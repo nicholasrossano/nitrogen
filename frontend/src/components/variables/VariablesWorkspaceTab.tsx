@@ -12,35 +12,35 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import {
   api,
-  type Assumption,
-  type AssumptionStatus,
+  type Variable,
+  type VariableStatus,
   type ProjectMaterial,
 } from '@/lib/api';
 import { getCached, invalidatePrefix, setCached, swrFetch, swrKeys } from '@/lib/swrCache';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
-import { AssumptionCommentsThread } from './AssumptionCommentsThread';
+import { VariableCommentsThread } from './VariableCommentsThread';
 import {
-  ASSUMPTION_STATUS_DEFINITIONS,
-  AssumptionStatusCapsule,
-} from './AssumptionStatusCapsule';
+  VARIABLE_STATUS_DEFINITIONS,
+  VariableStatusCapsule,
+} from './VariableStatusCapsule';
 
-const ASSUMPTION_UPDATED_EVENT = 'nitrogen:assumption-updated';
-const ASSUMPTION_DELETED_EVENT = 'nitrogen:assumption-deleted';
+const VARIABLE_UPDATED_EVENT = 'nitrogen:variable-updated';
+const VARIABLE_DELETED_EVENT = 'nitrogen:variable-deleted';
 
-interface AssumptionsWorkspaceTabProps {
+interface VariablesWorkspaceTabProps {
   projectId: string;
   embedded?: boolean;
   showDetailPanel?: boolean;
-  focusAssumptionId?: string | null;
-  onAssumptionSelectInChat?: (assumption: Assumption) => void;
-  onAddAssumptionInChat?: () => void;
+  focusVariableId?: string | null;
+  onVariableSelectInChat?: (variable: Variable) => void;
+  onAddVariableInChat?: () => void;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   onOpenFile?: (file: ProjectMaterial) => void;
   /** Notify float host when the selected-variable companion column is open. */
   onCompanionSidePanelOpenChange?: (open: boolean) => void;
 }
 
-const STATUS_OPTIONS: Array<{ value: '' | AssumptionStatus; label: string }> = [
+const STATUS_OPTIONS: Array<{ value: '' | VariableStatus; label: string }> = [
   { value: '', label: 'All statuses' },
   { value: 'validated', label: 'Validated' },
   { value: 'extracted', label: 'Extracted' },
@@ -48,7 +48,7 @@ const STATUS_OPTIONS: Array<{ value: '' | AssumptionStatus; label: string }> = [
   { value: 'missing', label: 'Missing' },
 ];
 
-function formatNumeric(value: number, valueType?: Assumption['value_type']): string {
+function formatNumeric(value: number, valueType?: Variable['value_type']): string {
   if (!Number.isFinite(value)) return String(value);
   if (valueType === 'currency') {
     return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -63,7 +63,7 @@ function isMissingValue(value: any): boolean {
   return value === null || value === undefined || value === '';
 }
 
-export function formatValue(value: any, unit?: string | null, valueType?: Assumption['value_type']): string {
+export function formatValue(value: any, unit?: string | null, valueType?: Variable['value_type']): string {
   if (isMissingValue(value)) return '';
   const formatted = typeof value === 'number'
     ? formatNumeric(value, valueType)
@@ -82,7 +82,7 @@ function MissingValuePill() {
 }
 
 /** Falls back to the generic source type label when no more specific name is on record. */
-function formatSourceLabel(row: Assumption): string {
+function formatSourceLabel(row: Variable): string {
   if (row.source_type === 'assessment' || row.source_type === 'assessment_approval') {
     const assessmentName = row.source_reference?.assessment_name;
     if (typeof assessmentName === 'string' && assessmentName.trim()) return assessmentName.trim();
@@ -104,7 +104,7 @@ function firstReferenceSource(sourceReference: Record<string, any> | null | unde
   return sources.find((source) => source && typeof source === 'object') ?? null;
 }
 
-function sourceCitationFromAssumption(row: Assumption): {
+function sourceCitationFromVariable(row: Variable): {
   title: string;
   url: string | null;
   publisher: string | null;
@@ -208,11 +208,11 @@ function SourceCell({
   onOpenDocument,
   onOpenFile,
 }: {
-  row: Assumption;
+  row: Variable;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   onOpenFile?: (file: ProjectMaterial) => void;
 }) {
-  const citation = sourceCitationFromAssumption(row);
+  const citation = sourceCitationFromVariable(row);
   if (!citation) {
     return <span className="text-text-secondary">{formatSourceLabel(row)}</span>;
   }
@@ -253,7 +253,7 @@ function SourceCell({
         : <FileText className="h-2.5 w-2.5 shrink-0" />}
       label={
         <>
-          <span className="max-w-[220px] truncate">{label}</span>
+          <span className="min-w-0 truncate">{label}</span>
           {!openInternal && citation.url ? <ExternalLink className="h-2.5 w-2.5 shrink-0" /> : null}
         </>
       }
@@ -283,44 +283,45 @@ export function normalizeDraftValue(raw: string): string | null {
 
 const STATUS_LEGEND_CONTENT = (
   <ul className="space-y-1.5">
-    {ASSUMPTION_STATUS_DEFINITIONS.map(({ status, description }) => (
+    {VARIABLE_STATUS_DEFINITIONS.map(({ status, description }) => (
       <li key={status}>
-        <AssumptionStatusCapsule status={status} />
+        <VariableStatusCapsule status={status} />
         <span className="ml-1.5">{description}</span>
       </li>
     ))}
   </ul>
 );
 
-export function AssumptionsWorkspaceTab({
+export function VariablesWorkspaceTab({
   projectId,
   embedded = false,
   showDetailPanel = true,
-  focusAssumptionId = null,
-  onAssumptionSelectInChat,
-  onAddAssumptionInChat,
+  focusVariableId = null,
+  onVariableSelectInChat,
+  onAddVariableInChat,
   onOpenDocument,
   onOpenFile,
   onCompanionSidePanelOpenChange,
-}: AssumptionsWorkspaceTabProps) {
-  const [status, setStatus] = useState<'' | AssumptionStatus>('');
-  const [rows, setRows] = useState<Assumption[]>(
-    () => getCached<Assumption[]>(swrKeys.assumptions(projectId)) ?? [],
+}: VariablesWorkspaceTabProps) {
+  const [status, setStatus] = useState<'' | VariableStatus>('');
+  const [rows, setRows] = useState<Variable[]>(
+    () => getCached<Variable[]>(swrKeys.variables(projectId)) ?? [],
   );
-  const [selected, setSelected] = useState<Assumption | null>(null);
+  const [selected, setSelected] = useState<Variable | null>(null);
   const [loading, setLoading] = useState(
-    () => getCached<Assumption[]>(swrKeys.assumptions(projectId)) === undefined,
+    () => getCached<Variable[]>(swrKeys.variables(projectId)) === undefined,
   );
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draftValue, setDraftValue] = useState('');
   const [draftUnit, setDraftUnit] = useState('');
 
   const loadRows = useCallback(async () => {
     const key = status
-      ? `${swrKeys.assumptions(projectId)}:${status}`
-      : swrKeys.assumptions(projectId);
-    const cached = getCached<Assumption[]>(key);
+      ? `${swrKeys.variables(projectId)}:${status}`
+      : swrKeys.variables(projectId);
+    const cached = getCached<Variable[]>(key);
     if (cached) {
       setRows(cached);
       setSelected((current) => cached.find((row) => row.id === current?.id) ?? null);
@@ -331,10 +332,10 @@ export function AssumptionsWorkspaceTab({
     setError(null);
     try {
       const { data: next } = await swrFetch(key, () =>
-        api.listAssumptions(projectId, { status }),
+        api.listVariables(projectId, { status }),
       );
       // Keep the unfiltered mini-panel cache warm when loading all.
-      if (!status) setCached(swrKeys.assumptions(projectId), next);
+      if (!status) setCached(swrKeys.variables(projectId), next);
       setRows(next);
       setSelected((current) => next.find((row) => row.id === current?.id) ?? null);
     } catch (e: any) {
@@ -354,18 +355,18 @@ export function AssumptionsWorkspaceTab({
   }, [selected]);
 
   useEffect(() => {
-    if (!focusAssumptionId) return;
-    const match = rows.find((row) => row.id === focusAssumptionId);
+    if (!focusVariableId) return;
+    const match = rows.find((row) => row.id === focusVariableId);
     if (!match) return;
     // Prefer in-panel companion selection when the detail column is available.
     if (showDetailPanel) {
       setSelected((current) => (current?.id === match.id ? current : match));
       return;
     }
-    if (onAssumptionSelectInChat) {
-      onAssumptionSelectInChat(match);
+    if (onVariableSelectInChat) {
+      onVariableSelectInChat(match);
     }
-  }, [focusAssumptionId, rows, onAssumptionSelectInChat, showDetailPanel]);
+  }, [focusVariableId, rows, onVariableSelectInChat, showDetailPanel]);
 
   useEffect(() => {
     const open = Boolean(showDetailPanel && selected);
@@ -373,7 +374,7 @@ export function AssumptionsWorkspaceTab({
     return () => onCompanionSidePanelOpenChange?.(false);
   }, [selected, showDetailPanel, onCompanionSidePanelOpenChange]);
 
-  const matchesActiveFilters = useCallback((row: Assumption) => {
+  const matchesActiveFilters = useCallback((row: Variable) => {
     if (status && row.status !== status) return false;
     return true;
   }, [status]);
@@ -381,12 +382,12 @@ export function AssumptionsWorkspaceTab({
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const handleAssumptionUpdated = (event: Event) => {
-      const customEvent = event as CustomEvent<Assumption>;
+    const handleVariableUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<Variable>;
       const updated = customEvent.detail;
       if (!updated || updated.project_id !== projectId) return;
 
-      invalidatePrefix(swrKeys.assumptions(projectId));
+      invalidatePrefix(swrKeys.variables(projectId));
 
       const includeInTable = matchesActiveFilters(updated);
       setRows((prev) => {
@@ -403,20 +404,20 @@ export function AssumptionsWorkspaceTab({
         return includeInTable ? updated : null;
       });
     };
-    const handleAssumptionDeleted = (event: Event) => {
-      const customEvent = event as CustomEvent<{ assumptionId?: string; projectId?: string }>;
-      const assumptionId = customEvent.detail?.assumptionId;
+    const handleVariableDeleted = (event: Event) => {
+      const customEvent = event as CustomEvent<{ variableId?: string; projectId?: string }>;
+      const variableId = customEvent.detail?.variableId;
       const deletedInitiativeId = customEvent.detail?.projectId;
-      if (!assumptionId || deletedInitiativeId !== projectId) return;
-      setRows((prev) => prev.filter((row) => row.id !== assumptionId));
-      setSelected((current) => (current?.id === assumptionId ? null : current));
+      if (!variableId || deletedInitiativeId !== projectId) return;
+      setRows((prev) => prev.filter((row) => row.id !== variableId));
+      setSelected((current) => (current?.id === variableId ? null : current));
     };
 
-    window.addEventListener(ASSUMPTION_UPDATED_EVENT, handleAssumptionUpdated as EventListener);
-    window.addEventListener(ASSUMPTION_DELETED_EVENT, handleAssumptionDeleted as EventListener);
+    window.addEventListener(VARIABLE_UPDATED_EVENT, handleVariableUpdated as EventListener);
+    window.addEventListener(VARIABLE_DELETED_EVENT, handleVariableDeleted as EventListener);
     return () => {
-      window.removeEventListener(ASSUMPTION_UPDATED_EVENT, handleAssumptionUpdated as EventListener);
-      window.removeEventListener(ASSUMPTION_DELETED_EVENT, handleAssumptionDeleted as EventListener);
+      window.removeEventListener(VARIABLE_UPDATED_EVENT, handleVariableUpdated as EventListener);
+      window.removeEventListener(VARIABLE_DELETED_EVENT, handleVariableDeleted as EventListener);
     };
   }, [projectId, matchesActiveFilters]);
 
@@ -432,19 +433,20 @@ export function AssumptionsWorkspaceTab({
     selected &&
     hasDraftValue &&
     (selected.status !== 'validated' || hasDraftChanges) &&
-    !saving,
+    !saving &&
+    !deleting,
   );
-  const handleAssumptionOpen = useCallback((row: Assumption) => {
+  const handleVariableOpen = useCallback((row: Variable) => {
     if (showDetailPanel) {
       setSelected(row);
       return;
     }
-    if (onAssumptionSelectInChat) {
-      onAssumptionSelectInChat(row);
+    if (onVariableSelectInChat) {
+      onVariableSelectInChat(row);
     }
-  }, [onAssumptionSelectInChat, showDetailPanel]);
+  }, [onVariableSelectInChat, showDetailPanel]);
 
-  const columns: ReadOnlyDataTableColumn<Assumption>[] = [
+  const columns: ReadOnlyDataTableColumn<Variable>[] = [
     {
       key: 'label',
       header: PROJECT_VARIABLES.titleSingular,
@@ -455,7 +457,7 @@ export function AssumptionsWorkspaceTab({
           className="text-left font-medium text-text-primary enabled:hover:text-accent"
           onClick={(event) => {
             event.stopPropagation();
-            handleAssumptionOpen(row);
+            handleVariableOpen(row);
           }}
         >
           {row.label}
@@ -472,25 +474,27 @@ export function AssumptionsWorkspaceTab({
       key: 'status',
       header: 'Status',
       className: 'whitespace-nowrap min-w-[120px]',
-      render: (row) => <AssumptionStatusCapsule status={row.status} />,
+      render: (row) => <VariableStatusCapsule status={row.status} />,
     },
-    { key: 'source_type', header: 'Source', className: 'min-w-[180px] max-w-[240px]', render: (row) => (
-      <SourceCell row={row} onOpenDocument={onOpenDocument} onOpenFile={onOpenFile} />
+    { key: 'source_type', header: 'Source', className: 'min-w-[120px] max-w-[240px] w-[22%] overflow-hidden', render: (row) => (
+      <div className="min-w-0 max-w-full overflow-hidden">
+        <SourceCell row={row} onOpenDocument={onOpenDocument} onOpenFile={onOpenFile} />
+      </div>
     ) },
     { key: 'last_updated_by_email', header: 'Updated By', className: 'whitespace-nowrap min-w-[150px]', render: (row) => row.last_updated_by_email || row.created_by_email || 'system' },
   ];
 
-  const updateSelected = useCallback(async (updates: Partial<Assumption>) => {
+  const updateSelected = useCallback(async (updates: Partial<Variable>) => {
     if (!selected) return;
     setSaving(true);
     setError(null);
     try {
-      const updated = await api.updateAssumption(selected.id, updates);
+      const updated = await api.updateVariable(selected.id, updates);
       setRows((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
       setSelected(updated);
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
-          new CustomEvent(ASSUMPTION_UPDATED_EVENT, { detail: updated }),
+          new CustomEvent(VARIABLE_UPDATED_EVENT, { detail: updated }),
         );
       }
     } catch (e: any) {
@@ -521,44 +525,86 @@ export function AssumptionsWorkspaceTab({
     setDraftUnit(selected.unit ?? '');
   }, [selected]);
 
+  const handleDelete = useCallback(async () => {
+    if (!selected || deleting) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      const deletedId = selected.id;
+      await api.deleteVariable(deletedId);
+      setRows((prev) => prev.filter((row) => row.id !== deletedId));
+      setSelected(null);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent(VARIABLE_DELETED_EVENT, {
+            detail: { variableId: deletedId, projectId },
+          }),
+        );
+      }
+    } catch (e: any) {
+      setError(e?.message ?? `Failed to delete ${PROJECT_VARIABLES.lowerSingular}`);
+    } finally {
+      setDeleting(false);
+    }
+  }, [deleting, projectId, selected]);
+
   if (loading) return <WorkspaceTabLoader />;
 
   const detailOpen = Boolean(showDetailPanel && selected);
 
   const detailFields = selected ? (
     <div className="flex-1 overflow-y-auto overflow-x-hidden px-5 py-4 space-y-4">
-      <p className="text-xs text-text-tertiary">{selected.key}</p>
-
       <label className="block">
         <span className="text-xs font-medium text-text-tertiary">Value</span>
-        <input className="mt-1 w-full rounded-lg border border-stroke-subtle px-3 py-2 text-sm" value={draftValue} onChange={(event) => setDraftValue(event.target.value)} />
+        <input
+          className="mt-1 w-full rounded-lg border border-stroke-subtle px-3 py-2 text-sm"
+          value={draftValue}
+          onChange={(event) => setDraftValue(event.target.value)}
+          disabled={saving || deleting}
+        />
       </label>
 
       <label className="block">
         <span className="text-xs font-medium text-text-tertiary">Unit</span>
-        <input className="mt-1 w-full rounded-lg border border-stroke-subtle px-3 py-2 text-sm" value={draftUnit} onChange={(event) => setDraftUnit(event.target.value)} />
+        <input
+          className="mt-1 w-full rounded-lg border border-stroke-subtle px-3 py-2 text-sm"
+          value={draftUnit}
+          onChange={(event) => setDraftUnit(event.target.value)}
+          disabled={saving || deleting}
+        />
       </label>
 
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex items-center justify-between gap-2">
         <button
           type="button"
-          className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
-          onClick={handleCancel}
-          disabled={saving || !hasDraftChanges}
+          className="btn-danger !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
+          onClick={() => void handleDelete()}
+          disabled={deleting}
+          title={`Delete this ${PROJECT_VARIABLES.lowerSingular}`}
         >
-          Cancel
+          {deleting ? 'Deleting...' : 'Delete'}
         </button>
-        <button
-          type="button"
-          className="btn-primary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
-          onClick={handleConfirm}
-          disabled={!canConfirm}
-        >
-          Confirm
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0 disabled:!opacity-100 disabled:!text-text-tertiary"
+            onClick={handleCancel}
+            disabled={saving || deleting || !hasDraftChanges}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn-primary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
+            onClick={handleConfirm}
+            disabled={!canConfirm}
+          >
+            {saving ? 'Saving...' : 'Confirm'}
+          </button>
+        </div>
       </div>
 
-      <AssumptionCommentsThread assumptionId={selected.id} />
+      <VariableCommentsThread variableId={selected.id} />
     </div>
   ) : null;
 
@@ -570,7 +616,7 @@ export function AssumptionsWorkspaceTab({
         <div className="flex flex-wrap items-center gap-2">
           <CustomDropdown
             value={status}
-            onChange={(value) => setStatus(value as '' | AssumptionStatus)}
+            onChange={(value) => setStatus(value as '' | VariableStatus)}
             options={STATUS_OPTIONS}
             ariaLabel={`Filter ${PROJECT_VARIABLES.lower} by status`}
           />
@@ -584,11 +630,11 @@ export function AssumptionsWorkspaceTab({
             </button>
           </Tooltip>
         </div>
-        {onAddAssumptionInChat ? (
+        {onAddVariableInChat ? (
           <button
             type="button"
             className="btn-primary !h-7 !text-xs !leading-none !px-2.5 !py-0 !rounded-lg shrink-0"
-            onClick={onAddAssumptionInChat}
+            onClick={onAddVariableInChat}
           >
             <Plus className="w-3 h-3" />
             Add {PROJECT_VARIABLES.lowerSingular}
@@ -602,7 +648,7 @@ export function AssumptionsWorkspaceTab({
             columns={columns}
             rows={rows}
             pageSize={25}
-            onRowClick={handleAssumptionOpen}
+            onRowClick={handleVariableOpen}
             emptyState={
               <div className="py-20 text-center">
                 <p className="text-sm font-medium text-text-secondary">No {PROJECT_VARIABLES.lower} yet</p>
@@ -618,7 +664,7 @@ export function AssumptionsWorkspaceTab({
           columns={columns}
           rows={rows}
           pageSize={25}
-          onRowClick={handleAssumptionOpen}
+          onRowClick={handleVariableOpen}
           emptyState={
             <div className="py-20 text-center">
               <p className="text-sm font-medium text-text-secondary">No {PROJECT_VARIABLES.lower} yet</p>

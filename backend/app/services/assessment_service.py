@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assessment_instance import AssessmentInstance, AssessmentInstanceStatus
 from app.models.project import Project
-from app.services.assumptions import AssumptionActor, ensure_expected_assumptions, sync_widget_assumptions
+from app.services.variables import VariableActor, ensure_expected_variables, sync_widget_variables
 
 
 # ── Instance resolution ────────────────────────────────────────────
@@ -103,11 +103,11 @@ async def get_or_create_instance(
     )
     initiative = await db.get(Project, project_id)
     if initiative is not None:
-        await ensure_expected_assumptions(
+        await ensure_expected_variables(
             db,
             initiative,
             assessment_ids=[tool_id],
-            actor=AssumptionActor(user_id=user_id, email=user_id),
+            actor=VariableActor(user_id=user_id, email=user_id),
         )
     return inst
 
@@ -139,13 +139,13 @@ async def save_deliverable(
     inst.status = AssessmentInstanceStatus.READY
     inst.updated_at = datetime.now(timezone.utc)
     if isinstance(content, dict):
-        await sync_widget_assumptions(
+        await sync_widget_variables(
             db,
             project_id=project_id,
             assessment_id=tool_id,
             assessment_instance_id=inst.id,
             widget_data=content,
-            actor=AssumptionActor(user_id=user_id, email=user_id),
+            actor=VariableActor(user_id=user_id, email=user_id),
         )
     await db.flush()
     return inst

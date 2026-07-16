@@ -52,7 +52,7 @@ class LandscapeMappingAssessment(BaseAssessment):
             input_dependencies=[],
             produced_outputs=["landscape_categories", "landscape_recommendations"],
             downstream_dependencies=[],
-            assumptions_behavior="tracks",
+            variables_behavior="tracks",
             evidence_behavior="rag_grounded",
         )
 

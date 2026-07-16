@@ -30,9 +30,9 @@ class CoreChat(Base):
         nullable=True,
         index=True,
     )
-    assumption_id: Mapped[uuid.UUID | None] = mapped_column(
+    variable_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("assumptions.id", ondelete="SET NULL"),
+        ForeignKey("variables.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )

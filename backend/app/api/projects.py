@@ -37,7 +37,7 @@ from app.schemas.project import (
 from app.schemas.assessment_instance import AssessmentInstanceResponse
 from app.assessments.registry import get_assessment_registry
 from app.services import assessment_service
-from app.services.assumptions import AssumptionActor, ensure_expected_assumptions
+from app.services.variables import VariableActor, ensure_expected_variables
 from app.services.assessment_workflow_service import is_instance_visible_in_lists
 from app.services.project_overview import generate_project_overview
 from app.services.workspaces import resolve_workspace_for_user
@@ -663,11 +663,11 @@ async def create_assessment_instance(
         db, initiative.id, body.assessment_id, user.uid
         # no chat_id → always creates a fresh instance
     )
-    await ensure_expected_assumptions(
+    await ensure_expected_variables(
         db,
         initiative,
         assessment_ids=[body.assessment_id],
-        actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
+        actor=VariableActor(user_id=user.uid, email=user.email or user.uid),
     )
     await db.commit()
     await db.refresh(inst)

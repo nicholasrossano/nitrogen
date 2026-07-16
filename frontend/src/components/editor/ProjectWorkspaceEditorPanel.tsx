@@ -5,12 +5,12 @@ import { FileText, FolderOpen, Plus, X } from 'lucide-react';
 import { AssessmentWorkspace } from '@/components/assessments/AssessmentWorkspace';
 import { AssessmentActivityLogTab } from '@/components/core-chat/AssessmentActivityLogTab';
 import { DecisionLogWorkspaceTab } from '@/components/decision-log/DecisionLogWorkspaceTab';
-import { AssumptionsWorkspaceTab } from '@/components/assumptions/AssumptionsWorkspaceTab';
+import { VariablesWorkspaceTab } from '@/components/variables/VariablesWorkspaceTab';
 import { DocumentViewerWidget } from '@/components/widgets/DocumentViewerWidget';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { FloatLayer, type FloatWidget } from './FloatLayer';
 import { WorkspaceHub, WorkspaceLaunchMode } from './WorkspaceHub';
-import { type Assumption, type AssessmentInstance } from '@/lib/api';
+import { type Variable, type AssessmentInstance } from '@/lib/api';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
 
@@ -33,7 +33,7 @@ export type WorkspacePanelTab =
     assessmentId: string;
     assessmentTitle: string;
   }
-  | { id: string; kind: 'assumptions'; title: string }
+  | { id: string; kind: 'variables'; title: string }
   | { id: string; kind: 'document'; title: string; citation: ResearchPanelCitation };
 
 export interface FrameworkPlanAssessmentOption {
@@ -63,8 +63,8 @@ interface ProjectWorkspaceEditorPanelProps {
   onAssessmentInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
   onAssessmentApprovalChange?: () => void;
   onAssessmentEngaged?: (instanceId: string) => void;
-  onOpenAssumptionInChat?: (assumption: Assumption) => void;
-  onAddAssumptionInChat?: () => void;
+  onOpenVariableInChat?: (variable: Variable) => void;
+  onAddVariableInChat?: () => void;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
 }
 
@@ -89,8 +89,8 @@ export function ProjectWorkspaceEditorPanel({
   onAssessmentInspectorStateChange,
   onAssessmentApprovalChange,
   onAssessmentEngaged,
-  onOpenAssumptionInChat,
-  onAddAssumptionInChat,
+  onOpenVariableInChat,
+  onAddVariableInChat,
   onOpenDocument,
 }: ProjectWorkspaceEditorPanelProps) {
   const [localWorkspaceLaunchMode, setLocalWorkspaceLaunchMode] = useState<WorkspaceLaunchMode>('idle');
@@ -191,13 +191,13 @@ export function ProjectWorkspaceEditorPanel({
       );
     }
 
-    if (tab.kind === 'assumptions') {
+    if (tab.kind === 'variables') {
       return (
-        <AssumptionsWorkspaceTab
+        <VariablesWorkspaceTab
           projectId={projectId}
           showDetailPanel={false}
-          onAssumptionSelectInChat={onOpenAssumptionInChat}
-          onAddAssumptionInChat={onAddAssumptionInChat}
+          onVariableSelectInChat={onOpenVariableInChat}
+          onAddVariableInChat={onAddVariableInChat}
           onOpenDocument={onOpenDocument}
         />
       );

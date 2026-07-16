@@ -14,10 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.core.model_catalog import Complexity, ModelRole
 from app.core.llm_invoke import acompletion
-from app.services.assumptions import (
-    AssumptionActor,
-    extract_assumptions_from_cited_chat_sources,
-    format_assumptions_for_initiative_prompt,
+from app.services.variables import (
+    VariableActor,
+    extract_variables_from_cited_chat_sources,
+    format_variables_for_initiative_prompt,
 )
 from app.services.chat.generation import ChatGenerationMixin
 from app.services.chat.planning import ChatPlanningMixin
@@ -695,17 +695,17 @@ class ChatService(ChatPlanningMixin, ChatGenerationMixin):
         cited_sources = self._extract_cited_sources(content, ranked_facts)
         if initiative is not None and cited_sources:
             try:
-                await extract_assumptions_from_cited_chat_sources(
+                await extract_variables_from_cited_chat_sources(
                     self.db,
                     initiative,
                     cited_sources,
                     answer_content=content,
-                    actor=AssumptionActor(user_id=self.user_id, email=self.ctx.user_email),
+                    actor=VariableActor(user_id=self.user_id, email=self.ctx.user_email),
                     user_message=user_message,
                     chat_id=str(self.ctx.chat_id) if self.ctx.chat_id else None,
                 )
             except Exception as exc:
-                logger.warning("Chat assumption extraction failed: %s", exc, exc_info=True)
+                logger.warning("Chat variable extraction failed: %s", exc, exc_info=True)
 
         # Step 5b: attach provenance to proposed_value widget data
         if widget_type == "proposed_value" and widget_data:
@@ -894,12 +894,12 @@ class ChatService(ChatPlanningMixin, ChatGenerationMixin):
             parts.append(f"- Goal: {initiative.goal}")
         return "\n".join(parts) if parts else ""
 
-    async def build_project_context_with_assumptions(self, initiative) -> str:
+    async def build_project_context_with_variables(self, initiative) -> str:
         base = self._build_project_context(initiative)
-        assumptions_text = await format_assumptions_for_initiative_prompt(self.db, initiative.id)
-        if not assumptions_text:
+        variables_text = await format_variables_for_initiative_prompt(self.db, initiative.id)
+        if not variables_text:
             return base
-        return f"{base}\n{assumptions_text}" if base else assumptions_text
+        return f"{base}\n{variables_text}" if base else variables_text
 
     @staticmethod
     def _chat_history_to_dicts(chat_history: list | None) -> list[dict[str, str]]:

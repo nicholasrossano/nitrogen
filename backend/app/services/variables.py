@@ -12,17 +12,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assessments.registry import get_assessment_registry
-from app.assumptions.config import (
-    ASSUMPTION_BY_KEY,
-    AssumptionDefinition,
-    expected_assumptions_for_assessments,
+from app.variables.config import (
+    VARIABLE_BY_KEY,
+    VariableDefinition,
+    expected_variables_for_assessments,
 )
 from app.config import get_settings
 from app.core.llm_invoke import acompletion
 from app.core.model_catalog import Complexity, ModelRole
 from app.domain.resolver import get_active_domain
 from app.models.assessment_instance import AssessmentInstance
-from app.models.assumption import Assumption, AssumptionBinding, AssumptionComment
+from app.models.variable import Variable, VariableBinding, VariableComment
 from app.models.evidence import EvidenceChunk, EvidenceDoc
 from app.models.project import Project
 from app.models.project_material import ProjectMaterial
@@ -48,31 +48,31 @@ WORLDBANK_INDICATOR_TO_ASSUMPTION_KEY: dict[str, str] = {
 
 
 @dataclass(frozen=True)
-class AssumptionActor:
+class VariableActor:
     user_id: str | None = None
     email: str | None = None
 
     @classmethod
-    def system(cls) -> "AssumptionActor":
+    def system(cls) -> "VariableActor":
         return cls(user_id=SYSTEM_ACTOR, email=SYSTEM_ACTOR)
 
 
-def normalize_assumption_key(value: str) -> str:
+def normalize_variable_key(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
 
 
-def _definition_for_key(key: str) -> AssumptionDefinition | None:
-    return ASSUMPTION_BY_KEY.get(normalize_assumption_key(key))
+def _definition_for_key(key: str) -> VariableDefinition | None:
+    return VARIABLE_BY_KEY.get(normalize_variable_key(key))
 
 
-def _definition_for_assessment_field(field_key: str, assessment_id: str) -> AssumptionDefinition | None:
-    normalized = normalize_assumption_key(field_key)
+def _definition_for_assessment_field(field_key: str, assessment_id: str) -> VariableDefinition | None:
+    normalized = normalize_variable_key(field_key)
     exact = _definition_for_key(normalized)
     if exact and assessment_id in exact.used_in_assessments:
         return exact
-    for definition in ASSUMPTION_BY_KEY.values():
+    for definition in VARIABLE_BY_KEY.values():
         aliases = {
-            normalize_assumption_key(alias)
+            normalize_variable_key(alias)
             for alias in definition.assessment_field_keys.get(assessment_id, [])
         }
         if normalized in aliases:
@@ -81,7 +81,7 @@ def _definition_for_assessment_field(field_key: str, assessment_id: str) -> Assu
 
 
 def _assessment_ids_from_initiative(initiative: Project) -> list[str]:
-    # Drive assumption requirements from active assessment instances, not planned tools.
+    # Drive variable requirements from active assessment instances, not planned tools.
     # This prevents static required placeholders from appearing before a assessment exists.
     assessments: set[str] = set()
     for inst in initiative.assessment_instances or []:
@@ -90,15 +90,15 @@ def _assessment_ids_from_initiative(initiative: Project) -> list[str]:
     return sorted(assessments)
 
 
-def _coerce_assessments(assessments: list[str] | None, definition: AssumptionDefinition | None) -> list[str]:
+def _coerce_assessments(assessments: list[str] | None, definition: VariableDefinition | None) -> list[str]:
     values = set(assessments or [])
     if definition:
         values.update(definition.used_in_assessments)
     return sorted(values)
 
 
-def suggest_assumption_candidates(facts: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Suggest durable assumption candidates from retrieved World Bank indicators."""
+def suggest_variable_candidates(facts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Suggest durable variable candidates from retrieved World Bank indicators."""
     if get_active_domain() != "energy":
         return []
     candidates: list[dict[str, Any]] = []
@@ -192,12 +192,12 @@ def _fact_was_cited(answer_content: str, fact: Any) -> bool:
     return bool(source_title and f"Country Indicator: {source_title}" in answer_content)
 
 
-def build_chat_assumption_candidate(
+def build_chat_variable_candidate(
     fact: Any,
     *,
     answer_content: str,
 ) -> dict[str, Any] | None:
-    """Build a syntactic assumption candidate from a cited indicator fact."""
+    """Build a syntactic variable candidate from a cited indicator fact."""
     if get_active_domain() != "energy":
         return None
     if _source_type_value(getattr(fact, "source_type", None)) != "worldbank_indicator":
@@ -246,30 +246,30 @@ def _initiative_relevance_context(initiative: Project) -> dict[str, Any]:
     }
 
 
-async def _should_log_chat_assumption(
+async def _should_log_chat_variable(
     db: AsyncSession,
     initiative: Project,
     candidate: dict[str, Any],
     *,
-    actor: AssumptionActor,
+    actor: VariableActor,
     user_message: str | None,
     answer_content: str,
 ) -> tuple[bool, str | None]:
     prompt = (
         "Decide whether a cited chat fact should be saved as a reusable project variable.\n\n"
         "Only return should_log=true when the cited fact is actually relevant to this project as a "
-        "baseline, model input, planning assumption, or explicitly adopted proxy. Return false for "
+        "baseline, model input, planning variable, or explicitly adopted proxy. Return false for "
         "general trivia, unrelated countries or sectors, background comparisons not adopted for the "
         "project, or facts merely mentioned while answering a side question.\n\n"
         f"Project context:\n{json.dumps(_initiative_relevance_context(initiative), indent=2)}\n\n"
         f"User question:\n{user_message or ''}\n\n"
         f"Assistant answer:\n{answer_content[:3000]}\n\n"
-        f"Candidate assumption:\n{json.dumps(candidate, indent=2)}"
+        f"Candidate variable:\n{json.dumps(candidate, indent=2)}"
     )
     tool_def = {
         "type": "function",
         "function": {
-            "name": "classify_assumption_relevance",
+            "name": "classify_variable_relevance",
             "description": "Decide whether a cited fact should be logged as a reusable project variable.",
             "parameters": {
                 "type": "object",
@@ -295,7 +295,7 @@ async def _should_log_chat_assumption(
             complexity=Complexity.STANDARD,
             messages=[{"role": "user", "content": prompt}],
             tools=[tool_def],
-            tool_choice={"type": "function", "function": {"name": "classify_assumption_relevance"}},
+            tool_choice={"type": "function", "function": {"name": "classify_variable_relevance"}},
             temperature=0,
             max_tokens=180,
         )
@@ -305,34 +305,34 @@ async def _should_log_chat_assumption(
         payload = json.loads(tool_calls[0].function.arguments)
         return bool(payload.get("should_log")), str(payload.get("reason") or "")
     except Exception as exc:
-        logger.warning("Chat assumption relevance classification failed: %s", exc, exc_info=True)
+        logger.warning("Chat variable relevance classification failed: %s", exc, exc_info=True)
         return False, "Relevance classification failed."
 
 
-async def extract_assumptions_from_cited_chat_sources(
+async def extract_variables_from_cited_chat_sources(
     db: AsyncSession,
     initiative: Project | None,
     cited_sources: list[Any],
     *,
     answer_content: str,
-    actor: AssumptionActor,
+    actor: VariableActor,
     user_message: str | None = None,
     chat_id: str | None = None,
-) -> list[Assumption]:
-    """Persist project-relevant assumptions from facts the final chat answer cited."""
+) -> list[Variable]:
+    """Persist project-relevant variables from facts the final chat answer cited."""
     if initiative is None or not getattr(initiative, "id", None):
         return []
 
-    touched: list[Assumption] = []
+    touched: list[Variable] = []
     seen_keys: set[str] = set()
     for fact in cited_sources:
-        candidate = build_chat_assumption_candidate(
+        candidate = build_chat_variable_candidate(
             fact,
             answer_content=answer_content,
         )
         if candidate is None or candidate["key"] in seen_keys:
             continue
-        should_log, relevance_reason = await _should_log_chat_assumption(
+        should_log, relevance_reason = await _should_log_chat_variable(
             db,
             initiative,
             candidate,
@@ -350,7 +350,7 @@ async def extract_assumptions_from_cited_chat_sources(
             "relevance_reason": relevance_reason,
             "extracted_at": datetime.now(timezone.utc).isoformat(),
         }
-        assumption, _created = await upsert_assumption(
+        variable, _created = await upsert_variable(
             db,
             project_id=initiative.id,
             key=candidate["key"],
@@ -365,21 +365,21 @@ async def extract_assumptions_from_cited_chat_sources(
             actor=actor,
             allow_create=False,
         )
-        if assumption is None:
+        if variable is None:
             continue
-        touched.append(assumption)
+        touched.append(variable)
     return touched
 
 
-def _actor_email(actor: AssumptionActor | None) -> str | None:
+def _actor_email(actor: VariableActor | None) -> str | None:
     return actor.email if actor and actor.email else None
 
 
-def _actor_user_id(actor: AssumptionActor | None) -> str | None:
+def _actor_user_id(actor: VariableActor | None) -> str | None:
     return actor.user_id if actor and actor.user_id else None
 
 
-def normalize_assumption_status(status: str | None, *, default: str = "assumed") -> str:
+def normalize_variable_status(status: str | None, *, default: str = "assumed") -> str:
     normalized = (status or "").strip().lower()
     mapping = {
         "validated": "validated",
@@ -451,7 +451,7 @@ def _passes_extraction_quality_gate(
     raw: dict[str, Any],
     *,
     value_type: str | None = None,
-    definition: AssumptionDefinition | None = None,
+    definition: VariableDefinition | None = None,
 ) -> bool:
     quote = str(raw.get("source_quote") or "").strip()
     if not quote:
@@ -461,15 +461,15 @@ def _passes_extraction_quality_gate(
     if value is None:
         return False
 
-    resolved_type = value_type or (definition.value_type if definition else infer_assumption_value_type(value))
+    resolved_type = value_type or (definition.value_type if definition else infer_variable_value_type(value))
 
-    # For numeric/currency/percent assumptions, insist on explicit quantitative
+    # For numeric/currency/percent variables, insist on explicit quantitative
     # evidence in the source quote to avoid entity/theme leakage.
     if resolved_type in {"number", "percent", "currency"}:
         if not re.search(r"-?\d", quote):
             return False
 
-    # For string assumptions, require assertion language in the quote
+    # For string variables, require assertion language in the quote
     # (e.g., "supplier is X"), not bare entity mentions.
     if isinstance(value, str):
         lowered_quote = f" {quote.lower()} "
@@ -511,7 +511,7 @@ def _stamp_outcome(source_reference: dict | None, outcome: str) -> dict:
     return ref
 
 
-def infer_assumption_value_type(value: Any) -> str:
+def infer_variable_value_type(value: Any) -> str:
     if isinstance(value, bool):
         return "boolean"
     if isinstance(value, (int, float)):
@@ -523,77 +523,77 @@ def infer_assumption_value_type(value: Any) -> str:
     return "string"
 
 
-async def list_assumptions(
+async def list_variables(
     db: AsyncSession,
     project_id: UUID,
     *,
     status: str | None = None,
     source_type: str | None = None,
     assessment: str | None = None,
-) -> list[Assumption]:
-    normalized_status_filter = normalize_assumption_status(status, default="")
-    stmt = select(Assumption).where(
-        Assumption.project_id == project_id,
-        Assumption.status != "rejected",
+) -> list[Variable]:
+    normalized_status_filter = normalize_variable_status(status, default="")
+    stmt = select(Variable).where(
+        Variable.project_id == project_id,
+        Variable.status != "rejected",
     )
     if normalized_status_filter:
         if normalized_status_filter == "extracted":
-            stmt = stmt.where(Assumption.status.in_(["extracted", "inferred", "needs_review"]))
+            stmt = stmt.where(Variable.status.in_(["extracted", "inferred", "needs_review"]))
         else:
-            stmt = stmt.where(Assumption.status == normalized_status_filter)
+            stmt = stmt.where(Variable.status == normalized_status_filter)
     if source_type:
-        stmt = stmt.where(Assumption.source_type == source_type)
-    stmt = stmt.order_by(Assumption.updated_at.desc(), Assumption.created_at.desc())
+        stmt = stmt.where(Variable.source_type == source_type)
+    stmt = stmt.order_by(Variable.updated_at.desc(), Variable.created_at.desc())
     result = await db.execute(stmt)
     rows = list(result.scalars().all())
     for row in rows:
-        row.status = normalize_assumption_status(row.status, default="assumed")
+        row.status = normalize_variable_status(row.status, default="assumed")
     if assessment:
         rows = [row for row in rows if assessment in (row.used_in_assessments or [])]
     return rows
 
 
-async def get_assumption(db: AsyncSession, assumption_id: UUID) -> Assumption | None:
-    assumption = await db.get(Assumption, assumption_id)
-    if assumption is None or normalize_assumption_status(assumption.status) == "rejected":
+async def get_variable(db: AsyncSession, variable_id: UUID) -> Variable | None:
+    variable = await db.get(Variable, variable_id)
+    if variable is None or normalize_variable_status(variable.status) == "rejected":
         return None
-    assumption.status = normalize_assumption_status(assumption.status, default="assumed")
-    return assumption
+    variable.status = normalize_variable_status(variable.status, default="assumed")
+    return variable
 
 
-async def list_assumption_comments(
+async def list_variable_comments(
     db: AsyncSession,
-    assumption_id: UUID,
-) -> list[AssumptionComment]:
+    variable_id: UUID,
+) -> list[VariableComment]:
     result = await db.execute(
-        select(AssumptionComment)
-        .where(AssumptionComment.assumption_id == assumption_id)
-        .order_by(AssumptionComment.created_at.asc())
+        select(VariableComment)
+        .where(VariableComment.variable_id == variable_id)
+        .order_by(VariableComment.created_at.asc())
     )
     return list(result.scalars().all())
 
 
-async def create_assumption_comment(
+async def create_variable_comment(
     db: AsyncSession,
-    assumption: Assumption,
+    variable: Variable,
     *,
     body: str,
-    actor: AssumptionActor,
-) -> AssumptionComment:
-    comment = AssumptionComment(
-        assumption_id=assumption.id,
-        project_id=assumption.project_id,
+    actor: VariableActor,
+) -> VariableComment:
+    comment = VariableComment(
+        variable_id=variable.id,
+        project_id=variable.project_id,
         body=body.strip(),
         created_by_user_id=actor.user_id,
         created_by_email=actor.email,
     )
     db.add(comment)
-    assumption.updated_at = datetime.now(timezone.utc)
+    variable.updated_at = datetime.now(timezone.utc)
     await db.flush()
     return comment
 
 
-async def upsert_assumption(
+async def upsert_variable(
     db: AsyncSession,
     *,
     project_id: UUID,
@@ -606,18 +606,18 @@ async def upsert_assumption(
     source_reference: dict[str, Any] | None = None,
     status: str = "assumed",
     used_in_assessments: list[str] | None = None,
-    actor: AssumptionActor | None = None,
+    actor: VariableActor | None = None,
     notes: str | None = None,
     replace_validated: bool = False,
     allow_create: bool = True,
-) -> tuple[Assumption | None, bool]:
-    from app.services.assumption_dedup import merge_alias_list, resolve_canonical_assumption
+) -> tuple[Variable | None, bool]:
+    from app.services.variable_dedup import merge_alias_list, resolve_canonical_variable
 
-    normalized_key = normalize_assumption_key(key)
+    normalized_key = normalize_variable_key(key)
     definition = _definition_for_key(normalized_key)
     resolved_label = label or (definition.label if definition else normalized_key.replace("_", " ").title())
 
-    existing = await resolve_canonical_assumption(
+    existing = await resolve_canonical_variable(
         db,
         project_id,
         key=normalized_key,
@@ -626,7 +626,7 @@ async def upsert_assumption(
 
     assessments = _coerce_assessments(used_in_assessments, definition)
     normalized_value = normalize_missing_value(value)
-    normalized_status = normalize_assumption_status(status)
+    normalized_status = normalize_variable_status(status)
     if normalized_value is None and normalized_status != "missing":
         normalized_status = "missing"
     now = datetime.now(timezone.utc)
@@ -671,7 +671,7 @@ async def upsert_assumption(
         # Never rewrite the canonical key on a fuzzy/alias merge.
         existing.value = normalized_value
         existing.unit = unit if unit is not None else (existing.unit or (definition.unit if definition else None))
-        existing.value_type = value_type or existing.value_type or (definition.value_type if definition else infer_assumption_value_type(normalized_value))
+        existing.value_type = value_type or existing.value_type or (definition.value_type if definition else infer_variable_value_type(normalized_value))
         existing.source_type = source_type
         existing.source_reference = source_reference
         existing.status = normalized_status
@@ -682,13 +682,13 @@ async def upsert_assumption(
         existing.updated_at = now
         return existing, False
 
-    assumption = Assumption(
+    variable = Variable(
         project_id=project_id,
         key=definition.key if definition else normalized_key,
         label=resolved_label,
         value=normalized_value,
         unit=unit if unit is not None else (definition.unit if definition else None),
-        value_type=value_type or (definition.value_type if definition else infer_assumption_value_type(normalized_value)),
+        value_type=value_type or (definition.value_type if definition else infer_variable_value_type(normalized_value)),
         source_type=source_type,
         source_reference=source_reference,
         aliases=merge_alias_list(None, resolved_label, key),
@@ -700,37 +700,37 @@ async def upsert_assumption(
         last_updated_by_email=_actor_email(actor),
         notes=notes,
     )
-    db.add(assumption)
+    db.add(variable)
     await db.flush()
-    return assumption, True
+    return variable, True
 
 
-async def update_assumption(
+async def update_variable(
     db: AsyncSession,
-    assumption: Assumption,
+    variable: Variable,
     updates: dict[str, Any],
     *,
-    actor: AssumptionActor,
-) -> Assumption:
+    actor: VariableActor,
+) -> Variable:
     if "value" in updates:
         updates["value"] = normalize_missing_value(updates.get("value"))
     if "status" in updates:
-        updates["status"] = normalize_assumption_status(updates.get("status"))
+        updates["status"] = normalize_variable_status(updates.get("status"))
     if "value" in updates or "status" in updates:
-        effective_value = updates.get("value", assumption.value)
+        effective_value = updates.get("value", variable.value)
         if _value_is_missing(effective_value):
             updates["value"] = None
             if "status" not in updates or updates.get("status") != "missing":
                 updates["status"] = "missing"
 
-    value_changed = "value" in updates and updates.get("value") != assumption.value
-    status_changed = "status" in updates and updates.get("status") != assumption.status
+    value_changed = "value" in updates and updates.get("value") != variable.value
+    status_changed = "status" in updates and updates.get("status") != variable.status
     if (
         (value_changed or status_changed)
-        and assumption.source_type in EXTRACTION_FEEDBACK_SOURCES
+        and variable.source_type in EXTRACTION_FEEDBACK_SOURCES
     ):
         updates["source_reference"] = _stamp_outcome(
-            updates.get("source_reference", assumption.source_reference),
+            updates.get("source_reference", variable.source_reference),
             "edited",
         )
 
@@ -747,81 +747,83 @@ async def update_assumption(
         "aliases",
     ):
         if field in updates:
-            setattr(assumption, field, updates[field])
-    assumption.last_updated_by_user_id = actor.user_id
-    assumption.last_updated_by_email = actor.email
-    assumption.updated_at = datetime.now(timezone.utc)
+            setattr(variable, field, updates[field])
+    variable.last_updated_by_user_id = actor.user_id
+    variable.last_updated_by_email = actor.email
+    variable.updated_at = datetime.now(timezone.utc)
     await db.flush()
-    return assumption
+    return variable
 
 
-async def delete_assumption(
+async def delete_variable(
     db: AsyncSession,
-    assumption: Assumption,
+    variable: Variable,
 ) -> None:
     # Light feedback: stamp before hard delete so logs still see the last state if needed.
-    if assumption.source_type in EXTRACTION_FEEDBACK_SOURCES:
-        assumption.source_reference = _stamp_outcome(assumption.source_reference, "deleted")
+    if variable.source_type in EXTRACTION_FEEDBACK_SOURCES:
+        variable.source_reference = _stamp_outcome(variable.source_reference, "deleted")
         await db.flush()
-    await db.delete(assumption)
+    await db.delete(variable)
     await db.flush()
 
 
-async def ensure_expected_assumptions(
+async def ensure_expected_variables(
     db: AsyncSession,
     initiative: Project,
     *,
     assessment_ids: list[str] | None = None,
-    actor: AssumptionActor | None = None,
-) -> tuple[int, list[Assumption]]:
+    actor: VariableActor | None = None,
+) -> tuple[int, list[Variable]]:
     # Config is guidance for extraction/prompting only. We intentionally do not
     # enforce static missing placeholders from config "required" fields.
     _ = (db, initiative, assessment_ids, actor)
     return 0, []
 
 
-def apply_assumptions_to_items(
+def apply_variables_to_items(
     items: list[dict[str, Any]],
-    assumptions: list[dict[str, Any]],
+    variables: list[dict[str, Any]],
     *,
     assessment_id: str,
 ) -> list[dict[str, Any]]:
     by_key = {
-        normalize_assumption_key(a.get("key", "")): a
-        for a in assumptions
-        if normalize_assumption_status(a.get("status")) in {"validated", "extracted", "assumed"}
+        normalize_variable_key(a.get("key", "")): a
+        for a in variables
+        if normalize_variable_status(a.get("status")) in {"validated", "extracted", "assumed"}
     }
-    for assumption in assumptions:
-        if normalize_assumption_status(assumption.get("status")) not in {"validated", "extracted", "assumed"}:
+    for variable in variables:
+        if normalize_variable_status(variable.get("status")) not in {"validated", "extracted", "assumed"}:
             continue
-        definition = _definition_for_key(str(assumption.get("key") or ""))
+        definition = _definition_for_key(str(variable.get("key") or ""))
         if definition is None:
             continue
         for alias in definition.assessment_field_keys.get(assessment_id, []):
-            by_key[normalize_assumption_key(alias)] = assumption
+            by_key[normalize_variable_key(alias)] = variable
     for item in items:
         content = item.get("content") if isinstance(item, dict) else None
         if not isinstance(content, dict):
             continue
-        field_name = normalize_assumption_key(
+        field_name = normalize_variable_key(
             str(content.get("field_name") or content.get("name") or content.get("variable") or "")
         )
-        assumption = by_key.get(field_name)
-        if assumption is None:
+        variable = by_key.get(field_name)
+        if variable is None:
             continue
-        if assessment_id not in (assumption.get("used_in_assessments") or []):
+        if assessment_id not in (variable.get("used_in_assessments") or []):
             definition = _definition_for_assessment_field(field_name, assessment_id)
             if definition is None or assessment_id not in definition.used_in_assessments:
                 continue
-        content["value"] = assumption.get("value")
-        if assumption.get("unit") and not content.get("unit"):
-            content["unit"] = assumption.get("unit")
-        normalized_status = normalize_assumption_status(assumption.get("status"))
+        content["value"] = variable.get("value")
+        if variable.get("unit") and not content.get("unit"):
+            content["unit"] = variable.get("unit")
+        normalized_status = normalize_variable_status(variable.get("status"))
         content["status"] = normalized_status if normalized_status in {"validated", "extracted", "assumed"} else "assumed"
-        content["source"] = "assumption"
-        content["assumption_id"] = assumption.get("id")
-        content["source_reference"] = assumption.get("source_reference")
-        content["rationale"] = f"Prefilled from project variable: {assumption.get('label')}"
+        content["source"] = "variable"
+        content["variable_id"] = variable.get("id")
+        # Drop legacy key if present so readers prefer variable_id.
+        content.pop("assumption_id", None)
+        content["source_reference"] = variable.get("source_reference")
+        content["rationale"] = f"Prefilled from project variable: {variable.get('label')}"
     return items
 
 
@@ -833,7 +835,7 @@ def _base_assessment_name(assessment_id: str) -> str:
 
 
 def _assessment_display_name_from_instance(assessment_instance: Any, assessment_id: str) -> str:
-    """Human-readable, instance-specific label for an assessment-sourced assumption.
+    """Human-readable, instance-specific label for an assessment-sourced variable.
 
     Mirrors the "<Assessment name> #<instance_number>" convention used elsewhere
     (see `_resolve_assessment_name` / `_serialize_assessment_instance` in
@@ -865,7 +867,7 @@ async def _resolve_assessment_display_name(
     return _assessment_display_name_from_instance(inst, assessment_id)
 
 
-async def sync_stage_assumptions(
+async def sync_stage_variables(
     db: AsyncSession,
     *,
     project_id: UUID,
@@ -873,37 +875,37 @@ async def sync_stage_assumptions(
     assessment_instance_id: UUID | None = None,
     stage_id: str,
     stage_data: dict[str, Any] | None,
-    actor: AssumptionActor,
+    actor: VariableActor,
     status: str = "assumed",
-) -> tuple[list[Assumption], dict[str, str]]:
+) -> tuple[list[Variable], dict[str, str]]:
     if not stage_data:
         return [], {}
     items = stage_data.get("items") if isinstance(stage_data, dict) else None
     if not isinstance(items, list):
         return [], {}
-    touched: list[Assumption] = []
-    item_assumption_map: dict[str, str] = {}
+    touched: list[Variable] = []
+    item_variable_map: dict[str, str] = {}
     assessment_name: str | None = None
     for item in items:
         content = item.get("content") if isinstance(item, dict) else None
         if not isinstance(content, dict):
             continue
-        # Only sync explicit assumption inputs. Free-form list rows (e.g. landscape
-        # entities with just "name"/"category") should not become assumptions.
+        # Only sync explicit variable inputs. Free-form list rows (e.g. landscape
+        # entities with just "name"/"category") should not become variables.
         raw_field_name = str(content.get("field_name") or "").strip()
         if not raw_field_name:
             continue
-        field_key = normalize_assumption_key(raw_field_name)
+        field_key = normalize_variable_key(raw_field_name)
         if not field_key:
             continue
         definition = _definition_for_assessment_field(field_key, assessment_id)
-        # Keep assessment-driven assumption sync scoped to configured variables
+        # Keep assessment-driven variable sync scoped to configured variables
         # that are actually mapped for this assessment.
         if definition is None:
             continue
         value = normalize_missing_value(content.get("value"))
         value_is_missing = value is None
-        effective_status = normalize_assumption_status(
+        effective_status = normalize_variable_status(
             content.get("status"),
             default=("missing" if value_is_missing else status),
         )
@@ -912,7 +914,7 @@ async def sync_stage_assumptions(
         value_type = definition.value_type
         if assessment_name is None:
             assessment_name = await _resolve_assessment_display_name(db, assessment_id, assessment_instance_id)
-        assumption, _created = await upsert_assumption(
+        variable, _created = await upsert_variable(
             db,
             project_id=project_id,
             key=key,
@@ -934,12 +936,12 @@ async def sync_stage_assumptions(
             replace_validated=True,
             allow_create=False,
         )
-        if assumption is None:
+        if variable is None:
             continue
-        binding = await upsert_assumption_binding(
+        binding = await upsert_variable_binding(
             db,
             project_id=project_id,
-            assumption_id=assumption.id,
+            variable_id=variable.id,
             assessment_id=assessment_id,
             assessment_instance_id=assessment_instance_id,
             stage_id=stage_id,
@@ -949,23 +951,23 @@ async def sync_stage_assumptions(
             value_type=value_type,
             metadata={"variable": content.get("variable")},
         )
-        content["assumption_id"] = str(assumption.id)
+        content["variable_id"] = str(variable.id)
         item_id = str(item.get("id") or "")
         if item_id:
-            item_assumption_map[item_id] = str(binding.assumption_id)
-        touched.append(assumption)
-    return touched, item_assumption_map
+            item_variable_map[item_id] = str(binding.variable_id)
+        touched.append(variable)
+    return touched, item_variable_map
 
 
-async def sync_widget_assumptions(
+async def sync_widget_variables(
     db: AsyncSession,
     *,
     project_id: UUID,
     assessment_id: str,
     assessment_instance_id: UUID | None = None,
     widget_data: dict[str, Any],
-    actor: AssumptionActor,
-) -> tuple[list[Assumption], dict[str, str]]:
+    actor: VariableActor,
+) -> tuple[list[Variable], dict[str, str]]:
     inputs = widget_data.get("inputs") if isinstance(widget_data, dict) else None
     if not isinstance(inputs, dict):
         return []
@@ -992,7 +994,7 @@ async def sync_widget_assumptions(
                 }
             }
         )
-    return await sync_stage_assumptions(
+    return await sync_stage_variables(
         db,
         project_id=project_id,
         assessment_id=assessment_id,
@@ -1004,11 +1006,11 @@ async def sync_widget_assumptions(
     )
 
 
-async def upsert_assumption_binding(
+async def upsert_variable_binding(
     db: AsyncSession,
     *,
     project_id: UUID,
-    assumption_id: UUID,
+    variable_id: UUID,
     assessment_id: str,
     assessment_instance_id: UUID | None,
     stage_id: str | None,
@@ -1017,19 +1019,19 @@ async def upsert_assumption_binding(
     unit: str | None = None,
     value_type: str | None = None,
     metadata: dict[str, Any] | None = None,
-) -> AssumptionBinding:
-    stmt = select(AssumptionBinding).where(
-        AssumptionBinding.project_id == project_id,
-        AssumptionBinding.assessment_id == assessment_id,
-        AssumptionBinding.field_name == normalize_assumption_key(field_name),
-        AssumptionBinding.stage_id == stage_id,
-        AssumptionBinding.assessment_instance_id == assessment_instance_id,
+) -> VariableBinding:
+    stmt = select(VariableBinding).where(
+        VariableBinding.project_id == project_id,
+        VariableBinding.assessment_id == assessment_id,
+        VariableBinding.field_name == normalize_variable_key(field_name),
+        VariableBinding.stage_id == stage_id,
+        VariableBinding.assessment_instance_id == assessment_instance_id,
     )
     existing = (await db.execute(stmt)).scalar_one_or_none()
     now = datetime.now(timezone.utc)
 
     if existing:
-        existing.assumption_id = assumption_id
+        existing.variable_id = variable_id
         existing.field_label = field_label
         existing.unit = unit
         existing.value_type = value_type
@@ -1037,13 +1039,13 @@ async def upsert_assumption_binding(
         existing.updated_at = now
         return existing
 
-    binding = AssumptionBinding(
+    binding = VariableBinding(
         project_id=project_id,
-        assumption_id=assumption_id,
+        variable_id=variable_id,
         assessment_id=assessment_id,
         assessment_instance_id=assessment_instance_id,
         stage_id=stage_id,
-        field_name=normalize_assumption_key(field_name),
+        field_name=normalize_variable_key(field_name),
         field_label=field_label,
         unit=unit,
         value_type=value_type,
@@ -1054,26 +1056,26 @@ async def upsert_assumption_binding(
     return binding
 
 
-async def resolve_assumption_for_assessment_field(
+async def resolve_variable_for_assessment_field(
     db: AsyncSession,
     *,
     project_id: UUID,
     assessment_id: str,
     field_name: str,
     assessment_instance_id: UUID | None = None,
-) -> Assumption | None:
-    normalized_field = normalize_assumption_key(field_name)
+) -> Variable | None:
+    normalized_field = normalize_variable_key(field_name)
     if not normalized_field:
         return None
 
     binding_stmt = (
-        select(AssumptionBinding)
+        select(VariableBinding)
         .where(
-            AssumptionBinding.project_id == project_id,
-            AssumptionBinding.assessment_id == assessment_id,
-            AssumptionBinding.field_name == normalized_field,
+            VariableBinding.project_id == project_id,
+            VariableBinding.assessment_id == assessment_id,
+            VariableBinding.field_name == normalized_field,
         )
-        .order_by(AssumptionBinding.updated_at.desc(), AssumptionBinding.created_at.desc())
+        .order_by(VariableBinding.updated_at.desc(), VariableBinding.created_at.desc())
     )
     bindings = list((await db.execute(binding_stmt)).scalars().all())
     if assessment_instance_id:
@@ -1082,44 +1084,44 @@ async def resolve_assumption_for_assessment_field(
             None,
         )
         if preferred is not None:
-            assumption = await get_assumption(db, preferred.assumption_id)
-            if assumption and assumption.project_id == project_id:
-                return assumption
+            variable = await get_variable(db, preferred.variable_id)
+            if variable and variable.project_id == project_id:
+                return variable
     if bindings:
-        assumption = await get_assumption(db, bindings[0].assumption_id)
-        if assumption and assumption.project_id == project_id:
-            return assumption
+        variable = await get_variable(db, bindings[0].variable_id)
+        if variable and variable.project_id == project_id:
+            return variable
 
     definition = _definition_for_assessment_field(normalized_field, assessment_id)
-    assumption_key = definition.key if definition else normalized_field
+    variable_key = definition.key if definition else normalized_field
     stmt = (
-        select(Assumption)
+        select(Variable)
         .where(
-            Assumption.project_id == project_id,
-            Assumption.key == assumption_key,
-            Assumption.status != "rejected",
+            Variable.project_id == project_id,
+            Variable.key == variable_key,
+            Variable.status != "rejected",
         )
-        .order_by(Assumption.updated_at.desc())
+        .order_by(Variable.updated_at.desc())
         .limit(1)
     )
-    assumption = (await db.execute(stmt)).scalar_one_or_none()
-    if assumption is not None:
-        assumption.status = normalize_assumption_status(assumption.status, default="assumed")
-    return assumption
+    variable = (await db.execute(stmt)).scalar_one_or_none()
+    if variable is not None:
+        variable.status = normalize_variable_status(variable.status, default="assumed")
+    return variable
 
 
 async def build_summary(db: AsyncSession, project_id: UUID) -> dict[str, Any]:
-    rows = await list_assumptions(db, project_id)
-    active_rows = [row for row in rows if normalize_assumption_status(row.status) in ACTIVE_STATUSES]
+    rows = await list_variables(db, project_id)
+    active_rows = [row for row in rows if normalize_variable_status(row.status) in ACTIVE_STATUSES]
     status_counts = {"validated": 0, "extracted": 0, "assumed": 0, "missing": 0}
     for row in active_rows:
-        normalized = normalize_assumption_status(row.status, default="assumed")
+        normalized = normalize_variable_status(row.status, default="assumed")
         if normalized in status_counts:
             status_counts[normalized] += 1
     top_attention = [
         row
         for row in active_rows
-        if normalize_assumption_status(row.status) in ATTENTION_STATUSES
+        if normalize_variable_status(row.status) in ATTENTION_STATUSES
     ][:5]
     return {
         "total": len(active_rows),
@@ -1132,7 +1134,7 @@ async def build_summary(db: AsyncSession, project_id: UUID) -> dict[str, Any]:
                 "id": row.id,
                 "key": row.key,
                 "label": row.label,
-                "status": normalize_assumption_status(row.status, default="assumed"),
+                "status": normalize_variable_status(row.status, default="assumed"),
                 "used_in_assessments": row.used_in_assessments or [],
             }
             for row in top_attention
@@ -1140,13 +1142,13 @@ async def build_summary(db: AsyncSession, project_id: UUID) -> dict[str, Any]:
     }
 
 
-def format_assumptions_for_prompt(assumptions: list[Assumption]) -> str:
-    active = [row for row in assumptions if normalize_assumption_status(row.status) in ACTIVE_STATUSES]
+def format_variables_for_prompt(variables: list[Variable]) -> str:
+    active = [row for row in variables if normalize_variable_status(row.status) in ACTIVE_STATUSES]
     if not active:
         return ""
     buckets: dict[str, list[str]] = {"validated": [], "extracted": [], "assumed": [], "missing": []}
     for row in active[:MAX_PROMPT_ASSUMPTIONS]:
-        normalized_status = normalize_assumption_status(row.status, default="assumed")
+        normalized_status = normalize_variable_status(row.status, default="assumed")
         value = "missing" if normalized_status == "missing" else row.value
         unit = f" {row.unit}" if row.unit else ""
         assessments = f" ({', '.join(row.used_in_assessments or [])})" if row.used_in_assessments else ""
@@ -1158,13 +1160,13 @@ def format_assumptions_for_prompt(assumptions: list[Assumption]) -> str:
     return "\n".join(parts)
 
 
-async def format_assumptions_for_initiative_prompt(db: AsyncSession, project_id: UUID) -> str:
-    rows = await list_assumptions(db, project_id)
-    return format_assumptions_for_prompt(rows)
+async def format_variables_for_initiative_prompt(db: AsyncSession, project_id: UUID) -> str:
+    rows = await list_variables(db, project_id)
+    return format_variables_for_prompt(rows)
 
 
-async def assumptions_as_context(db: AsyncSession, project_id: UUID) -> list[dict[str, Any]]:
-    rows = await list_assumptions(db, project_id)
+async def variables_as_context(db: AsyncSession, project_id: UUID) -> list[dict[str, Any]]:
+    rows = await list_variables(db, project_id)
     return [
         {
             "id": str(row.id),
@@ -1175,11 +1177,11 @@ async def assumptions_as_context(db: AsyncSession, project_id: UUID) -> list[dic
             "value_type": row.value_type,
             "source_type": row.source_type,
             "source_reference": row.source_reference,
-            "status": normalize_assumption_status(row.status, default="assumed"),
+            "status": normalize_variable_status(row.status, default="assumed"),
             "used_in_assessments": row.used_in_assessments or [],
         }
         for row in rows
-        if normalize_assumption_status(row.status) in ACTIVE_STATUSES
+        if normalize_variable_status(row.status) in ACTIVE_STATUSES
     ]
 
 
@@ -1195,7 +1197,7 @@ async def _load_extraction_text(db: AsyncSession, project_id: UUID) -> tuple[str
         rag = RAGService(db)
         retrieved = await rag.retrieve(
             query=(
-                "project assumptions inputs parameters CAPEX OPEX capacity discount rate "
+                "project variables inputs parameters CAPEX OPEX capacity discount rate "
                 "system size location costs financials"
             ),
             project_id=project_id,
@@ -1216,7 +1218,7 @@ async def _load_extraction_text(db: AsyncSession, project_id: UUID) -> tuple[str
                 f"[evidence:{item.source_doc_id}:{item.chunk_index}]\n{(item.content or '')[:1200]}"
             )
     except Exception as exc:  # noqa: BLE001
-        logger.info("Assumption extraction RAG unavailable, using recency fallback: %s", exc)
+        logger.info("Variable extraction RAG unavailable, using recency fallback: %s", exc)
 
     if not chunks:
         evidence_result = await db.execute(
@@ -1255,19 +1257,19 @@ async def _load_extraction_text(db: AsyncSession, project_id: UUID) -> tuple[str
     return "\n\n".join(chunks)[:MAX_EXTRACTION_CHARS], source_refs
 
 
-async def extract_assumptions_from_sources(
+async def extract_variables_from_sources(
     db: AsyncSession,
     initiative: Project,
     *,
-    actor: AssumptionActor,
+    actor: VariableActor,
     assessment_ids: list[str] | None = None,
-) -> tuple[int, int, list[Assumption]]:
+) -> tuple[int, int, list[Variable]]:
     """Open-vocabulary extraction from project materials/evidence with quote grounding."""
     assessments = assessment_ids or _assessment_ids_from_initiative(initiative)
     # Config is hints for the model + calculator binding seeds — not an allowlist.
-    definitions = expected_assumptions_for_assessments(assessments)
+    definitions = expected_variables_for_assessments(assessments)
     text, source_refs = await _load_extraction_text(db, initiative.id)
-    touched: list[Assumption] = []
+    touched: list[Variable] = []
     created_count = 0
     updated_count = 0
     if not text.strip():
@@ -1289,9 +1291,9 @@ async def extract_assumptions_from_sources(
         "Be conservative but open-vocabulary: you may extract parameters that are NOT in the "
         "known-keys list when the text states a concrete project value "
         "(for example a comparable-project NPV, custom metric, or bespoke cost).\n\n"
-        "Include an assumption only when the source quote states a concrete value. "
+        "Include a variable only when the source quote states a concrete value. "
         "Do NOT extract mere entities, organizations, policies, technologies, headings, themes, or concept lists.\n\n"
-        "Return JSON with an 'assumptions' array. Each item must include:\n"
+        "Return JSON with a 'variables' array. Each item must include:\n"
         "- key (snake_case)\n"
         "- label (human-readable)\n"
         "- value\n"
@@ -1301,7 +1303,7 @@ async def extract_assumptions_from_sources(
         "- status ('validated' for direct explicit statements, otherwise 'extracted')."
     )
     user_prompt = (
-        "Known assumption keys (prefer these keys when they match; you may also invent new keys):\n"
+        "Known variable keys (prefer these keys when they match; you may also invent new keys):\n"
         f"{json.dumps(schema_lines, indent=2)}\n\n"
         "Project materials:\n"
         f"{text}"
@@ -1321,20 +1323,21 @@ async def extract_assumptions_from_sources(
         )
         payload = json.loads(response.choices[0].message.content or "{}")
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Assumption extraction failed: %s", exc, exc_info=True)
+        logger.warning("Variable extraction failed: %s", exc, exc_info=True)
         payload = {}
 
-    for raw in payload.get("assumptions", []):
+    raw_items = payload.get("variables") or payload.get("assumptions") or []
+    for raw in raw_items:
         if not isinstance(raw, dict):
             continue
-        key = normalize_assumption_key(str(raw.get("key") or raw.get("label") or ""))
+        key = normalize_variable_key(str(raw.get("key") or raw.get("label") or ""))
         if not key:
             continue
         definition = _definition_for_key(key)
         value = raw.get("value")
         if value in (None, ""):
             continue
-        value_type = raw.get("value_type") or (definition.value_type if definition else infer_assumption_value_type(value))
+        value_type = raw.get("value_type") or (definition.value_type if definition else infer_variable_value_type(value))
         if not _passes_extraction_quality_gate(raw, value_type=value_type, definition=definition):
             continue
         # Require the quote to actually appear in retrieved text (grounding).
@@ -1345,7 +1348,7 @@ async def extract_assumptions_from_sources(
             collapsed_text = re.sub(r"\s+", " ", text).lower()
             if collapsed_quote not in collapsed_text and collapsed_quote[:60] not in collapsed_text:
                 continue
-        assumption, created = await upsert_assumption(
+        variable, created = await upsert_variable(
             db,
             project_id=initiative.id,
             key=definition.key if definition else key,
@@ -1362,12 +1365,12 @@ async def extract_assumptions_from_sources(
             },
             status="extracted",
             used_in_assessments=definition.used_in_assessments if definition else [],
-            actor=actor if actor.email else AssumptionActor.system(),
+            actor=actor if actor.email else VariableActor.system(),
             allow_create=True,
         )
-        if assumption is None:
+        if variable is None:
             continue
-        touched.append(assumption)
+        touched.append(variable)
         if created:
             created_count += 1
         else:
@@ -1375,21 +1378,21 @@ async def extract_assumptions_from_sources(
     return created_count, updated_count, touched
 
 
-async def extract_assumptions_from_assessment(
+async def extract_variables_from_assessment(
     db: AsyncSession,
     project: Project,
     *,
     assessment_instance,
-    actor: AssumptionActor,
-) -> list[Assumption]:
-    """Promote confirmed assessment inputs into the shared assumption pool on final approval."""
+    actor: VariableActor,
+) -> list[Variable]:
+    """Promote confirmed assessment inputs into the shared variable pool on final approval."""
     if assessment_instance is None or not hasattr(assessment_instance, "workflow_state"):
         return []
 
     state = assessment_instance.workflow_state if isinstance(assessment_instance.workflow_state, dict) else {}
     stages = state.get("stages") if isinstance(state.get("stages"), dict) else {}
     approved_at = datetime.now(timezone.utc).isoformat()
-    touched: list[Assumption] = []
+    touched: list[Variable] = []
     assessment_id = getattr(assessment_instance, "assessment_id", None) or ""
     assessment_name = _assessment_display_name_from_instance(assessment_instance, assessment_id)
 
@@ -1405,22 +1408,22 @@ async def extract_assumptions_from_assessment(
             content = item.get("content") if isinstance(item.get("content"), dict) else None
             if not isinstance(content, dict):
                 continue
-            # Same gate as sync_stage_assumptions: only explicit field_name rows.
+            # Same gate as sync_stage_variables: only explicit field_name rows.
             field_name = str(content.get("field_name") or "").strip()
             value = content.get("value")
             if not field_name or value in (None, ""):
                 continue
             definition = _definition_for_assessment_field(field_name, assessment_id)
-            key = definition.key if definition else normalize_assumption_key(field_name)
+            key = definition.key if definition else normalize_variable_key(field_name)
             label = str(content.get("variable") or content.get("label") or field_name)
-            assumption, _ = await upsert_assumption(
+            variable, _ = await upsert_variable(
                 db,
                 project_id=project.id,
                 key=key,
                 value=value,
                 label=label,
                 unit=content.get("unit") or (definition.unit if definition else None),
-                value_type=definition.value_type if definition else infer_assumption_value_type(value),
+                value_type=definition.value_type if definition else infer_variable_value_type(value),
                 source_type="assessment_approval",
                 source_reference={
                     "assessment_instance_id": str(assessment_instance.id),
@@ -1438,8 +1441,8 @@ async def extract_assumptions_from_assessment(
                 allow_create=True,
                 replace_validated=True,
             )
-            if assumption is not None:
-                touched.append(assumption)
+            if variable is not None:
+                touched.append(variable)
 
     # Calculator assessments persist under workflow_state.widget_state.inputs.
     top_widget = state.get("widget_state")
@@ -1461,15 +1464,15 @@ async def extract_assumptions_from_assessment(
                 if value in (None, "", [], {}) or not isinstance(value, (str, int, float, bool)):
                     continue
                 definition = _definition_for_assessment_field(str(field_name), assessment_id)
-                key = definition.key if definition else normalize_assumption_key(str(field_name))
-                assumption, _ = await upsert_assumption(
+                key = definition.key if definition else normalize_variable_key(str(field_name))
+                variable, _ = await upsert_variable(
                     db,
                     project_id=project.id,
                     key=key,
                     value=value,
                     label=str(label),
                     unit=unit or (definition.unit if definition else None),
-                    value_type=definition.value_type if definition else infer_assumption_value_type(value),
+                    value_type=definition.value_type if definition else infer_variable_value_type(value),
                     source_type="assessment_approval",
                     source_reference={
                         "assessment_instance_id": str(assessment_instance.id),
@@ -1485,13 +1488,13 @@ async def extract_assumptions_from_assessment(
                     allow_create=True,
                     replace_validated=True,
                 )
-                if assumption is not None:
-                    touched.append(assumption)
+                if variable is not None:
+                    touched.append(variable)
 
     return touched
 
 
-async def promote_chat_value_to_assumption(
+async def promote_chat_value_to_variable(
     db: AsyncSession,
     project: Project,
     *,
@@ -1503,21 +1506,21 @@ async def promote_chat_value_to_assumption(
     chat_id: UUID | None = None,
     chat_message_id: UUID | None = None,
     quote: str | None = None,
-    actor: AssumptionActor,
-) -> Assumption | None:
-    """Scaffold: promote a user-approved chat value into the shared assumption pool."""
-    normalized_key = normalize_assumption_key(key)
+    actor: VariableActor,
+) -> Variable | None:
+    """Scaffold: promote a user-approved chat value into the shared variable pool."""
+    normalized_key = normalize_variable_key(key)
     if not normalized_key:
         return None
     definition = _definition_for_key(normalized_key)
-    assumption, _ = await upsert_assumption(
+    variable, _ = await upsert_variable(
         db,
         project_id=project.id,
         key=definition.key if definition else normalized_key,
         value=value,
         label=label or (definition.label if definition else normalized_key.replace("_", " ").title()),
         unit=unit if unit is not None else (definition.unit if definition else None),
-        value_type=value_type or (definition.value_type if definition else infer_assumption_value_type(value)),
+        value_type=value_type or (definition.value_type if definition else infer_variable_value_type(value)),
         source_type="chat_approval",
         source_reference={
             "chat_id": str(chat_id) if chat_id else None,
@@ -1532,4 +1535,4 @@ async def promote_chat_value_to_assumption(
         allow_create=True,
         replace_validated=True,
     )
-    return assumption
+    return variable

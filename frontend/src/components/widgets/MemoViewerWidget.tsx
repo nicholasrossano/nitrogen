@@ -251,7 +251,7 @@ export function MemoViewerWidget({ data, projectId, isActive = true }: MemoViewe
                   </p>
                 </section>
 
-                {/* Risks and Assumptions */}
+                {/* Risks and Variables */}
                 <section>
                   <h2
                     contentEditable

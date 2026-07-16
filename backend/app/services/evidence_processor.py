@@ -31,7 +31,7 @@ from app.models.evidence import EvidenceChunk, EvidenceDoc, EvidenceDocStatus
 from app.models.project import Project
 from app.services.document_parser import DocumentParserService
 from app.services.embeddings import EmbeddingsService
-from app.services.assumptions import AssumptionActor, extract_assumptions_from_sources
+from app.services.variables import VariableActor, extract_variables_from_sources
 from app.services.evidence_processing import parse_file_to_chunk_payloads
 
 logger = logging.getLogger(__name__)
@@ -251,13 +251,13 @@ async def process_evidence_doc(
                 initiative.touch()
                 await db.flush()
                 try:
-                    await extract_assumptions_from_sources(
+                    await extract_variables_from_sources(
                         db,
                         initiative,
-                        actor=AssumptionActor(user_id=user_id, email=user_id),
+                        actor=VariableActor(user_id=user_id, email=user_id),
                     )
                 except Exception:
-                    logger.warning("Could not refresh assumptions after evidence processing", exc_info=True)
+                    logger.warning("Could not refresh variables after evidence processing", exc_info=True)
             await db.commit()
         except Exception as exc:  # noqa: BLE001
             logger.error(

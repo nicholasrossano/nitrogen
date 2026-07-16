@@ -18,7 +18,7 @@ from app.config import get_settings  # noqa: E402
 from app.core.database import engine  # noqa: E402
 from app.core.log_sanitizer import sanitize_text, sanitize_exception  # noqa: E402
 import app.core.project_activity_listeners  # noqa: F401, E402  # registers ORM hooks for project sort
-from app.api import legacy_initiatives, evidence, exports, assessment_catalog, chat, project_plan, project_materials, shares, users, google_drive, billing, api_keys, assessment_workflow, workspaces, assumptions, project_status, projects  # noqa: E402
+from app.api import legacy_assumptions, legacy_initiatives, evidence, exports, assessment_catalog, chat, project_plan, project_materials, shares, users, google_drive, billing, api_keys, assessment_workflow, workspaces, variables, project_status, projects  # noqa: E402
 from app.domain.energy.api import lcoe, carbon, pvwatts  # noqa: E402
 from app.mcp import get_mcp_http_app  # noqa: E402
 
@@ -187,7 +187,8 @@ app.include_router(evidence.router, prefix="/api/v1", tags=["evidence"])
 app.include_router(exports.router, prefix="/api/v1", tags=["exports"])
 app.include_router(assessment_catalog.router, prefix="/api/v1", tags=["assessments"])
 app.include_router(assessment_workflow.router, prefix="/api/v1", tags=["assessment-workflow"])
-app.include_router(assumptions.router, prefix="/api/v1", tags=["assumptions"])
+app.include_router(variables.router, prefix="/api/v1", tags=["variables"])
+app.include_router(legacy_assumptions.router, prefix="/api/v1", tags=["legacy-assumptions"])
 app.include_router(chat.router, prefix="/api/v1", tags=["chat"])
 app.include_router(project_plan.router, prefix="/api/v1", tags=["project-plan"])
 app.include_router(project_status.router, prefix="/api/v1", tags=["project-status"])

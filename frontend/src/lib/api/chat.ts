@@ -52,7 +52,7 @@ export const chatApi = {
         message_count: number;
         compare_project_ids: string[] | null;
         project_id: string | null;
-        assumption_id: string | null;
+        variable_id: string | null;
       }[];
     }>(
       (() => {
@@ -66,7 +66,7 @@ export const chatApi = {
     fetchApi<{
       chat_id: string;
       title: string | null;
-      assumption_id: string | null;
+      variable_id: string | null;
       messages: ChatMessage[];
     }>(`/api/v1/chats/${chatId}/messages`),
   getChatAssessments: (chatId: string) =>
@@ -115,7 +115,7 @@ export const chatApi = {
     modelInputsContext?: string | null,
     assessmentContext?: { instance_id: string; assessment_id: string; title?: string | null } | null,
     projectId?: string | null,
-    assumptionId?: string | null,
+    variableId?: string | null,
     onResearchStep?: (step: ResearchStep) => void,
     compareProjectIds?: string[] | null,
     allowInitialProjectOnboarding?: boolean,
@@ -140,7 +140,7 @@ export const chatApi = {
       has_model_inputs_context: Boolean(modelInputsContext),
       has_assessment_context: Boolean(assessmentContext),
       project_id: projectId ?? null,
-      assumption_id: assumptionId ?? null,
+      variable_id: variableId ?? null,
       compare_mode: Boolean(compareProjectIds?.length),
       allow_initial_project_onboarding: Boolean(allowInitialProjectOnboarding),
       has_active_editor_context: Boolean(activeEditorContext),
@@ -160,7 +160,7 @@ export const chatApi = {
         model_inputs_context: modelInputsContext ?? null,
         assessment_context: assessmentContext ?? null,
         project_id: projectId ?? null,
-        assumption_id: assumptionId ?? null,
+        variable_id: variableId ?? null,
         compare_project_ids: compareProjectIds ?? null,
         allow_initial_project_onboarding: Boolean(allowInitialProjectOnboarding),
         active_editor_context: activeEditorContext ?? null,

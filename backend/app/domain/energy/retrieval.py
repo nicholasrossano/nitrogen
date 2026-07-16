@@ -73,7 +73,7 @@ def register_retrieval_tools(registry: CapabilityRegistry) -> None:
                     "description": (
                         "Query World Bank Open Data for country-level indicators (electricity access, "
                         "clean cooking access, population, GDP per capita, inflation, poverty). "
-                        "Use this when the user needs baseline market or macro assumptions for a country."
+                        "Use this when the user needs baseline market or macro variables for a country."
                     ),
                     "parameters": {
                         "type": "object",

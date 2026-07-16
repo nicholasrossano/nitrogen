@@ -85,16 +85,16 @@ def match_assumptions(
 
 def run_recorded_extraction(fixture: dict[str, Any]) -> list[dict[str, Any]]:
     """Apply quality gate + grounding to frozen LLM JSON (deterministic CI path)."""
-    from app.services.assumptions import (
+    from app.services.variables import (
         _passes_extraction_quality_gate,
-        infer_assumption_value_type,
-        normalize_assumption_key,
+        infer_variable_value_type,
+        normalize_variable_key,
         normalize_missing_value,
     )
-    from app.assumptions.config import ASSUMPTION_BY_KEY
+    from app.variables.config import VARIABLE_BY_KEY
 
     recorded = fixture.get("recorded_llm") or {}
-    raw_items = recorded.get("assumptions") or []
+    raw_items = recorded.get("variables") or []
     text = ""
     for material in (fixture.get("input") or {}).get("materials") or []:
         text += "\n" + str(material.get("content_text") or "")
@@ -105,14 +105,14 @@ def run_recorded_extraction(fixture: dict[str, Any]) -> list[dict[str, Any]]:
     for raw in raw_items:
         if not isinstance(raw, dict):
             continue
-        key = normalize_assumption_key(str(raw.get("key") or raw.get("label") or ""))
+        key = normalize_variable_key(str(raw.get("key") or raw.get("label") or ""))
         if not key:
             continue
         value = normalize_missing_value(raw.get("value"))
         if value is None:
             continue
-        definition = ASSUMPTION_BY_KEY.get(key)
-        value_type = raw.get("value_type") or (definition.value_type if definition else infer_assumption_value_type(value))
+        definition = VARIABLE_BY_KEY.get(key)
+        value_type = raw.get("value_type") or (definition.value_type if definition else infer_variable_value_type(value))
         if not _passes_extraction_quality_gate(raw, value_type=value_type, definition=definition):
             continue
         quote = str(raw.get("source_quote") or "").strip()

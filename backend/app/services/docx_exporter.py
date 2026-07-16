@@ -283,8 +283,8 @@ class DocxExporterService:
         doc.add_heading("Evidence Summary", level=1)
         doc.add_paragraph(memo_content.evidence_summary)
         
-        # Risks and Assumptions
-        doc.add_heading("Risks and Assumptions", level=1)
+        # Risks and Variables
+        doc.add_heading("Risks and Variables", level=1)
         doc.add_paragraph(memo_content.risks_and_assumptions)
         
         # Open Questions

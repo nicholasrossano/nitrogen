@@ -93,7 +93,7 @@ export const swrKeys = {
   materials: (id: string) => `materials:${id}`,
   status: (id: string) => `status:${id}`,
   shares: (id: string) => `shares:${id}`,
-  assumptions: (id: string) => `assumptions:${id}`,
+  variables: (id: string) => `variables:${id}`,
   instances: (id: string) => `instances:${id}`,
   health: (id: string) => `health:${id}`,
 } as const;

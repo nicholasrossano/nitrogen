@@ -103,14 +103,14 @@ Use exactly one of: **required**, **optional**, or **unknown**.
 ### required
 A deliverable is **required** ONLY when ALL of the following are true:
 1. You can cite a specific source: a government/agency checklist, a regulation or legislative instrument, or an official funder program page that lists this as a required component.
-2. It is plausibly triggered under the **default interpretation** of this project type (see Default Assumptions below).
+2. It is plausibly triggered under the **default interpretation** of this project type (see Default Variables below).
 3. You are confident it is a hard gate — the project cannot legally proceed, cannot get funded, or cannot be built without it.
 
 If you cannot satisfy all three, do NOT use required. Use unknown instead.
 The rationale for a required item MUST name the specific regulation, act, regulatory instrument, or official source (e.g. "Ghana EPA Act 490 requires a screening under L.I. 2454", not "environmental compliance is needed").
 
 ### optional
-A deliverable is **optional** when it is a legitimate pathway or useful artifact, but not a mandated gate under default assumptions.
+A deliverable is **optional** when it is a legitimate pathway or useful artifact, but not a mandated gate under default variables.
 
 Optional items fall into two internal buckets — keep the same label but make the distinction clear in the rationale:
 - **Execution-helpful**: supports project delivery regardless of route (e.g. techno-economic feasibility study, M&E plan, maintenance plan, site assessment).
@@ -127,7 +127,7 @@ The rationale for an unknown item MUST state what trigger or information would r
 
 NEVER mark something required just because it sounds plausible. Uncertainty is honest — use unknown.
 
-## Default Assumption Policy (apply when the description is ambiguous)
+## Default Variable Policy (apply when the description is ambiguous)
 
 You cannot ask clarifying questions. Apply these conservative defaults by project category:
 

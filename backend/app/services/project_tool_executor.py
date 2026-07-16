@@ -40,7 +40,7 @@ class ProjectToolExecutor:
         logger.info("Executing action: %s", action)
 
         if action == "send_message":
-            project_context = await self.chat_service.build_project_context_with_assumptions(initiative)
+            project_context = await self.chat_service.build_project_context_with_variables(initiative)
             history_dicts = self.chat_service._chat_history_to_dicts(chat_history)
             user_message = self.chat_service._extract_last_user_message(chat_history, params)
 
@@ -133,14 +133,14 @@ class ProjectToolExecutor:
                 if computable and content.get("result") and content.get("inputs"):
                     lcoe_val = content["result"]["lcoe"]
                     currency = content["result"].get("currency", "USD")
-                    assumption_count = content["result"].get("assumption_count", 0)
+                    variable_count = content["result"].get("variable_count", 0)
                     quality = content["result"].get("quality_label", "moderate")
                     widget_type = "lcoe_output"
                     widget_data = content
                     assistant_response = (
                         f"{yield_msg}\n\n"
                         f"**LCOE: {currency} {lcoe_val:.4f}/kWh** "
-                        f"({assumption_count} assumption{'s' if assumption_count != 1 else ''}, "
+                        f"({variable_count} variable{'s' if variable_count != 1 else ''}, "
                         f"{quality} confidence). "
                         "Review the inputs below — you can edit any value and I'll recalculate instantly."
                     )
@@ -193,14 +193,14 @@ class ProjectToolExecutor:
 
                 if computable and content.get("result") and content.get("inputs"):
                     net_er = content["result"]["net_er_tco2e"]
-                    assumption_count = content["result"].get("assumption_count", 0)
+                    variable_count = content["result"].get("variable_count", 0)
                     quality = content["result"].get("quality_label", "moderate")
                     widget_type = "carbon_output"
                     widget_data = content
                     assistant_response = (
                         f"{yield_msg}\n\n"
                         f"**Net Emission Reductions: {net_er:,.2f} tCO₂e/year** "
-                        f"({assumption_count} assumption{'s' if assumption_count != 1 else ''}, "
+                        f"({variable_count} variable{'s' if variable_count != 1 else ''}, "
                         f"{quality} confidence). "
                         "Review the inputs below — you can edit any value and I'll recalculate instantly."
                     )
@@ -236,7 +236,7 @@ class ProjectToolExecutor:
                 )
 
         elif action == "propose_input_value":
-            project_context = await self.chat_service.build_project_context_with_assumptions(initiative)
+            project_context = await self.chat_service.build_project_context_with_variables(initiative)
             history_dicts = self.chat_service._chat_history_to_dicts(chat_history)
             user_message = self.chat_service._extract_last_user_message(chat_history, params)
             active_field_context = field_context or {

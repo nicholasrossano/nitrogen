@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { ExternalLink, Loader2 } from 'lucide-react';
-import { api, type Assumption } from '@/lib/api';
+import { api, type Variable } from '@/lib/api';
 import { CHAT_FLOATING_PANEL_CHROME } from '@/components/ui/chatSidebarLayout';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import { getCached, swrFetch, swrKeys } from '@/lib/swrCache';
-import { AssumptionStatusCapsule } from '@/components/assumptions/AssumptionStatusCapsule';
+import { VariableStatusCapsule } from '@/components/variables/VariableStatusCapsule';
 
 function formatValue(value: unknown, unit?: string | null): string {
   if (value === null || value === undefined || value === '') return '—';
@@ -14,20 +14,20 @@ function formatValue(value: unknown, unit?: string | null): string {
   return unit ? `${base} ${unit}` : base;
 }
 
-interface ProjectAssumptionsPanelProps {
+interface ProjectVariablesPanelProps {
   projectId: string | null;
   refreshKey?: number;
-  onAssumptionSelect?: (assumption: Assumption) => void;
+  onVariableSelect?: (variable: Variable) => void;
   onViewAll?: () => void;
 }
 
-export function ProjectAssumptionsPanel({
+export function ProjectVariablesPanel({
   projectId,
   refreshKey = 0,
-  onAssumptionSelect,
+  onVariableSelect,
   onViewAll,
-}: ProjectAssumptionsPanelProps) {
-  const [rows, setRows] = useState<Assumption[]>([]);
+}: ProjectVariablesPanelProps) {
+  const [rows, setRows] = useState<Variable[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -35,8 +35,8 @@ export function ProjectAssumptionsPanel({
       setRows([]);
       return;
     }
-    const key = swrKeys.assumptions(projectId);
-    const cached = getCached<Assumption[]>(key);
+    const key = swrKeys.variables(projectId);
+    const cached = getCached<Variable[]>(key);
     if (cached) {
       setRows(cached.slice(0, 12));
       setLoading(false);
@@ -45,7 +45,7 @@ export function ProjectAssumptionsPanel({
     }
 
     let cancelled = false;
-    void swrFetch(key, () => api.listAssumptions(projectId), { force: refreshKey > 0 })
+    void swrFetch(key, () => api.listVariables(projectId), { force: refreshKey > 0 })
       .then(({ data }) => {
         if (!cancelled) setRows(data.slice(0, 12));
       })
@@ -100,17 +100,17 @@ export function ProjectAssumptionsPanel({
               <li key={row.id}>
                 <button
                   type="button"
-                  onClick={() => onAssumptionSelect?.(row)}
-                  disabled={!onAssumptionSelect}
+                  onClick={() => onVariableSelect?.(row)}
+                  disabled={!onVariableSelect}
                   className={`w-full text-left rounded-md border border-stroke-subtle bg-white px-2.5 py-2 transition-colors ${
-                    onAssumptionSelect
+                    onVariableSelect
                       ? 'hover:bg-surface-subtle cursor-pointer'
                       : 'disabled:cursor-default'
                   } disabled:hover:bg-white`}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-medium text-text-primary leading-snug">{row.label}</span>
-                    <AssumptionStatusCapsule status={row.status} className="shrink-0" />
+                    <VariableStatusCapsule status={row.status} className="shrink-0" />
                   </div>
                   <p className="mt-1 text-[11px] text-text-secondary truncate" title={formatValue(row.value, row.unit)}>
                     {formatValue(row.value, row.unit)}

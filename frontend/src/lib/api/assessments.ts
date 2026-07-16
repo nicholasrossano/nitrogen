@@ -14,13 +14,13 @@ import type {
   AssessmentAgentStatus,
   AssessmentActivityLog,
   AssessmentDecisionLogReport,
-  AssumptionStatus,
-  AssumptionSourceType,
-  Assumption,
-  AssumptionSummary,
-  AssumptionCreateInput,
-  AssumptionUpdateInput,
-  AssumptionComment,
+  VariableStatus,
+  VariableSourceType,
+  Variable,
+  VariableSummary,
+  VariableCreateInput,
+  VariableUpdateInput,
+  VariableComment,
   DeepDiveResult,
 } from './types';
 
@@ -217,22 +217,22 @@ export const assessmentsApi = {
   getAssessmentDecisionLog: (instanceId: string) => {
     return fetchApi<AssessmentDecisionLogReport>(`/api/v1/assessment-workflow/${instanceId}/decision-log`);
   },
-  getAssumptionsSummary: (projectId: string) =>
-    fetchApi<AssumptionSummary>(`/api/v1/projects/${projectId}/assumptions/summary`),
-  listAssumptions: (
+  getVariablesSummary: (projectId: string) =>
+    fetchApi<VariableSummary>(`/api/v1/projects/${projectId}/variables/summary`),
+  listVariables: (
     projectId: string,
-    filters?: { status?: AssumptionStatus | ''; source_type?: AssumptionSourceType | ''; assessment?: string },
+    filters?: { status?: VariableStatus | ''; source_type?: VariableSourceType | ''; assessment?: string },
   ) => {
     const params = new URLSearchParams();
     if (filters?.status) params.set('status', filters.status);
     if (filters?.source_type) params.set('source_type', filters.source_type);
     if (filters?.assessment) params.set('assessment', filters.assessment);
     const query = params.toString();
-    return fetchApi<Assumption[]>(
-      `/api/v1/projects/${projectId}/assumptions${query ? `?${query}` : ''}`,
+    return fetchApi<Variable[]>(
+      `/api/v1/projects/${projectId}/variables${query ? `?${query}` : ''}`,
     );
   },
-  resolveAssumption: (
+  resolveVariable: (
     projectId: string,
     assessmentId: string,
     fieldName: string,
@@ -243,30 +243,34 @@ export const assessmentsApi = {
       field_name: fieldName,
     });
     if (assessmentInstanceId) params.set('assessment_instance_id', assessmentInstanceId);
-    return fetchApi<{ found: boolean; assumption: Assumption | null }>(
-      `/api/v1/projects/${projectId}/assumptions/resolve?${params.toString()}`,
+    return fetchApi<{ found: boolean; variable: Variable | null }>(
+      `/api/v1/projects/${projectId}/variables/resolve?${params.toString()}`,
     );
   },
-  createAssumption: (projectId: string, data: AssumptionCreateInput) =>
-    fetchApi<Assumption>(`/api/v1/projects/${projectId}/assumptions`, {
+  createVariable: (projectId: string, data: VariableCreateInput) =>
+    fetchApi<Variable>(`/api/v1/projects/${projectId}/variables`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  getAssumption: (assumptionId: string) =>
-    fetchApi<Assumption>(`/api/v1/assumptions/${assumptionId}`),
-  updateAssumption: (assumptionId: string, data: AssumptionUpdateInput) =>
-    fetchApi<Assumption>(`/api/v1/assumptions/${assumptionId}`, {
+  getVariable: (variableId: string) =>
+    fetchApi<Variable>(`/api/v1/variables/${variableId}`),
+  updateVariable: (variableId: string, data: VariableUpdateInput) =>
+    fetchApi<Variable>(`/api/v1/variables/${variableId}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
-  deleteAssumption: (assumptionId: string) =>
-    fetchApi<void>(`/api/v1/assumptions/${assumptionId}`, {
+  deleteVariable: (variableId: string) =>
+    fetchApi<void>(`/api/v1/variables/${variableId}`, {
       method: 'DELETE',
     }),
-  listAssumptionComments: (assumptionId: string) =>
-    fetchApi<AssumptionComment[]>(`/api/v1/assumptions/${assumptionId}/comments`),
-  createAssumptionComment: (assumptionId: string, body: string) =>
-    fetchApi<AssumptionComment>(`/api/v1/assumptions/${assumptionId}/comments`, {
+  listVariableComments: (variableId: string, timeoutMs: number = 15_000) =>
+    fetchApiWithTimeout<VariableComment[]>(
+      `/api/v1/variables/${variableId}/comments`,
+      {},
+      timeoutMs,
+    ),
+  createVariableComment: (variableId: string, body: string) =>
+    fetchApi<VariableComment>(`/api/v1/variables/${variableId}/comments`, {
       method: 'POST',
       body: JSON.stringify({ body }),
     }),

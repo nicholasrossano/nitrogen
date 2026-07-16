@@ -57,7 +57,7 @@ type PendingInvestigateAutoSend = {
   toolHint?: string;
   fieldContext?: FieldContext | null;
   modelInputsContext?: string | null;
-  assumptionId?: string | null;
+  variableId?: string | null;
 };
 
 function floatWidgetsAreEqual(a: FloatWidget[], b: FloatWidget[]): boolean {
@@ -81,7 +81,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   const [contextRefreshKey, setContextRefreshKey] = useState(0);
   const [expandedContextWidget, setExpandedContextWidget] = useState<ChatContextExpandedWidget | null>(null);
   const [expandMotionMode, setExpandMotionMode] = useState<ContextPanelExpandMotion>('stack');
-  const [focusedAssumptionId, setFocusedAssumptionId] = useState<string | null>(null);
+  const [focusedVariableId, setFocusedVariableId] = useState<string | null>(null);
   const [pendingInvestigateAutoSend, setPendingInvestigateAutoSend] = useState<PendingInvestigateAutoSend | null>(null);
   const [floatPanelWidthPx, setFloatPanelWidthPx] = useState(readChatEditorPanelWidth);
   const [floatCompanionOpen, setFloatCompanionOpen] = useState(false);
@@ -160,7 +160,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     setFloatWidgets([]);
     setFloatLayout('docked');
     restoringAssessmentRef.current = null;
-    setFocusedAssumptionId(null);
+    setFocusedVariableId(null);
     setPendingInvestigateAutoSend(null);
     // Keep URL-driven floors across project switches; only reset expansions
     // that aren't backed by ?panel=.
@@ -569,7 +569,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     setPinnedFloatWidgets(widgets);
   }, [chatShell, dismissContextPanelParam, panelParam]);
 
-  const handleOpenVariablesWorkspace = useCallback((focusAssumptionId?: string | null) => {
+  const handleOpenVariablesWorkspace = useCallback((focusVariableId?: string | null) => {
     const layout = resolveFloatLayoutForOpen();
     setExpandedContextWidget(null);
     setExpandMotionMode('stack');
@@ -579,7 +579,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     }
     setFloatLayout(layout);
     setFloatCompanionOpen(false);
-    setPinnedFloatWidgets([floatWidgetForVariablesWorkspace(projectId, focusAssumptionId)]);
+    setPinnedFloatWidgets([floatWidgetForVariablesWorkspace(projectId, focusVariableId)]);
     replaceWorkbenchSearchParams((params) => {
       params.delete('chat');
       params.set(CONTEXT_PANEL_SEARCH_PARAM, 'variables');
@@ -856,11 +856,11 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const bumpRefresh = () => setContextRefreshKey((k) => k + 1);
-    window.addEventListener('nitrogen:assumption-updated', bumpRefresh);
-    window.addEventListener('nitrogen:assumption-deleted', bumpRefresh);
+    window.addEventListener('nitrogen:variable-updated', bumpRefresh);
+    window.addEventListener('nitrogen:variable-deleted', bumpRefresh);
     return () => {
-      window.removeEventListener('nitrogen:assumption-updated', bumpRefresh);
-      window.removeEventListener('nitrogen:assumption-deleted', bumpRefresh);
+      window.removeEventListener('nitrogen:variable-updated', bumpRefresh);
+      window.removeEventListener('nitrogen:variable-deleted', bumpRefresh);
     };
   }, []);
 
@@ -904,18 +904,18 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
       toolHint?: string | null;
       fieldContext?: FieldContext | null;
       modelInputsContext?: string | null;
-      assumptionId?: string | null;
+      variableId?: string | null;
     }) => {
       const text = typeof detail.text === 'string' ? detail.text.trim() : '';
       if (!text) return;
       const fieldContext = detail.fieldContext ?? null;
-      const assumptionId =
-        detail.assumptionId
-        ?? fieldContext?.assumption_id
+      const variableId =
+        detail.variableId
+        ?? fieldContext?.variable_id
         ?? null;
       revealChatFloorForInvestigate();
-      if (assumptionId) {
-        setFocusedAssumptionId(assumptionId);
+      if (variableId) {
+        setFocusedVariableId(variableId);
       }
       setPendingInvestigateAutoSend({
         requestId: `investigate-${fieldContext?.field_name ?? 'field'}-${Date.now()}`,
@@ -923,26 +923,26 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
         toolHint: detail.toolHint ?? fieldContext?.assessment_id ?? undefined,
         fieldContext,
         modelInputsContext: detail.modelInputsContext ?? null,
-        assumptionId,
+        variableId,
       });
     };
 
-    const onOpenAssumptionChat = (event: Event) => {
+    const onOpenVariableChat = (event: Event) => {
       const detail = (event as CustomEvent).detail as {
-        assumptionId?: string | null;
+        variableId?: string | null;
         title?: string | null;
         text?: string | null;
         toolHint?: string | null;
         fieldContext?: FieldContext | null;
         modelInputsContext?: string | null;
       } | null;
-      if (!detail?.assumptionId) return;
+      if (!detail?.variableId) return;
       queueInvestigateSend({
         text: detail.text,
         toolHint: detail.toolHint,
         fieldContext: detail.fieldContext ?? null,
         modelInputsContext: detail.modelInputsContext ?? null,
-        assumptionId: detail.assumptionId,
+        variableId: detail.variableId,
       });
     };
 
@@ -965,15 +965,15 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
         toolHint: detail.toolHint,
         fieldContext: detail.fieldContext,
         modelInputsContext: detail.modelInputsContext ?? null,
-        assumptionId: detail.fieldContext.assumption_id ?? null,
+        variableId: detail.fieldContext.variable_id ?? null,
       });
     };
 
-    window.addEventListener('nitrogen:open-assumption-chat', onOpenAssumptionChat);
+    window.addEventListener('nitrogen:open-variable-chat', onOpenVariableChat);
     // Capture so we mark investigate drafts before ConversationView fills the composer.
     window.addEventListener('nitrogen:draft', onDraft, true);
     return () => {
-      window.removeEventListener('nitrogen:open-assumption-chat', onOpenAssumptionChat);
+      window.removeEventListener('nitrogen:open-variable-chat', onOpenVariableChat);
       window.removeEventListener('nitrogen:draft', onDraft, true);
     };
   }, [revealChatFloorForInvestigate]);
@@ -1023,7 +1023,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
             onFloatWidgetsChange={handleFloatWidgetsChange}
             activeAssessmentContext={activeAssessmentContext}
             activeEditorContext={activeEditorContext}
-            focusedAssumptionId={focusedAssumptionId}
+            focusedVariableId={focusedVariableId}
             pendingAutoSend={pendingInvestigateAutoSend}
             onPendingAutoSendHandled={() => setPendingInvestigateAutoSend(null)}
             onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}

@@ -39,7 +39,7 @@ interface StageTableRow extends ModelInputRow {
   fieldType: string;
   options: string[] | null;
   readOnly: boolean;
-  assumptionId?: string;
+  variableId?: string;
 }
 
 const SolarLocationMap = lazy(() => import('@/components/widgets/solar/SolarLocationMap'));
@@ -487,7 +487,7 @@ export function EditableTableStage({
           fieldType,
           options,
           readOnly: rowReadOnly,
-          assumptionId: typeof content.assumption_id === 'string' ? content.assumption_id : undefined,
+          variableId: typeof content.variable_id === 'string' ? content.variable_id : (typeof content.assumption_id === 'string' ? content.assumption_id : undefined),
         } satisfies StageTableRow;
       }),
     }));
@@ -623,7 +623,7 @@ export function EditableTableStage({
       fieldName: string,
       currentValue: unknown,
       unit: string,
-      rowAssumptionId?: unknown,
+      rowVariableId?: unknown,
     ) => {
     const text =
       status === 'extracted'
@@ -644,21 +644,21 @@ export function EditableTableStage({
         status: status || null,
       };
 
-      let resolvedAssumptionId =
-        typeof rowAssumptionId === 'string' && rowAssumptionId.trim().length > 0
-          ? rowAssumptionId
+      let resolvedVariableId =
+        typeof rowVariableId === 'string' && rowVariableId.trim().length > 0
+          ? rowVariableId
           : null;
-      if (!resolvedAssumptionId && projectId) {
+      if (!resolvedVariableId && projectId) {
         try {
-          const resolved = await api.resolveAssumption(projectId, assessmentId, fieldName, instanceId);
-          resolvedAssumptionId = resolved.found ? resolved.assumption?.id ?? null : null;
+          const resolved = await api.resolveVariable(projectId, assessmentId, fieldName, instanceId);
+          resolvedVariableId = resolved.found ? resolved.variable?.id ?? null : null;
         } catch {
-          resolvedAssumptionId = null;
+          resolvedVariableId = null;
         }
       }
-      if (!resolvedAssumptionId && projectId) {
+      if (!resolvedVariableId && projectId) {
         try {
-          const created = await api.createAssumption(projectId, {
+          const created = await api.createVariable(projectId, {
             key: fieldName,
             label,
             value: currentValue ?? null,
@@ -673,16 +673,16 @@ export function EditableTableStage({
             status: currentValue === null || currentValue === undefined || currentValue === '' ? 'missing' : 'assumed',
             used_in_assessments: [assessmentId],
           });
-          resolvedAssumptionId = created.id;
+          resolvedVariableId = created.id;
         } catch {
-          resolvedAssumptionId = null;
+          resolvedVariableId = null;
         }
       }
-      if (resolvedAssumptionId) {
-        fieldContext.assumption_id = resolvedAssumptionId;
-        window.dispatchEvent(new CustomEvent('nitrogen:open-assumption-chat', {
+      if (resolvedVariableId) {
+        fieldContext.variable_id = resolvedVariableId;
+        window.dispatchEvent(new CustomEvent('nitrogen:open-variable-chat', {
           detail: {
-            assumptionId: resolvedAssumptionId,
+            variableId: resolvedVariableId,
             title: label,
             text,
             toolHint: assessmentId,
@@ -890,7 +890,7 @@ export function EditableTableStage({
               row.field_name,
               row.value,
               String(row.unit ?? ''),
-              row.assumptionId,
+              row.variableId,
             );
           }}
           renderValueCell={(row) => (
@@ -961,7 +961,7 @@ export function EditableTableStage({
                         fieldName,
                         currentValue,
                         unit,
-                        item.content?.assumption_id,
+                        item.content?.variable_id ?? item.content?.assumption_id,
                       )}
                     />
                   );

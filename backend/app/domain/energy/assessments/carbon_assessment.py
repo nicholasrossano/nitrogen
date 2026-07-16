@@ -92,7 +92,7 @@ class CarbonTool(BaseAssessment):
         return AssessmentDefinition(
             id="carbon_model",
             name="Carbon Emissions Calculator",
-            description="Estimate emission reductions (tCO₂e) by comparing baseline vs project scenarios — extracts inputs from conversation and documents, fills gaps with methodology-aligned assumptions, and produces transparent, auditable results.",
+            description="Estimate emission reductions (tCO₂e) by comparing baseline vs project scenarios — extracts inputs from conversation and documents, fills gaps with methodology-aligned variables, and produces transparent, auditable results.",
             icon="Leaf",
             output_type="carbon",
             category="analysis",
@@ -123,7 +123,7 @@ class CarbonTool(BaseAssessment):
             input_dependencies=[],
             produced_outputs=["annual_emission_reduction_tco2e", "carbon_sensitivity", "carbon_inputs"],
             downstream_dependencies=[],
-            assumptions_behavior="tracks",
+            variables_behavior="tracks",
             evidence_behavior="none",
             decision_log_attribution=DecisionLogAttribution(
                 adapter_labels={"carbon": "Carbon calculator engine"},
@@ -216,7 +216,7 @@ class CarbonTool(BaseAssessment):
         method_pack = None
         for item in items:
             content = item.get("content", {})
-            var = content.get("variable", "")
+            var = content.get("variable") or content.get("assumption") or ""
             explicit_field_name = content.get("field_name")
             key = explicit_field_name if isinstance(explicit_field_name, str) and explicit_field_name else var.lower().replace(" ", "_")
             val = content.get("value")
@@ -412,7 +412,7 @@ class CarbonTool(BaseAssessment):
             carbon_result = widget_data.get("result") or {}
             await _progress(
                 f"Net ERs: {carbon_result.get('net_er_tco2e', 0):,.2f} tCO₂e/yr "
-                f"({carbon_result.get('assumption_count', 0)} assumptions)"
+                f"({carbon_result.get('variable_count', 0)} variables)"
             )
         else:
             widget_type = "carbon_inputs"
