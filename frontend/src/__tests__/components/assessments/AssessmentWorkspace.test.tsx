@@ -7,10 +7,12 @@ jest.mock('@/lib/api', () => ({
   api: {
     getStagedAssessmentWorkflowState: jest.fn(),
     getAssessmentAgentStatus: jest.fn(),
+    getAssessmentActivityLog: jest.fn(),
     runAssessment: jest.fn(),
     confirmStage: jest.fn(),
     approveFinalAssessmentOutput: jest.fn(),
     revokeFinalAssessmentApproval: jest.fn(),
+    exportStagedAssessment: jest.fn(),
   },
 }));
 
@@ -143,6 +145,41 @@ describe('AssessmentWorkspace', () => {
       workflow_version: 3,
       can_resume: true,
     } as any);
+    mockedApi.getAssessmentActivityLog.mockResolvedValue({
+      run_state: 'needs_review',
+      entries: [
+        {
+          sequence_number: 1,
+          event_type: 'agent_action',
+          label: 'Generated plan draft',
+          summary: 'Built initial plan groups',
+          occurred_at: '2026-04-22T12:00:00Z',
+          stage_id: 'plan',
+          stage_title: 'Plan',
+          is_decision_point: false,
+        },
+      ],
+    } as any);
+  });
+
+  it('opens the activity log in the companion side panel', async () => {
+    mockedApi.getStagedAssessmentWorkflowState.mockResolvedValue(buildWorkflowState() as any);
+    const onOpenActivityLog = jest.fn();
+
+    render(
+      <AssessmentWorkspace
+        instanceId="instance-1"
+        assessmentId="implementation_plan"
+        onOpenActivityLog={onOpenActivityLog}
+      />,
+    );
+
+    await screen.findByText('Implementation plan widget');
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+
+    expect(await screen.findByLabelText('Assessment activity log')).toBeInTheDocument();
+    expect(await screen.findByText('Generated plan draft')).toBeInTheDocument();
+    expect(onOpenActivityLog).not.toHaveBeenCalled();
   });
 
   it('keeps backend-confirmed stages navigable and read-only when revisiting them', async () => {
@@ -278,6 +315,57 @@ describe('AssessmentWorkspace', () => {
     await screen.findByText('Categorized list stage');
     expect(screen.queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
+  });
+
+  it('disables export while a download is in flight', async () => {
+    mockedApi.getStagedAssessmentWorkflowState.mockResolvedValue(buildWorkflowState({
+      assessment_definition: {
+        ...buildWorkflowState().assessment_definition,
+        export_format: 'xlsx',
+      },
+      workflow_state: {
+        ...buildWorkflowState().workflow_state,
+        stages: {
+          ...buildWorkflowState().workflow_state.stages,
+          plan: {
+            status: 'confirmed',
+            confirmed_at: '2026-04-22T12:10:00Z',
+            confirmed_by: 'user-1',
+            confirmed_by_email: 'user@example.com',
+            data: { widget_data: { groups: [] } },
+          },
+        },
+      },
+    }) as any);
+
+    const createObjectURL = jest.fn(() => 'blob:mock');
+    const revokeObjectURL = jest.fn();
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
+
+    let resolveExport: (value: { blob: Blob; filename: string }) => void = () => {};
+    mockedApi.exportStagedAssessment.mockImplementation(
+      () => new Promise((resolve) => {
+        resolveExport = resolve;
+      }),
+    );
+
+    render(<AssessmentWorkspace instanceId="instance-1" assessmentId="implementation_plan" projectId="initiative-1" />);
+    await screen.findByText('Implementation plan widget');
+
+    const exportButton = screen.getByRole('button', { name: 'Export' });
+    fireEvent.click(exportButton);
+    await waitFor(() => expect(exportButton).toBeDisabled());
+    expect(mockedApi.exportStagedAssessment).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(exportButton);
+    expect(mockedApi.exportStagedAssessment).toHaveBeenCalledTimes(1);
+
+    resolveExport({ blob: new Blob(['x']), filename: 'test.xlsx' });
+    await waitFor(() => expect(exportButton).not.toBeDisabled());
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(screen.getByText('Export ready')).toBeInTheDocument();
+    expect(screen.getByText('Assessment export')).toBeInTheDocument();
   });
 
   it('reverts final approval to an approvable state', async () => {

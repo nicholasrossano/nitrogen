@@ -11,6 +11,8 @@ import type {
 interface DeepDiveSourcesMenuProps {
   sources: PlanWorkspaceInspectorCitationSource[];
   onOpenDocument?: (source: PlanWorkspaceInspectorDocumentSource) => void;
+  /** Where the menu opens relative to the trigger. Default `bottom` (below). */
+  placement?: 'top' | 'bottom';
 }
 
 function sourceIcon(type: PlanWorkspaceInspectorCitationSource['type']) {
@@ -22,7 +24,11 @@ function sourceLabel(type: PlanWorkspaceInspectorCitationSource['type']) {
   return type === 'document' ? 'Uploaded' : 'Web';
 }
 
-export function DeepDiveSourcesMenu({ sources, onOpenDocument }: DeepDiveSourcesMenuProps) {
+export function DeepDiveSourcesMenu({
+  sources,
+  onOpenDocument,
+  placement = 'bottom',
+}: DeepDiveSourcesMenuProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const hasSources = sources.length > 0;
@@ -57,7 +63,12 @@ export function DeepDiveSourcesMenu({ sources, onOpenDocument }: DeepDiveSources
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1.5 min-w-[240px] max-w-[340px] rounded-lg border border-stroke-subtle bg-white p-2 shadow-lg">
+        <div
+          className={[
+            'absolute right-0 z-50 min-w-[240px] max-w-[340px] rounded-lg border border-stroke-subtle bg-white p-2 shadow-lg',
+            placement === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5',
+          ].join(' ')}
+        >
           <div className="space-y-0.5">
             {sources.map((source) => (
               <div

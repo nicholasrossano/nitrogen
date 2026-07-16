@@ -339,8 +339,9 @@ textarea {
 /* Button base styles - with opacity fade effect */
 .btn-primary {
   @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[18px];
-  @apply border border-accent text-accent bg-surface font-medium text-sm;
+  @apply border border-accent text-accent bg-surface font-medium text-sm leading-none;
   @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  line-height: 1 !important;
   position: relative;
   overflow: hidden;
   z-index: 0;
@@ -385,8 +386,9 @@ textarea {
 
 .btn-secondary {
   @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[18px];
-  @apply bg-surface text-text-primary font-medium border border-stroke-subtle text-sm;
+  @apply bg-surface text-text-primary font-medium border border-stroke-subtle text-sm leading-none;
   @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  line-height: 1 !important;
   position: relative;
   overflow: hidden;
   z-index: 0;
@@ -423,7 +425,8 @@ textarea {
 .btn-compact-neutral {
   @apply inline-flex items-center justify-center gap-1.5 h-7 px-2.5 rounded-lg;
   @apply whitespace-nowrap border border-stroke-subtle bg-white text-text-secondary;
-  @apply text-xs font-medium disabled:cursor-not-allowed disabled:opacity-60;
+  @apply text-xs font-medium leading-none disabled:cursor-not-allowed disabled:opacity-60;
+  line-height: 1 !important;
   transition: border-color 150ms ease-in-out, color 150ms ease-in-out, transform 100ms ease-out;
 }
 
@@ -441,8 +444,9 @@ textarea {
 
 .btn-danger {
   @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[18px];
-  @apply border border-indicator-red text-indicator-red bg-surface font-medium text-sm;
+  @apply border border-indicator-red text-indicator-red bg-surface font-medium text-sm leading-none;
   @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  line-height: 1 !important;
   position: relative;
   overflow: hidden;
   z-index: 0;
@@ -486,8 +490,9 @@ textarea {
 
 .btn-ghost {
   @apply inline-flex items-center justify-center gap-2 px-4 py-2;
-  @apply text-text-secondary font-medium;
+  @apply text-text-secondary font-medium leading-none;
   @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  line-height: 1 !important;
   position: relative;
   overflow: hidden;
   z-index: 0;
@@ -557,7 +562,8 @@ textarea {
 
 /* Icon button with opacity fade */
 .icon-btn {
-  @apply p-2 rounded;
+  @apply inline-flex items-center justify-center p-2 rounded leading-none;
+  line-height: 1 !important;
   position: relative;
   overflow: hidden;
   z-index: 0;

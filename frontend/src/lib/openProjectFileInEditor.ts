@@ -1,6 +1,7 @@
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import type { FloatWidget } from '@/components/editor/FloatLayer';
 import type { Assumption, ProjectMaterial } from '@/lib/api';
+import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 
 export function floatWidgetForCitation(citation: ResearchPanelCitation): FloatWidget {
   return {
@@ -45,6 +46,20 @@ export function floatWidgetForAssumption(assumption: Assumption): FloatWidget {
       title: assumption.label,
     },
     messageId: `variable-${assumption.id}`,
+  };
+}
+
+export function floatWidgetForVariablesWorkspace(
+  projectId: string,
+  focusAssumptionId?: string | null,
+): FloatWidget {
+  return {
+    type: 'variables_workspace',
+    data: {
+      title: PROJECT_VARIABLES.title,
+      focus_assumption_id: focusAssumptionId ?? null,
+    },
+    messageId: `variables-${projectId}`,
   };
 }
 

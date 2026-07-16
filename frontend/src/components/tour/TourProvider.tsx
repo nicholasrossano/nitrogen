@@ -167,8 +167,8 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   }, [pathname, replayNonce, router, startWelcome, welcomeCompleted]);
 
   // First-visit feature tips — only after welcome is done.
-  // Mount-triggered tips fire when a floor panel header registers (mini stack "View all"
-  // does not put ?panel= in the URL). Route-triggered tips still use pathname/search.
+  // Mount-triggered tips fire when a floor panel header registers (including
+  // mini-stack expands that now also set ?panel=). Route-triggered tips still use pathname/search.
   useEffect(() => {
     if (welcomeActive || !welcomeCompleted) return;
     if (activeGroup) return;
@@ -181,8 +181,8 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
       const completed = useTourStore.getState().completedStepIds;
 
       // 1) Expanded floors (Overview / Variables / Assessments / Files) — tip when the
-      //    floor header mounts. Mini-stack "View all" expands without ?panel=; require
-      //    surface=floor so sidebar nav wrappers with the same id do not fire early.
+      //    floor header mounts. Require surface=floor so sidebar nav wrappers with the
+      //    same id do not fire early.
       for (const step of MOUNT_TRIGGERED_FEATURE_STEPS) {
         if (completed.includes(step.id)) continue;
         if (promptedFeatureGroupsRef.current.has(step.group)) continue;

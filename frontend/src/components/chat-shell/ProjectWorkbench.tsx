@@ -10,10 +10,12 @@ import {
   type ChatContextExpandedWidget,
 } from '@/components/chat-shell/ChatContextStack';
 import {
+  ASSESSMENT_SEARCH_PARAM,
   CONTEXT_PANEL_SEARCH_PARAM,
   buildProjectWorkbenchPath,
   contextStackBackdropMotionClass,
   contextStackTransitionClass,
+  parseAssessmentParam,
   parseContextPanelParam,
   type ContextPanelExpandMotion,
   type ExpandedWidgetChangeOptions,
@@ -21,19 +23,21 @@ import {
 import { FloatLayer, type AssessmentLogContext, type FloatWidget } from '@/components/editor/FloatLayer';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import {
-  floatWidgetForAssumption,
   floatWidgetForCitation,
   floatWidgetForProjectMaterial,
+  floatWidgetForVariablesWorkspace,
 } from '@/lib/openProjectFileInEditor';
 import { activeEditorContextFromWidget } from '@/lib/activeEditorContext';
-import { api, type Assumption, type AssessmentInstance, type ProjectMaterial } from '@/lib/api';
+import { api, type AssessmentInstance, type FieldContext, type ProjectMaterial } from '@/lib/api';
 import { projectDisplayName } from '@/lib/projectDisplayName';
 import { discardEphemeralAssessmentInstance } from '@/lib/assessmentEngagement';
+import { assessmentHeaderTitle } from '@/lib/assessmentDisplay';
 import { getCached, swrFetch, swrKeys } from '@/lib/swrCache';
 import { useProjectStore } from '@/stores/projectStore';
 import {
   CHAT_CONTEXT_STACK_GUTTER,
   CHAT_FLOATING_PANEL_CHROME,
+  COMPANION_SIDE_PANEL_WIDTH_PX,
   clampChatEditorPanelWidth,
   chatEditorPanelGutter,
   readChatEditorPanelWidth,
@@ -44,8 +48,27 @@ const FLOATING_PANEL_CLASS = `absolute z-20 right-3 flex flex-col min-h-0 overfl
 const SOLO_FLOAT_PANEL_CLASS = `absolute z-30 inset-y-3 left-0 right-3 flex flex-col min-h-0 overflow-hidden ${CHAT_FLOATING_PANEL_CHROME}`;
 const RIGHT_MARGIN_PX = 12;
 
-/** Docked = companion beside an active floor (Chat / Overview / Variables / Files / Assessments). Solo = float owns the stage. */
+/** Docked = companion beside an active floor (Chat / Overview / Files / Assessments). Solo = float owns the stage. */
 type FloatLayout = 'docked' | 'solo';
+
+type PendingInvestigateAutoSend = {
+  requestId: string;
+  content: string;
+  toolHint?: string;
+  fieldContext?: FieldContext | null;
+  modelInputsContext?: string | null;
+  assumptionId?: string | null;
+};
+
+function floatWidgetsAreEqual(a: FloatWidget[], b: FloatWidget[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i].messageId !== b[i].messageId || a[i].type !== b[i].type) return false;
+    if (a[i].data !== b[i].data) return false;
+  }
+  return true;
+}
 
 export function ProjectWorkbench({ projectId }: { projectId: string }) {
   const router = useRouter();
@@ -58,8 +81,10 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   const [contextRefreshKey, setContextRefreshKey] = useState(0);
   const [expandedContextWidget, setExpandedContextWidget] = useState<ChatContextExpandedWidget | null>(null);
   const [expandMotionMode, setExpandMotionMode] = useState<ContextPanelExpandMotion>('stack');
-  const [variablesFocusId, setVariablesFocusId] = useState<string | null>(null);
+  const [focusedAssumptionId, setFocusedAssumptionId] = useState<string | null>(null);
+  const [pendingInvestigateAutoSend, setPendingInvestigateAutoSend] = useState<PendingInvestigateAutoSend | null>(null);
   const [floatPanelWidthPx, setFloatPanelWidthPx] = useState(readChatEditorPanelWidth);
+  const [floatCompanionOpen, setFloatCompanionOpen] = useState(false);
   const [isResizingFloatPanel, setIsResizingFloatPanel] = useState(false);
   const [floatLayout, setFloatLayout] = useState<FloatLayout>('docked');
   const [frameworkAssessmentInstances, setFrameworkAssessmentInstances] = useState<AssessmentInstance[]>([]);
@@ -71,6 +96,8 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
 
   const activeChatId = searchParams.get('chat');
   const panelParam = parseContextPanelParam(searchParams.get(CONTEXT_PANEL_SEARCH_PARAM));
+  const assessmentParam = parseAssessmentParam(searchParams.get(ASSESSMENT_SEARCH_PARAM));
+  const restoringAssessmentRef = useRef<string | null>(null);
 
   const replaceWorkbenchSearchParams = useCallback((mutate: (params: URLSearchParams) => void) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -79,7 +106,8 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     mutate(params);
     const chat = params.get('chat');
     const panel = parseContextPanelParam(params.get(CONTEXT_PANEL_SEARCH_PARAM));
-    router.replace(buildProjectWorkbenchPath(projectId, { chat, panel }));
+    const assessment = parseAssessmentParam(params.get(ASSESSMENT_SEARCH_PARAM));
+    router.replace(buildProjectWorkbenchPath(projectId, { chat, panel, assessment }));
   }, [projectId, router, searchParams]);
 
   const clearContextPanelParam = useCallback(() => {
@@ -131,26 +159,37 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     setPinnedFloatWidgets(null);
     setFloatWidgets([]);
     setFloatLayout('docked');
-    // Keep URL-driven floors (sidebar capsules) across project switches; only
-    // reset stack expansions that aren't backed by ?panel=.
+    restoringAssessmentRef.current = null;
+    setFocusedAssumptionId(null);
+    setPendingInvestigateAutoSend(null);
+    // Keep URL-driven floors across project switches; only reset expansions
+    // that aren't backed by ?panel=.
     if (!panelParam) {
       setExpandedContextWidget(null);
-      setVariablesFocusId(null);
       setExpandMotionMode('stack');
     }
-  }, [projectId, panelParam]);
+    // panelParam intentionally read only at project switch — panel changes are
+    // handled by the ?panel= sync effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
 
   useEffect(() => {
     if (activeChatId) return;
 
     if (!panelParam) {
       dismissingPanelRef.current = null;
-      // Stack expansions don't use the URL — don't tear them down when ?panel= is absent.
-      if (expandMotionMode === 'center') {
+      // Floors / variables float are URL-backed via ?panel= — tear down when absent.
+      if (expandedContextWidget) {
         setExpandedContextWidget(null);
         chatShell?.setActiveContextWidget(null);
         setExpandMotionMode('stack');
       }
+      setPinnedFloatWidgets((prev) => {
+        if (!prev?.some((widget) => widget.type === 'variables_workspace')) return prev;
+        const rest = prev.filter((widget) => widget.type !== 'variables_workspace');
+        return rest.length > 0 ? rest : null;
+      });
+      setFloatCompanionOpen(false);
       return;
     }
 
@@ -161,20 +200,52 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
       dismissingPanelRef.current = null;
     }
 
-    if (expandedContextWidget === panelParam && expandMotionMode === 'center') return;
+    // Variables is a float, not a floor.
+    if (panelParam === 'variables') {
+      if (expandedContextWidget) {
+        setExpandedContextWidget(null);
+        setExpandMotionMode('stack');
+      }
+      chatShell?.setActiveContextWidget('variables');
+      const alreadyOpen = (pinnedFloatWidgets ?? floatWidgets).some(
+        (widget) => widget.type === 'variables_workspace',
+      );
+      if (!alreadyOpen) {
+        const layout: FloatLayout = hasMessages ? 'docked' : 'solo';
+        setFloatLayout(layout);
+        if (layout === 'solo') {
+          setHasMessages(true);
+        }
+        setPinnedFloatWidgets([floatWidgetForVariablesWorkspace(projectId)]);
+      }
+      return;
+    }
+
+    if (expandedContextWidget === panelParam) return;
 
     // Honor capsule / deep-link opens even when a stack floor is already up.
-    setPinnedFloatWidgets(null);
-    setFloatWidgets([]);
-    setFloatLayout('docked');
-    if (panelParam !== 'variables') {
-      setVariablesFocusId(null);
+    // Keep an assessment float when restoring both ?panel= and ?assessment=.
+    if (!assessmentParam) {
+      setPinnedFloatWidgets(null);
+      setFloatWidgets([]);
+      setFloatLayout('docked');
+      setFloatCompanionOpen(false);
     }
     setHasMessages(false);
     setExpandMotionMode('center');
     setExpandedContextWidget(panelParam);
     chatShell?.setActiveContextWidget(panelParam);
-  }, [activeChatId, chatShell, expandMotionMode, expandedContextWidget, panelParam]);
+  }, [
+    activeChatId,
+    assessmentParam,
+    chatShell,
+    expandedContextWidget,
+    floatWidgets,
+    hasMessages,
+    panelParam,
+    pinnedFloatWidgets,
+    projectId,
+  ]);
 
   useEffect(() => {
     if (!activeChatId || !panelParam) return;
@@ -183,7 +254,6 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
 
   const project = useProjectStore((s) => s.project);
   const projectPlan = useProjectStore((s) => s.projectPlan);
-
   const cachedProject = useProjectStore((s) => s.projectsById[projectId] ?? null);
 
   // Prefer live store slot, then by-id cache — never paint "Untitled" for a known id.
@@ -210,30 +280,182 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     () => activeEditorContextFromWidget(effectiveFloatWidgets[effectiveFloatWidgets.length - 1]),
     [effectiveFloatWidgets],
   );
+  const activeAssessmentContext = useMemo(() => {
+    for (let index = effectiveFloatWidgets.length - 1; index >= 0; index -= 1) {
+      const widget = effectiveFloatWidgets[index];
+      if (
+        (widget.type === 'assessment_workspace'
+          || widget.type === 'decision_log'
+          || widget.type === 'activity_log')
+        && typeof widget.data?.instance_id === 'string'
+        && typeof widget.data?.assessment_id === 'string'
+      ) {
+        return {
+          instanceId: widget.data.instance_id,
+          assessmentId: widget.data.assessment_id,
+          title: typeof widget.data.title === 'string' ? widget.data.title : null,
+        };
+      }
+    }
+    return null;
+  }, [effectiveFloatWidgets]);
   const showFloatLayer = effectiveFloatWidgets.length > 0;
-  // A FloorLayer overlay (e.g. Variables) stays up when a companion float docks
-  // beside it. The mini launcher stack only shows when no float or expanded floor owns the stage.
+
+  const urlAssessmentInstanceId = useMemo(() => {
+    for (let index = effectiveFloatWidgets.length - 1; index >= 0; index -= 1) {
+      const widget = effectiveFloatWidgets[index];
+      if (
+        (widget.type === 'assessment_workspace'
+          || widget.type === 'decision_log'
+          || widget.type === 'activity_log')
+        && typeof widget.data?.instance_id === 'string'
+        && widget.data.instance_id
+      ) {
+        return widget.data.instance_id as string;
+      }
+    }
+    return null;
+  }, [effectiveFloatWidgets]);
+
+  // Keep ?assessment= in sync with the open assessment float (refresh / share).
+  useEffect(() => {
+    if (urlAssessmentInstanceId) {
+      if (assessmentParam === urlAssessmentInstanceId) return;
+      replaceWorkbenchSearchParams((params) => {
+        params.set(ASSESSMENT_SEARCH_PARAM, urlAssessmentInstanceId);
+      });
+      return;
+    }
+    if (!assessmentParam) return;
+    // Don't clear a deep-link while restore is in flight.
+    if (restoringAssessmentRef.current === assessmentParam) return;
+    replaceWorkbenchSearchParams((params) => {
+      params.delete(ASSESSMENT_SEARCH_PARAM);
+    });
+  }, [assessmentParam, replaceWorkbenchSearchParams, urlAssessmentInstanceId]);
+
+  // Restore assessment float from ?assessment= after refresh.
+  useEffect(() => {
+    if (!assessmentParam) {
+      restoringAssessmentRef.current = null;
+      return;
+    }
+    const alreadyOpen = (pinnedFloatWidgets ?? floatWidgets).some(
+      (widget) =>
+        (widget.type === 'assessment_workspace'
+          || widget.type === 'decision_log'
+          || widget.type === 'activity_log')
+        && widget.data?.instance_id === assessmentParam,
+    );
+    if (alreadyOpen) {
+      restoringAssessmentRef.current = assessmentParam;
+      return;
+    }
+
+    let cancelled = false;
+    restoringAssessmentRef.current = assessmentParam;
+
+    void api.listAssessmentInstances(projectId)
+      .then((instances) => {
+        if (cancelled) return;
+        const instance = instances.find((item) => item.id === assessmentParam);
+        if (!instance) {
+          restoringAssessmentRef.current = null;
+          replaceWorkbenchSearchParams((params) => {
+            params.delete(ASSESSMENT_SEARCH_PARAM);
+          });
+          return;
+        }
+        const layout: FloatLayout = panelParam || activeChatId ? 'docked' : 'solo';
+        setFloatLayout(layout);
+        if (layout === 'solo') {
+          setHasMessages(true);
+        }
+        setPinnedFloatWidgets([
+          {
+            type: 'assessment_workspace',
+            data: {
+              instance_id: instance.id,
+              assessment_id: instance.assessment_id,
+              title:
+                instance.display_name
+                || instance.title
+                || instance.assessment_id.replace(/_/g, ' '),
+            },
+            messageId: `workspace-${instance.id}`,
+          },
+        ]);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        restoringAssessmentRef.current = null;
+        replaceWorkbenchSearchParams((params) => {
+          params.delete(ASSESSMENT_SEARCH_PARAM);
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeChatId,
+    assessmentParam,
+    floatWidgets,
+    panelParam,
+    pinnedFloatWidgets,
+    projectId,
+    replaceWorkbenchSearchParams,
+  ]);
+
+  // A FloorLayer overlay stays up when a companion float docks beside it.
+  // The mini launcher stack only shows when no float or expanded floor owns the stage.
   const showContextStack = Boolean(projectId)
     && (expandedContextWidget != null || (!showFloatLayer && (!hasMessages || panelParam != null)));
   const floatIsSolo = showFloatLayer && floatLayout === 'solo';
   const floatIsDocked = showFloatLayer && !floatIsSolo;
   const reserveRightSpace = (showContextStack && !expandedContextWidget) || floatIsDocked;
+  // Grow the docked float when a companion column is open so content + side panel fit.
+  const effectiveFloatPanelWidthPx = floatCompanionOpen
+    ? clampChatEditorPanelWidth(floatPanelWidthPx + COMPANION_SIDE_PANEL_WIDTH_PX, {
+      companionOpen: true,
+    })
+    : floatPanelWidthPx;
   const rightGutter = floatIsSolo
     ? undefined
     : showFloatLayer
-      ? chatEditorPanelGutter(floatPanelWidthPx)
+      ? chatEditorPanelGutter(effectiveFloatPanelWidthPx)
       : reserveRightSpace
         ? CHAT_CONTEXT_STACK_GUTTER
         : undefined;
   // Overlay floors shrink to leave room for a docked FloatLayer.
-  const floorRightInset = floatIsDocked ? chatEditorPanelGutter(floatPanelWidthPx) : '0.75rem';
+  const floorRightInset = floatIsDocked ? chatEditorPanelGutter(effectiveFloatPanelWidthPx) : '0.75rem';
+
+  // rAF-batched so a burst of native mousemove events (which can fire far faster
+  // than the browser paints) collapses into one width commit per frame.
+  const floatResizeFrameRef = useRef<number | null>(null);
+  const floatResizePendingClientXRef = useRef<number | null>(null);
 
   const handleFloatResizeMove = useCallback((event: MouseEvent) => {
-    const nextWidth = window.innerWidth - event.clientX - RIGHT_MARGIN_PX;
-    setFloatPanelWidthPx(clampChatEditorPanelWidth(nextWidth));
-  }, []);
+    floatResizePendingClientXRef.current = event.clientX;
+    if (floatResizeFrameRef.current != null) return;
+    floatResizeFrameRef.current = requestAnimationFrame(() => {
+      floatResizeFrameRef.current = null;
+      const clientX = floatResizePendingClientXRef.current;
+      if (clientX == null) return;
+      const nextTotalWidth = window.innerWidth - clientX - RIGHT_MARGIN_PX;
+      // Persist the base (content) width; companion width is added on top when open.
+      const nextBaseWidth = floatCompanionOpen
+        ? nextTotalWidth - COMPANION_SIDE_PANEL_WIDTH_PX
+        : nextTotalWidth;
+      setFloatPanelWidthPx(clampChatEditorPanelWidth(nextBaseWidth));
+    });
+  }, [floatCompanionOpen]);
 
   const handleFloatResizeEnd = useCallback(() => {
+    if (floatResizeFrameRef.current != null) {
+      cancelAnimationFrame(floatResizeFrameRef.current);
+      floatResizeFrameRef.current = null;
+    }
     setIsResizingFloatPanel(false);
   }, []);
 
@@ -276,14 +498,31 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
 
   const handleCloseFloatLayer = useCallback(() => {
     cleanupActiveEphemeralAssessment(pinnedFloatWidgets ?? floatWidgets);
+    const closingVariables = (pinnedFloatWidgets ?? floatWidgets).some(
+      (widget) => widget.type === 'variables_workspace',
+    );
     setPinnedFloatWidgets(null);
     setFloatWidgets([]);
     setFloatLayout('docked');
-    // If a context panel (e.g. Variables) is still the floor, chat stays hidden behind it.
+    setFloatCompanionOpen(false);
+    if (closingVariables && panelParam === 'variables') {
+      chatShell?.setActiveContextWidget(null);
+      dismissContextPanelParam();
+    }
+    // If a context panel is still the floor, chat stays hidden behind it.
     if (!activeChatId && !expandedContextWidget) {
       setHasMessages(false);
     }
-  }, [activeChatId, cleanupActiveEphemeralAssessment, floatWidgets, expandedContextWidget, pinnedFloatWidgets]);
+  }, [
+    activeChatId,
+    chatShell,
+    cleanupActiveEphemeralAssessment,
+    dismissContextPanelParam,
+    expandedContextWidget,
+    floatWidgets,
+    panelParam,
+    pinnedFloatWidgets,
+  ]);
 
   const handleAssessmentEngaged = useCallback((instanceId: string) => {
     const session = ephemeralAssessmentSessionsRef.current.get(instanceId);
@@ -293,35 +532,59 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   }, []);
 
   const handleFloatWidgetsChange = useCallback((widgets: FloatWidget[]) => {
-    setFloatWidgets(widgets);
-    if (widgets.length > 0) {
-      setPinnedFloatWidgets(null);
-      // Chat-emitted widgets are companions beside the active conversation.
-      setFloatLayout('docked');
-    }
+    // Keep pinned floats (assessments opened from the stack / URL). Chat message
+    // widget sync used to clear pinned state, which unmounted the assessment and
+    // then ?assessment= restored it — a full remount that felt like random reloads.
+    setFloatWidgets((prev) => (
+      floatWidgetsAreEqual(prev, widgets) ? prev : widgets
+    ));
   }, []);
 
   const resolveFloatLayoutForOpen = useCallback((): FloatLayout => {
     // Dock beside whichever floor is already active — an overlay FloorLayer
-    // (Variables/Files/Overview), or Chat (messages on stage). Only a bare landing
+    // (Files/Overview/Assessments), or Chat (messages on stage). Only a bare landing
     // with no floor content yet opens the float solo.
     if (expandedContextWidget != null || hasMessages) return 'docked';
     return 'solo';
   }, [expandedContextWidget, hasMessages]);
 
   const openPinnedFloat = useCallback((widgets: FloatWidget[], layout: FloatLayout) => {
+    const openingVariables = widgets.some((widget) => widget.type === 'variables_workspace');
+    if (!openingVariables && panelParam === 'variables') {
+      chatShell?.setActiveContextWidget(null);
+      dismissContextPanelParam();
+    }
     if (layout === 'solo') {
       // Bare landing — float owns the stage; dismiss any stale overlay floor.
       setExpandedContextWidget(null);
-      setVariablesFocusId(null);
       setExpandMotionMode('stack');
-      chatShell?.setActiveContextWidget(null);
-      dismissContextPanelParam();
+      if (!openingVariables) {
+        chatShell?.setActiveContextWidget(null);
+        dismissContextPanelParam();
+      }
       setHasMessages(true);
     }
     setFloatLayout(layout);
+    setFloatCompanionOpen(false);
     setPinnedFloatWidgets(widgets);
-  }, [chatShell, dismissContextPanelParam]);
+  }, [chatShell, dismissContextPanelParam, panelParam]);
+
+  const handleOpenVariablesWorkspace = useCallback((focusAssumptionId?: string | null) => {
+    const layout = resolveFloatLayoutForOpen();
+    setExpandedContextWidget(null);
+    setExpandMotionMode('stack');
+    chatShell?.setActiveContextWidget('variables');
+    if (layout === 'solo') {
+      setHasMessages(true);
+    }
+    setFloatLayout(layout);
+    setFloatCompanionOpen(false);
+    setPinnedFloatWidgets([floatWidgetForVariablesWorkspace(projectId, focusAssumptionId)]);
+    replaceWorkbenchSearchParams((params) => {
+      params.delete('chat');
+      params.set(CONTEXT_PANEL_SEARCH_PARAM, 'variables');
+    });
+  }, [chatShell, projectId, replaceWorkbenchSearchParams, resolveFloatLayoutForOpen]);
 
   /** Swap float contents in place (assessment → decision/activity log) without changing dock layout. */
   const replaceFloatContent = useCallback((widgets: FloatWidget[]) => {
@@ -384,10 +647,6 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     openPinnedFloat([floatWidgetForCitation(citation)], resolveFloatLayoutForOpen());
   }, [openPinnedFloat, resolveFloatLayoutForOpen]);
 
-  const handleOpenAssumptionDetail = useCallback((assumption: Assumption) => {
-    openPinnedFloat([floatWidgetForAssumption(assumption)], resolveFloatLayoutForOpen());
-  }, [openPinnedFloat, resolveFloatLayoutForOpen]);
-
   const handleOpenWorkspaceAssessment = useCallback(
     (assessment: {
       instanceId: string;
@@ -443,7 +702,11 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     handleOpenWorkspaceAssessment({
       instanceId: instance.id,
       assessmentId: instance.assessment_id,
-      title: instance.display_name || assessmentName,
+      title: assessmentHeaderTitle(
+        instance.title || instance.display_name,
+        assessmentName,
+        instance.creator_handle,
+      ),
       pendingEngagement: true,
     });
   }, [handleOpenWorkspaceAssessment, projectId]);
@@ -454,9 +717,32 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     handleOpenWorkspaceAssessment({
       instanceId: instance.id,
       assessmentId: instance.assessment_id,
-      title: instance.display_name || instance.title || instance.assessment_id.replace(/_/g, ' '),
+      title: assessmentHeaderTitle(
+        instance.title || instance.display_name,
+        instance.assessment_id.replace(/_/g, ' '),
+        instance.creator_handle,
+      ),
     });
   }, [handleOpenWorkspaceAssessment]);
+
+  const handleAssessmentTitleChange = useCallback((instanceId: string, title: string) => {
+    setFrameworkAssessmentInstances((prev) =>
+      prev.map((inst) => {
+        if (inst.id !== instanceId) return inst;
+        const handle = inst.creator_handle?.trim();
+        const displayName = handle ? `${title} · @${handle}` : title;
+        return { ...inst, title, display_name: displayName };
+      }),
+    );
+    const syncWidgetTitles = (widgets: FloatWidget[]) =>
+      widgets.map((widget) => {
+        if (widget.type !== 'assessment_workspace') return widget;
+        if (widget.data?.instance_id !== instanceId) return widget;
+        return { ...widget, data: { ...widget.data, title } };
+      });
+    setFloatWidgets((prev) => syncWidgetTitles(prev));
+    setPinnedFloatWidgets((prev) => (prev ? syncWidgetTitles(prev) : prev));
+  }, []);
 
   const handleOpenProjectFile = useCallback((file: ProjectMaterial) => {
     openPinnedFloat([floatWidgetForProjectMaterial(file)], resolveFloatLayoutForOpen());
@@ -467,16 +753,18 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   }, [chatShell]);
 
   const handleChatIdResolved = useCallback((chatId: string) => {
-    router.replace(buildProjectWorkbenchPath(projectId, { chat: chatId }));
+    router.replace(buildProjectWorkbenchPath(projectId, {
+      chat: chatId,
+      assessment: urlAssessmentInstanceId,
+    }));
     chatShell?.refreshDrawer();
-  }, [chatShell, projectId, router]);
+  }, [chatShell, projectId, router, urlAssessmentInstanceId]);
 
   const resetLandingOverlays = useCallback((): boolean => {
     let didReset = false;
 
     if (expandedContextWidget || panelParam) {
       setExpandedContextWidget(null);
-      setVariablesFocusId(null);
       setExpandMotionMode('stack');
       chatShell?.setActiveContextWidget(null);
       dismissContextPanelParam();
@@ -488,6 +776,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
       setPinnedFloatWidgets(null);
       setFloatWidgets([]);
       setFloatLayout('docked');
+      setFloatCompanionOpen(false);
       didReset = true;
     }
 
@@ -513,13 +802,19 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     widget: ChatContextExpandedWidget | null,
     options?: ExpandedWidgetChangeOptions,
   ) => {
+    if (widget === 'variables') {
+      handleOpenVariablesWorkspace(null);
+      return;
+    }
+
     const motion = options?.motion ?? (widget ? 'stack' : undefined);
 
     // A docked float is scoped to whichever floor is active; clear it on any floor
-    // change, including closing the floor (e.g. Back on Variables → Chat).
+    // change, including closing the floor (e.g. Back on Files → Chat).
     cleanupActiveEphemeralAssessment(pinnedFloatWidgets ?? floatWidgets);
     setPinnedFloatWidgets(null);
     setFloatLayout('docked');
+    setFloatCompanionOpen(false);
     if (widget) {
       setFloatWidgets([]);
     }
@@ -535,7 +830,8 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     setExpandedContextWidget(widget);
     chatShell?.setActiveContextWidget(widget);
 
-    if (widget && motion === 'center') {
+    if (widget) {
+      // Persist floor in the URL for refresh / deep-link (stack and sidebar).
       replaceWorkbenchSearchParams((params) => {
         params.delete('chat');
         params.set(CONTEXT_PANEL_SEARCH_PARAM, widget);
@@ -551,7 +847,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     cleanupActiveEphemeralAssessment,
     dismissContextPanelParam,
     floatWidgets,
-    projectId,
+    handleOpenVariablesWorkspace,
     pinnedFloatWidgets,
     replaceWorkbenchSearchParams,
     searchParams,
@@ -584,6 +880,103 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     window.addEventListener('nitrogen:tour-replay', onReplay);
     return () => window.removeEventListener('nitrogen:tour-replay', onReplay);
   }, [chatShell, dismissContextPanelParam]);
+
+  /** Make Chat the active floor beside any open assessment float (Investigate entry). */
+  const revealChatFloorForInvestigate = useCallback(() => {
+    if (expandedContextWidget || panelParam) {
+      setExpandedContextWidget(null);
+      setExpandMotionMode('stack');
+      chatShell?.setActiveContextWidget(null);
+      dismissContextPanelParam();
+    }
+    if (floatLayout === 'solo') {
+      setFloatLayout('docked');
+    }
+    setHasMessages(true);
+  }, [chatShell, dismissContextPanelParam, expandedContextWidget, floatLayout, panelParam]);
+
+  // Investigate from assessment inputs: auto-send into the chat floor with field context.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const queueInvestigateSend = (detail: {
+      text?: string | null;
+      toolHint?: string | null;
+      fieldContext?: FieldContext | null;
+      modelInputsContext?: string | null;
+      assumptionId?: string | null;
+    }) => {
+      const text = typeof detail.text === 'string' ? detail.text.trim() : '';
+      if (!text) return;
+      const fieldContext = detail.fieldContext ?? null;
+      const assumptionId =
+        detail.assumptionId
+        ?? fieldContext?.assumption_id
+        ?? null;
+      revealChatFloorForInvestigate();
+      if (assumptionId) {
+        setFocusedAssumptionId(assumptionId);
+      }
+      setPendingInvestigateAutoSend({
+        requestId: `investigate-${fieldContext?.field_name ?? 'field'}-${Date.now()}`,
+        content: text,
+        toolHint: detail.toolHint ?? fieldContext?.assessment_id ?? undefined,
+        fieldContext,
+        modelInputsContext: detail.modelInputsContext ?? null,
+        assumptionId,
+      });
+    };
+
+    const onOpenAssumptionChat = (event: Event) => {
+      const detail = (event as CustomEvent).detail as {
+        assumptionId?: string | null;
+        title?: string | null;
+        text?: string | null;
+        toolHint?: string | null;
+        fieldContext?: FieldContext | null;
+        modelInputsContext?: string | null;
+      } | null;
+      if (!detail?.assumptionId) return;
+      queueInvestigateSend({
+        text: detail.text,
+        toolHint: detail.toolHint,
+        fieldContext: detail.fieldContext ?? null,
+        modelInputsContext: detail.modelInputsContext ?? null,
+        assumptionId: detail.assumptionId,
+      });
+    };
+
+    const onDraft = (event: Event) => {
+      const detail = (event as CustomEvent).detail as {
+        text?: string;
+        toolHint?: string;
+        fieldContext?: FieldContext | null;
+        modelInputsContext?: string | null;
+        _investigateAutoSend?: boolean;
+        _workspaceForwarded?: boolean;
+      } | null;
+      // Only auto-send investigate drafts that carry field context. Plain drafts
+      // still flow to ConversationView to populate the composer.
+      if (!detail?.fieldContext?.field_name || !detail.text) return;
+      if (detail._workspaceForwarded || detail._investigateAutoSend) return;
+      detail._investigateAutoSend = true;
+      queueInvestigateSend({
+        text: detail.text,
+        toolHint: detail.toolHint,
+        fieldContext: detail.fieldContext,
+        modelInputsContext: detail.modelInputsContext ?? null,
+        assumptionId: detail.fieldContext.assumption_id ?? null,
+      });
+    };
+
+    window.addEventListener('nitrogen:open-assumption-chat', onOpenAssumptionChat);
+    // Capture so we mark investigate drafts before ConversationView fills the composer.
+    window.addEventListener('nitrogen:draft', onDraft, true);
+    return () => {
+      window.removeEventListener('nitrogen:open-assumption-chat', onOpenAssumptionChat);
+      window.removeEventListener('nitrogen:draft', onDraft, true);
+    };
+  }, [revealChatFloorForInvestigate]);
 
   const chatSurfaceKey = projectId;
 
@@ -628,7 +1021,11 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
               wasOnLandingRef.current = onLanding;
             }}
             onFloatWidgetsChange={handleFloatWidgetsChange}
+            activeAssessmentContext={activeAssessmentContext}
             activeEditorContext={activeEditorContext}
+            focusedAssumptionId={focusedAssumptionId}
+            pendingAutoSend={pendingInvestigateAutoSend}
+            onPendingAutoSendHandled={() => setPendingInvestigateAutoSend(null)}
             onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
             onOpenDocument={handleOpenDocument}
             onChatMetaChange={({ chatId }) => {
@@ -648,11 +1045,9 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
           expandedWidget={expandedContextWidget}
           expandMotionMode={expandMotionMode}
           onExpandedWidgetChange={handleExpandedContextWidgetChange}
-          variablesFocusId={variablesFocusId}
-          onVariablesFocusIdChange={setVariablesFocusId}
+          onOpenVariablesWorkspace={handleOpenVariablesWorkspace}
           onOpenFile={handleOpenProjectFile}
           onOpenDocument={handleOpenDocument}
-          onOpenAssumptionDetail={handleOpenAssumptionDetail}
           onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
           rightInset={floorRightInset}
           frameworkPlannedAssessmentIds={frameworkPlannedAssessmentIds}
@@ -673,7 +1068,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
               ? `${SOLO_FLOAT_PANEL_CLASS} ${isResizingFloatPanel ? '' : 'transition-[width] duration-300 ease-in-out'}`
               : `${FLOATING_PANEL_CLASS} top-3 bottom-3 ${isResizingFloatPanel ? '' : 'transition-[width] duration-300 ease-in-out'}`
           }
-          style={floatIsSolo ? undefined : { width: floatPanelWidthPx }}
+          style={floatIsSolo ? undefined : { width: effectiveFloatPanelWidthPx }}
         >
           {!floatIsSolo ? (
             <div
@@ -684,10 +1079,10 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
                 event.preventDefault();
                 setIsResizingFloatPanel(true);
               }}
-              className={`absolute left-0 top-0 bottom-0 z-10 w-2 -translate-x-1/2 cursor-col-resize group ${isResizingFloatPanel ? 'bg-accent/10' : ''}`}
+              className={`absolute left-0 top-0 bottom-0 z-10 w-2 cursor-col-resize group ${isResizingFloatPanel ? 'bg-accent/10' : ''}`}
             >
               <div
-                className={`absolute left-1/2 top-0 h-full w-px -translate-x-1/2 transition-colors ${isResizingFloatPanel ? 'bg-accent/60' : 'bg-divider group-hover:bg-accent/40'}`}
+                className={`absolute left-0 top-0 h-full w-px transition-colors ${isResizingFloatPanel ? 'bg-accent/60' : 'bg-divider group-hover:bg-accent/40'}`}
               />
             </div>
           ) : null}
@@ -700,10 +1095,20 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
             onOpenActivityLog={handleOpenActivityLog}
             onExportDecisionLog={handleExportDecisionLog}
             onOpenAssessment={handleReopenAssessmentFromLog}
+            onAssessmentTitleChange={handleAssessmentTitleChange}
+            onCompanionSidePanelOpenChange={setFloatCompanionOpen}
+            onOpenDocument={handleOpenDocument}
+            onOpenFile={handleOpenProjectFile}
           />
         </aside>
       )}
 
+      {isResizingFloatPanel && (
+        // Transparent shield above everything (including embedded document
+        // iframes) so drag mousemove/mouseup always land on this document
+        // instead of being swallowed by the iframe's own browsing context.
+        <div className="fixed inset-0 z-[100] cursor-col-resize" aria-hidden="true" />
+      )}
     </div>
   );
 }

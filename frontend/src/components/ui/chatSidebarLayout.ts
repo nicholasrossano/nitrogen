@@ -3,7 +3,7 @@ export const CHAT_SIDEBAR_EXPANDED_WIDTH = '18rem';
 export const CHAT_SIDEBAR_COLLAPSED_WIDTH = '2.75rem';
 export const CHAT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'nitrogen-chat-sidebar-collapsed';
 
-/** Right-side floating panels (context stack, assumptions detail). */
+/** Right-side floating panels (context stack, variables detail). */
 export const CHAT_CONTEXT_STACK_WIDTH = 'min(22rem, 34vw)';
 export const CHAT_CONTEXT_STACK_GUTTER = `calc(${CHAT_SIDEBAR_MARGIN} + ${CHAT_CONTEXT_STACK_WIDTH} + ${CHAT_SIDEBAR_MARGIN})`;
 
@@ -13,11 +13,39 @@ export const CHAT_EDITOR_PANEL_MAX_WIDTH_PX = 760;
 export const CHAT_EDITOR_PANEL_DEFAULT_WIDTH_PX = 544;
 export const CHAT_EDITOR_PANEL_WIDTH_STORAGE_KEY = 'nitrogen-chat-editor-panel-width';
 
-export function clampChatEditorPanelWidth(widthPx: number, viewportWidth?: number): number {
-  const vw = viewportWidth ?? (typeof window !== 'undefined' ? window.innerWidth : 1280);
-  const maxByViewport = Math.floor(vw * 0.58);
-  const max = Math.min(CHAT_EDITOR_PANEL_MAX_WIDTH_PX, maxByViewport);
-  return Math.min(max, Math.max(CHAT_EDITOR_PANEL_MIN_WIDTH_PX, Math.round(widthPx)));
+/**
+ * Extra width reserved when AssessmentWorkspace hosts a companion column
+ * (deep dive / activity log). Keep in sync with CompanionSidePanel.
+ */
+export const COMPANION_SIDE_PANEL_WIDTH_PX = 420;
+export const CHAT_EDITOR_PANEL_WITH_COMPANION_MIN_WIDTH_PX =
+  CHAT_EDITOR_PANEL_MIN_WIDTH_PX + COMPANION_SIDE_PANEL_WIDTH_PX;
+export const CHAT_EDITOR_PANEL_WITH_COMPANION_MAX_WIDTH_PX = 1100;
+
+type ClampChatEditorPanelWidthOptions = {
+  viewportWidth?: number;
+  companionOpen?: boolean;
+};
+
+export function clampChatEditorPanelWidth(
+  widthPx: number,
+  viewportWidthOrOptions?: number | ClampChatEditorPanelWidthOptions,
+): number {
+  const opts: ClampChatEditorPanelWidthOptions =
+    typeof viewportWidthOrOptions === 'number'
+      ? { viewportWidth: viewportWidthOrOptions }
+      : (viewportWidthOrOptions ?? {});
+  const companionOpen = Boolean(opts.companionOpen);
+  const vw = opts.viewportWidth ?? (typeof window !== 'undefined' ? window.innerWidth : 1280);
+  const min = companionOpen
+    ? CHAT_EDITOR_PANEL_WITH_COMPANION_MIN_WIDTH_PX
+    : CHAT_EDITOR_PANEL_MIN_WIDTH_PX;
+  const hardMax = companionOpen
+    ? CHAT_EDITOR_PANEL_WITH_COMPANION_MAX_WIDTH_PX
+    : CHAT_EDITOR_PANEL_MAX_WIDTH_PX;
+  const maxByViewport = Math.floor(vw * (companionOpen ? 0.82 : 0.58));
+  const max = Math.min(hardMax, maxByViewport);
+  return Math.min(max, Math.max(min, Math.round(widthPx)));
 }
 
 export function chatEditorPanelGutter(widthPx: number): string {
@@ -55,6 +83,15 @@ export const CHAT_FLOATING_PANEL_SHADOW = 'shadow-floating-panel';
 /** Shared border, shadow, and surface for floating chat-shell panels (sidebar, health, editor). */
 export const CHAT_FLOATING_PANEL_CHROME =
   `rounded-2xl bg-surface border border-stroke-subtle ${CHAT_FLOATING_PANEL_SHADOW}`;
+
+/**
+ * Shared height for chat-shell side nav, floor, and float headers.
+ * Keeps top edges (all `top-3` / `inset-y-3`) and bottom hairlines aligned.
+ * 3.25rem = icon button (2rem) + vertical padding matching former `py-2.5`.
+ */
+export const SHELL_SURFACE_HEADER_HEIGHT = '3.25rem';
+export const SHELL_SURFACE_HEADER_CLASS =
+  'flex h-[3.25rem] shrink-0 items-center';
 
 export function chatShellContentGutter(collapsed: boolean): string {
   const drawerWidth = collapsed ? CHAT_SIDEBAR_COLLAPSED_WIDTH : CHAT_SIDEBAR_EXPANDED_WIDTH;
