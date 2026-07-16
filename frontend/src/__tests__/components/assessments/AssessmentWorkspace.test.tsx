@@ -13,6 +13,7 @@ jest.mock('@/lib/api', () => ({
     approveFinalAssessmentOutput: jest.fn(),
     revokeFinalAssessmentApproval: jest.fn(),
     exportStagedAssessment: jest.fn(),
+    uploadProjectMaterial: jest.fn(),
   },
 }));
 
@@ -315,6 +316,72 @@ describe('AssessmentWorkspace', () => {
     await screen.findByText('Categorized list stage');
     expect(screen.queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
+  });
+
+  it('shows Report for document-generating assessments, saves to Files, and opens the report', async () => {
+    mockedApi.getStagedAssessmentWorkflowState.mockResolvedValue(buildWorkflowState({
+      assessment_definition: {
+        ...buildWorkflowState().assessment_definition,
+        export_format: 'docx',
+      },
+      workflow_state: {
+        ...buildWorkflowState().workflow_state,
+        stages: {
+          ...buildWorkflowState().workflow_state.stages,
+          plan: {
+            status: 'confirmed',
+            confirmed_at: '2026-04-22T12:10:00Z',
+            confirmed_by: 'user-1',
+            confirmed_by_email: 'user@example.com',
+            data: { widget_data: { groups: [] } },
+          },
+        },
+      },
+    }) as any);
+
+    const onOpenAssessmentReport = jest.fn();
+    mockedApi.exportStagedAssessment.mockResolvedValue({
+      blob: new Blob(['report-bytes']),
+      filename: 'stakeholder-report.docx',
+    });
+    mockedApi.uploadProjectMaterial.mockResolvedValue({
+      success: true,
+      message: 'uploaded',
+      material: {
+        id: 'material-1',
+        filename: 'stakeholder-report.docx',
+        file_type: 'docx',
+        file_size: 12,
+        created_at: '2026-07-16T12:00:00Z',
+        source: 'material',
+      },
+    });
+
+    render(
+      <AssessmentWorkspace
+        instanceId="instance-1"
+        assessmentId="implementation_plan"
+        projectId="initiative-1"
+        onOpenAssessmentReport={onOpenAssessmentReport}
+      />,
+    );
+
+    await screen.findByText('Implementation plan widget');
+
+    const reportButton = screen.getByRole('button', { name: 'Report' });
+    expect(reportButton).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
+
+    fireEvent.click(reportButton);
+
+    await waitFor(() => {
+      expect(mockedApi.uploadProjectMaterial).toHaveBeenCalledTimes(1);
+      expect(onOpenAssessmentReport).toHaveBeenCalledTimes(1);
+    });
+    const payload = onOpenAssessmentReport.mock.calls[0][0];
+    expect(payload.instanceId).toBe('instance-1');
+    expect(payload.material.id).toBe('material-1');
+    expect(payload.material.filename).toBe('stakeholder-report.docx');
   });
 
   it('disables export while a download is in flight', async () => {

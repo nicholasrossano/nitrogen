@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import type {
   AssessmentAgentStatus,
+  ProjectMaterial,
   StagedAssessmentWorkflowState,
   StageDef,
   StageState,
@@ -297,6 +298,12 @@ interface AssessmentWorkspaceProps {
   onOpenActivityLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
   onOpenDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
   onExportDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void | Promise<void>;
+  onOpenAssessmentReport?: (payload: {
+    instanceId: string;
+    assessmentId: string;
+    title: string;
+    material: ProjectMaterial;
+  }) => void | Promise<void>;
   onInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
   onApprovalChange?: () => void;
   /** When true, do not auto-run the assessment agent until the user engages. */
@@ -321,6 +328,7 @@ export function AssessmentWorkspace({
   onOpenActivityLog: _onOpenActivityLog,
   onOpenDecisionLog,
   onExportDecisionLog,
+  onOpenAssessmentReport,
   onInspectorStateChange,
   onApprovalChange,
   deferAgentStart = false,
@@ -703,7 +711,9 @@ export function AssessmentWorkspace({
     setIsExporting(true);
     setError(null);
 
-    const steps = buildExportToastSteps(state?.assessment_definition?.export_format);
+    const exportFormat = state?.assessment_definition?.export_format;
+    const isReport = exportFormat === 'docx';
+    const steps = buildExportToastSteps(exportFormat);
     setExportToastSteps(steps);
     setExportToastPhase('running');
     setExportToastError(null);
@@ -715,6 +725,35 @@ export function AssessmentWorkspace({
 
     try {
       const { blob, filename } = await api.exportStagedAssessment(instanceId);
+
+      // Narrative DOCX: save into project Files, then open like any other document.
+      // Keep the toast in "running" until open succeeds — success-before-open was lying.
+      if (isReport && onOpenAssessmentReport && projectId) {
+        setExportToastSteps((prev) => {
+          const advanced = advanceExportToastSteps(prev);
+          return advanceExportToastSteps(advanced);
+        });
+        const file = new File([blob], filename, {
+          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        });
+        const uploaded = await api.uploadProjectMaterial(projectId, file);
+        const fallbackTitle = state?.assessment_definition?.name || assessmentId.replace(/_/g, ' ');
+        await onOpenAssessmentReport({
+          instanceId,
+          assessmentId,
+          title: displayTitle || assessmentHeaderTitle(assessmentTitle, fallbackTitle),
+          material: {
+            ...uploaded.material,
+            id: String(uploaded.material.id),
+            source: uploaded.material.source ?? 'material',
+          },
+        });
+        clearExportPhaseTimer();
+        setExportToastSteps((prev) => markExportToastComplete(prev));
+        setExportToastPhase('success');
+        return;
+      }
+
       clearExportPhaseTimer();
       setExportToastSteps((prev) => markExportToastComplete(prev));
       setExportToastPhase('success');
@@ -727,7 +766,7 @@ export function AssessmentWorkspace({
       URL.revokeObjectURL(url);
     } catch (e: any) {
       clearExportPhaseTimer();
-      const message = e.message ?? 'Export failed';
+      const message = e.message ?? (exportFormat === 'docx' ? 'Report failed' : 'Export failed');
       setExportToastSteps((prev) => markExportToastFailed(prev));
       setExportToastPhase('error');
       setExportToastError(message);
@@ -735,7 +774,18 @@ export function AssessmentWorkspace({
     } finally {
       setIsExporting(false);
     }
-  }, [instanceId, isExporting, state?.assessment_definition?.export_format, clearExportPhaseTimer]);
+  }, [
+    instanceId,
+    assessmentId,
+    assessmentTitle,
+    displayTitle,
+    projectId,
+    isExporting,
+    onOpenAssessmentReport,
+    state?.assessment_definition?.export_format,
+    state?.assessment_definition?.name,
+    clearExportPhaseTimer,
+  ]);
 
   useEffect(() => () => clearExportPhaseTimer(), [clearExportPhaseTimer]);
 
@@ -824,6 +874,7 @@ export function AssessmentWorkspace({
     && stageDefs.length > 0
     && stagesBeforeTerminalConfirmed;
   const showExportAction = canExportAssessment && currentStageDef.id === terminalStageId;
+  const exportActionKind = mod.export_format === 'docx' ? 'report' : 'export';
   const assessmentFallback = mod.name || assessmentId.replace(/_/g, ' ');
   const assessmentDisplayTitle = displayTitle || assessmentHeaderTitle(assessmentTitle, assessmentFallback);
   const canEditTitle = !!projectId;
@@ -1016,6 +1067,7 @@ export function AssessmentWorkspace({
           onDecisionLogOpen={handleDecisionLogOpen}
           onDecisionLogExport={handleDecisionLogExport}
           showExportAction={showExportAction}
+          exportActionKind={exportActionKind}
           onExport={handleExport}
           isExporting={isExporting}
           canApproveFinal={canApproveFinal}
@@ -1087,6 +1139,7 @@ export function AssessmentWorkspace({
                   onClick={handleExport}
                   loading={isExporting}
                   disabled={isApprovingFinal}
+                  label={exportActionKind === 'report' ? 'Report' : 'Export'}
                 />
               )}
               {canApproveFinal && (
@@ -1277,11 +1330,12 @@ export function AssessmentWorkspace({
     </div>
     {exportToastOpen && (
       <ExportProgressToast
-        title="Working on your export"
+        title={mod.export_format === 'docx' ? 'Working on your report' : 'Working on your export'}
         steps={exportToastSteps}
         phase={exportToastPhase}
         errorMessage={exportToastError}
         onDismiss={dismissExportToast}
+        opensInViewer={mod.export_format === 'docx' && !!onOpenAssessmentReport}
       />
     )}
     </>

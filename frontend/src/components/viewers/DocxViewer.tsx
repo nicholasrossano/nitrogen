@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import DOMPurify from 'dompurify';
 import { Loader2 } from 'lucide-react';
 import { ZoomableContainer } from './ZoomableContainer';
 
@@ -11,22 +10,27 @@ interface DocxViewerProps {
 
 export function DocxViewer({ fileData }: DocxViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const styleContainerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!containerRef.current || !fileData) return;
+    const body = containerRef.current;
+    const styles = styleContainerRef.current;
+    if (!body || !styles || !fileData) return;
 
     let cancelled = false;
-    const container = containerRef.current;
+    setLoading(true);
+    setError(null);
 
     (async () => {
       try {
         const { renderAsync } = await import('docx-preview');
         if (cancelled) return;
-        container.innerHTML = '';
-        await renderAsync(fileData, container, undefined, {
-          className: 'docx-preview-wrapper',
+        // Keep styles in a separate host — rewriting body.innerHTML after render
+        // (e.g. via DOMPurify) strips the stylesheet nodes docx-preview injects.
+        await renderAsync(fileData, body, styles, {
+          className: 'docx',
           inWrapper: true,
           ignoreWidth: false,
           ignoreHeight: false,
@@ -37,13 +41,7 @@ export function DocxViewer({ fileData }: DocxViewerProps) {
           renderFootnotes: true,
           renderEndnotes: true,
         });
-        if (cancelled) return;
-        container.innerHTML = DOMPurify.sanitize(container.innerHTML, {
-          USE_PROFILES: { html: true },
-          FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button'],
-          FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover'],
-        });
-      } catch (e) {
+      } catch {
         if (!cancelled) {
           setError('Failed to render DOCX document');
         }
@@ -54,15 +52,17 @@ export function DocxViewer({ fileData }: DocxViewerProps) {
 
     return () => {
       cancelled = true;
+      body.innerHTML = '';
+      styles.innerHTML = '';
     };
   }, [fileData]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col">
       {loading && (
         <div className="flex items-center justify-center py-20">
           <div className="flex flex-col items-center gap-2">
-            <Loader2 className="w-5 h-5 animate-spin text-accent" />
+            <Loader2 className="h-5 w-5 animate-spin text-accent" />
             <span className="text-xs text-text-tertiary">Rendering document…</span>
           </div>
         </div>
@@ -74,24 +74,12 @@ export function DocxViewer({ fileData }: DocxViewerProps) {
         </div>
       )}
 
-      <ZoomableContainer className="flex-1 bg-[#e8e5e0] docx-viewer-host">
+      {/* Stylesheet host for docx-preview (style tags only — not visually rendered). */}
+      <div ref={styleContainerRef} className="docx-viewer-styles" />
+
+      <ZoomableContainer className="docx-viewer-host flex-1 bg-surface">
         <div ref={containerRef} />
       </ZoomableContainer>
-
-      <style jsx global>{`
-        .docx-viewer-host .docx-preview-wrapper {
-          padding: 16px;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 12px;
-        }
-        .docx-viewer-host .docx-preview-wrapper > section.docx {
-          background: white;
-          box-shadow: 0 1px 4px rgba(0,0,0,0.12);
-          margin: 0 auto;
-        }
-      `}</style>
     </div>
   );
 }

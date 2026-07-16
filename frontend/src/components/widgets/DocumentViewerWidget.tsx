@@ -1,9 +1,13 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { X } from 'lucide-react';
-import { widgetHeaderIconButtonClassName } from '@/components/editor/EditorPanelHeader';
+import { Download, X } from 'lucide-react';
+import {
+  EditorPanelHeaderIconButton,
+  widgetHeaderIconButtonClassName,
+} from '@/components/editor/EditorPanelHeader';
+import { useRegisterEditorPanelChrome } from '@/components/editor/EditorPanelChromeContext';
 import { api } from '@/lib/api';
 import type { EvidenceChunkDetail } from '@/lib/api';
 import { ZoomableContainer } from '@/components/viewers/ZoomableContainer';
@@ -35,27 +39,44 @@ interface DocumentViewerWidgetProps {
 
 type FileType = 'pdf' | 'docx' | 'xlsx' | 'xls' | 'text' | string;
 
-export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewerWidgetProps) {
+function resolveHeaderTitle(data: Record<string, any>): string {
+  if (typeof data.title === 'string' && data.title.trim()) return data.title.trim();
+  if (typeof data.filename === 'string' && data.filename.trim()) return data.filename.trim();
+  if (typeof data.source_title === 'string' && data.source_title.trim()) return data.source_title.trim();
+  return 'Document';
+}
+
+export function DocumentViewerWidget({ data, isActive: _isActive, onClose }: DocumentViewerWidgetProps) {
   const evidenceDocId = data.evidence_doc_id as string | undefined;
   const projectMaterialId = data.project_material_id as string | undefined;
   const declaredFileType = data.file_type as string | undefined;
   const chunkId = data.chunk_id as string | null | undefined;
+  const downloadFilename =
+    (typeof data.filename === 'string' && data.filename.trim())
+      ? data.filename.trim()
+      : (typeof data.title === 'string' && data.title.trim())
+        ? data.title.trim()
+        : 'document.docx';
+  const headerTitle = resolveHeaderTitle(data);
 
   const [fileType, setFileType] = useState<FileType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Native viewer state
   const [fileData, setFileData] = useState<ArrayBuffer | null>(null);
   const [initialPage, setInitialPage] = useState<number | null>(null);
 
-  // Fallback plain-text state
   const [chunks, setChunks] = useState<EvidenceChunkDetail[]>([]);
   const [showingExtractedTextFallback, setShowingExtractedTextFallback] = useState(false);
   const highlightRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!evidenceDocId && !projectMaterialId) return;
+    if (!evidenceDocId && !projectMaterialId) {
+      setLoading(false);
+      setError('Could not load document');
+      return;
+    }
+
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -68,7 +89,12 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
     (async () => {
       try {
         if (projectMaterialId && !evidenceDocId) {
-          const ft = declaredFileType || 'text';
+          const rawType = (declaredFileType || '').toLowerCase().replace(/^\./, '');
+          const ft = (
+            ['pdf', 'docx', 'xlsx', 'xls'] as const
+          ).find((type) => rawType === type || rawType.endsWith(`/${type}`))
+            || rawType
+            || 'text';
           setFileType(ft);
           const bytes = await api.getMaterialFileBytes(projectMaterialId);
           if (cancelled) return;
@@ -107,11 +133,11 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
           } catch {
             if (cancelled) return;
             setShowingExtractedTextFallback(true);
-            setChunks(chunkRes.chunks);
+            setChunks(chunkRes.chunks ?? []);
           }
         } else {
           setShowingExtractedTextFallback(true);
-          setChunks(chunkRes.chunks);
+          setChunks(chunkRes.chunks ?? []);
         }
       } catch {
         if (cancelled) return;
@@ -136,6 +162,42 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
     return () => { cancelled = true; };
   }, [evidenceDocId, projectMaterialId, declaredFileType, chunkId]);
 
+  const handleExport = useCallback(() => {
+    if (!fileData) return;
+    const mimeByType: Record<string, string> = {
+      pdf: 'application/pdf',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      xls: 'application/vnd.ms-excel',
+    };
+    const mime = mimeByType[fileType || ''] || 'application/octet-stream';
+    const blob = new Blob([new Uint8Array(fileData)], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = downloadFilename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [fileData, fileType, downloadFilename]);
+
+  const handleExportRef = useRef(handleExport);
+  handleExportRef.current = handleExport;
+
+  const headerActions = useMemo(() => {
+    if (!fileData) return null;
+    return (
+      <EditorPanelHeaderIconButton label="Export" onClick={() => handleExportRef.current()}>
+        <Download className="h-3.5 w-3.5" />
+      </EditorPanelHeaderIconButton>
+    );
+  }, [fileData]);
+
+  useRegisterEditorPanelChrome({
+    title: headerTitle,
+    suffix: fileType ? fileType.toUpperCase() : null,
+    actions: headerActions,
+  });
+
   const scrollToHighlight = useCallback(() => {
     if (highlightRef.current) {
       highlightRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -143,11 +205,11 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
   }, []);
 
   useEffect(() => {
-    if (!loading && chunkId && chunks.length > 0) {
+    if (!loading && chunkId && (chunks?.length ?? 0) > 0) {
       const timer = setTimeout(scrollToHighlight, 150);
       return () => clearTimeout(timer);
     }
-  }, [loading, chunkId, chunks.length, scrollToHighlight]);
+  }, [loading, chunkId, chunks, scrollToHighlight]);
 
   if (loading) {
     return <WorkspaceTabLoader />;
@@ -161,7 +223,6 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
     );
   }
 
-  // Native viewers
   if (fileData) {
     return (
       <div className="h-full flex flex-col relative">
@@ -190,7 +251,6 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
     );
   }
 
-  // Fallback: plain-text chunk rendering
   return (
     <div className="h-full flex flex-col relative">
       {onClose && (
@@ -210,7 +270,7 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
           </div>
         )}
         <div className="space-y-4">
-          {chunks.map((chunk) => {
+          {(chunks ?? []).map((chunk) => {
             const isHighlighted = chunkId && chunk.id === chunkId;
             const paragraphs = chunk.content.split(/\n{2,}/);
             return (

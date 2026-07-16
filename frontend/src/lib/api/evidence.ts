@@ -101,6 +101,29 @@ export const evidenceApi = {
   },
 
   // --- Project Materials ---,
+  uploadProjectMaterial: async (
+    projectId: string,
+    file: File,
+  ): Promise<{ success: boolean; material: ProjectMaterial; message: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const response = await fetch(`${API_URL}/api/v1/projects/${projectId}/materials`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      const detail = body?.detail;
+      throw new Error(detail || `Upload failed (${response.status})`);
+    }
+    return response.json();
+  },
   getMaterials: (projectId: string) =>
     fetchApi<ProjectMaterial[]>(`/api/v1/projects/${projectId}/materials`),
   deleteMaterial: async (materialId: string) => {

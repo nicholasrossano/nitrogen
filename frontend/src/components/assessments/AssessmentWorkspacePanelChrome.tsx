@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo, type RefObject } from 'react';
+import { useMemo, useRef, type RefObject } from 'react';
 import {
-  CheckCircle2, Download, FileSpreadsheet, Loader2, RotateCcw,
+  CheckCircle2, Download, FileSpreadsheet, FileText, Loader2, RotateCcw,
 } from 'lucide-react';
 import { EditorPanelHeaderIconButton } from '@/components/editor/EditorPanelHeader';
 import { useRegisterEditorPanelChrome } from '@/components/editor/EditorPanelChromeContext';
@@ -20,6 +20,8 @@ interface AssessmentWorkspacePanelChromeProps {
   onDecisionLogOpen: () => void;
   onDecisionLogExport: () => void;
   showExportAction: boolean;
+  /** Document-generating assessments use Report → open in viewer; calculators use Export → download. */
+  exportActionKind?: 'export' | 'report';
   onExport: () => void;
   isExporting?: boolean;
   canApproveFinal: boolean;
@@ -42,6 +44,7 @@ export function AssessmentWorkspacePanelChrome({
   onDecisionLogOpen,
   onDecisionLogExport,
   showExportAction,
+  exportActionKind = 'export',
   onExport,
   isExporting = false,
   canApproveFinal,
@@ -50,6 +53,23 @@ export function AssessmentWorkspacePanelChrome({
   onRevokeApproval,
   isApprovingFinal,
 }: AssessmentWorkspacePanelChromeProps) {
+  // Keep handlers fresh without putting their identities in memo/chrome deps
+  // (unstable parent callbacks previously caused an infinite chrome update loop).
+  const onDecisionMenuToggleRef = useRef(onDecisionMenuToggle);
+  const onDecisionLogOpenRef = useRef(onDecisionLogOpen);
+  const onDecisionLogExportRef = useRef(onDecisionLogExport);
+  const onExportRef = useRef(onExport);
+  const onApproveFinalRef = useRef(onApproveFinal);
+  const onRevokeApprovalRef = useRef(onRevokeApproval);
+  const onSaveTitleRef = useRef(onSaveTitle);
+  onDecisionMenuToggleRef.current = onDecisionMenuToggle;
+  onDecisionLogOpenRef.current = onDecisionLogOpen;
+  onDecisionLogExportRef.current = onDecisionLogExport;
+  onExportRef.current = onExport;
+  onApproveFinalRef.current = onApproveFinal;
+  onRevokeApprovalRef.current = onRevokeApproval;
+  onSaveTitleRef.current = onSaveTitle;
+
   const actions = useMemo(() => {
     if (!projectId) return null;
 
@@ -58,7 +78,7 @@ export function AssessmentWorkspacePanelChrome({
         <div ref={decisionMenuRef} className="relative">
           <EditorPanelHeaderIconButton
             label="Decision log"
-            onClick={onDecisionMenuToggle}
+            onClick={() => onDecisionMenuToggleRef.current()}
           >
             <FileSpreadsheet className="h-3.5 w-3.5" />
           </EditorPanelHeaderIconButton>
@@ -66,14 +86,14 @@ export function AssessmentWorkspacePanelChrome({
             <div className="absolute right-0 top-full z-30 mt-1 min-w-[132px] rounded-lg border border-divider bg-white py-1 shadow-lg">
               <button
                 type="button"
-                onClick={onDecisionLogOpen}
+                onClick={() => onDecisionLogOpenRef.current()}
                 className="flex w-full items-center px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-black/[0.04] hover:text-text-primary"
               >
                 Open
               </button>
               <button
                 type="button"
-                onClick={onDecisionLogExport}
+                onClick={() => onDecisionLogExportRef.current()}
                 className="flex w-full items-center px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-black/[0.04] hover:text-text-primary"
               >
                 Export
@@ -83,19 +103,21 @@ export function AssessmentWorkspacePanelChrome({
         </div>
         {showExportAction && (
           <EditorPanelHeaderIconButton
-            label="Export assessment"
-            onClick={onExport}
+            label={exportActionKind === 'report' ? 'Report' : 'Export assessment'}
+            onClick={() => onExportRef.current()}
             disabled={isExporting || isApprovingFinal}
           >
             {isExporting
               ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              : <Download className="h-3.5 w-3.5" />}
+              : exportActionKind === 'report'
+                ? <FileText className="h-3.5 w-3.5" />
+                : <Download className="h-3.5 w-3.5" />}
           </EditorPanelHeaderIconButton>
         )}
         {canApproveFinal && (
           <EditorPanelHeaderIconButton
             label="Confirm assessment"
-            onClick={onApproveFinal}
+            onClick={() => onApproveFinalRef.current()}
             disabled={isApprovingFinal}
           >
             {isApprovingFinal
@@ -106,7 +128,7 @@ export function AssessmentWorkspacePanelChrome({
         {finalApproved && (
           <button
             type="button"
-            onClick={onRevokeApproval}
+            onClick={() => onRevokeApprovalRef.current()}
             disabled={isApprovingFinal}
             title="Confirmed — click to revoke"
             aria-label="Confirmed — click to revoke"
@@ -129,30 +151,24 @@ export function AssessmentWorkspacePanelChrome({
     projectId,
     decisionMenuRef,
     decisionMenuOpen,
-    onDecisionMenuToggle,
-    onDecisionLogOpen,
-    onDecisionLogExport,
     showExportAction,
-    onExport,
+    exportActionKind,
     isExporting,
     canApproveFinal,
-    onApproveFinal,
     finalApproved,
-    onRevokeApproval,
     isApprovingFinal,
   ]);
 
-  useRegisterEditorPanelChrome(
-    {
-      title,
-      titleEditable,
-      onSaveTitle,
-      titleSaving,
-      suffix: exportFormat?.toUpperCase() ?? null,
-      actions,
-    },
-    [title, titleEditable, onSaveTitle, titleSaving, exportFormat, actions],
-  );
+  useRegisterEditorPanelChrome({
+    title,
+    titleEditable,
+    onSaveTitle: onSaveTitle
+      ? (next) => onSaveTitleRef.current?.(next)
+      : undefined,
+    titleSaving,
+    suffix: exportFormat?.toUpperCase() ?? null,
+    actions,
+  });
 
   return null;
 }
