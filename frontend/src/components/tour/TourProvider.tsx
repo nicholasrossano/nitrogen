@@ -85,7 +85,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   // Auto-start welcome once enough anchors exist on the chat shell.
   useEffect(() => {
     if (welcomeCompleted || welcomeActive || startedWelcomeRef.current) return;
-    if (!(pathname.startsWith('/chat') || pathname === '/')) return;
+    if (!(pathname.startsWith('/chat') || pathname === '/' || pathname.startsWith('/projects/'))) return;
     // Replay has its own starter — avoid racing with a half-open floor/sidebar state.
     if (replayNonce > 0) return;
 
@@ -122,8 +122,8 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     if (replayNonce === 0) return;
     if (welcomeCompleted) return;
 
-    const onChat = pathname.startsWith('/chat') || pathname === '/';
-    if (!onChat) {
+    const onWorkbench = pathname.startsWith('/chat') || pathname === '/' || pathname.startsWith('/projects/');
+    if (!onWorkbench) {
       router.push('/chat');
       return;
     }
@@ -180,9 +180,9 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
       if (cancelled || useTourStore.getState().activeGroup) return;
       const completed = useTourStore.getState().completedStepIds;
 
-      // 1) Expanded floors (Overview / Variables / Files) — tip when the floor header mounts.
-      //    Mini-stack "View all" expands without ?panel=; require surface=floor so sidebar
-      //    nav wrappers with the same id do not fire early.
+      // 1) Expanded floors (Overview / Variables / Assessments / Files) — tip when the
+      //    floor header mounts. Mini-stack "View all" expands without ?panel=; require
+      //    surface=floor so sidebar nav wrappers with the same id do not fire early.
       for (const step of MOUNT_TRIGGERED_FEATURE_STEPS) {
         if (completed.includes(step.id)) continue;
         if (promptedFeatureGroupsRef.current.has(step.group)) continue;
@@ -192,7 +192,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // 2) Route-gated surfaces (Framework / Assessments, and project Variables/Files views).
+      // 2) Route-gated surfaces (if any remain).
       const group = featureGroupForRoute(pathname, search);
       if (!group) return;
       if (promptedFeatureGroupsRef.current.has(group)) return;

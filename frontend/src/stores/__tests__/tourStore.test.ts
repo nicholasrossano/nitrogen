@@ -36,7 +36,7 @@ describe('tourStore', () => {
   it('replays welcome without clearing unrelated completed feature tips', () => {
     act(() => {
       useTourStore.setState({
-        completedStepIds: [...WELCOME_STEP_IDS, 'feature-framework'],
+        completedStepIds: [...WELCOME_STEP_IDS, 'feature-assessments'],
         welcomeCompleted: true,
       });
       useTourStore.getState().replayWelcome();
@@ -45,14 +45,14 @@ describe('tourStore', () => {
     const state = useTourStore.getState();
     expect(state.welcomeCompleted).toBe(false);
     expect(state.replayNonce).toBe(1);
-    expect(state.completedStepIds).toEqual(['feature-framework']);
+    expect(state.completedStepIds).toEqual(['feature-assessments']);
     expect(state.completedStepIds).not.toContain('welcome-composer');
   });
 
   it('does not start a feature tip while welcome is active', () => {
     act(() => {
       useTourStore.getState().startWelcome('welcome-composer');
-      useTourStore.getState().startFeatureGroup('feature-framework', 'feature-framework');
+      useTourStore.getState().startFeatureGroup('feature-assessments', 'feature-assessments');
     });
     expect(useTourStore.getState().activeGroup).toBe('welcome');
     expect(useTourStore.getState().activeStepId).toBe('welcome-composer');

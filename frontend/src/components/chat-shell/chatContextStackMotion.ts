@@ -1,5 +1,5 @@
 /** Overlay floors promoted from the mini stack. Chat is the default floor when this is null. */
-export type ChatContextExpandedWidget = 'overview' | 'variables' | 'files';
+export type ChatContextExpandedWidget = 'overview' | 'variables' | 'files' | 'assessments';
 
 export type ContextPanelExpandMotion = 'stack' | 'center';
 
@@ -10,14 +10,33 @@ export type ExpandedWidgetChangeOptions = {
 export const CONTEXT_PANEL_SEARCH_PARAM = 'panel';
 
 export function parseContextPanelParam(value: string | null): ChatContextExpandedWidget | null {
-  if (value === 'overview' || value === 'variables' || value === 'files') return value;
+  if (value === 'overview' || value === 'variables' || value === 'files' || value === 'assessments') {
+    return value;
+  }
+  // Pre-rename alias
+  if (value === 'framework' || value === 'plan') return 'assessments';
   return null;
+}
+
+/** Canonical project workbench URL — chat is default floor when panel/chat omitted. */
+export function buildProjectWorkbenchPath(
+  projectId: string,
+  options?: {
+    chat?: string | null;
+    panel?: ChatContextExpandedWidget | null;
+  },
+): string {
+  const params = new URLSearchParams();
+  if (options?.chat) params.set('chat', options.chat);
+  if (options?.panel) params.set(CONTEXT_PANEL_SEARCH_PARAM, options.panel);
+  const query = params.toString();
+  return query ? `/projects/${projectId}?${query}` : `/projects/${projectId}`;
 }
 
 export const CONTEXT_STACK_MOTION_MS = 300;
 
 export const contextStackTransitionClass =
-  'transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]';
+  'transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]';
 
 export const contextStackPanelTransitionClass =
   'transition-[transform,opacity,border-color,box-shadow,right] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-[transform,opacity]';
@@ -48,6 +67,8 @@ export function contextStackExpandOriginClass(
       return 'origin-bottom-right';
     case 'variables':
       return 'origin-[right_38%]';
+    case 'assessments':
+      return 'origin-[right_30%]';
     default:
       return 'origin-top-right';
   }
@@ -58,13 +79,11 @@ export function contextStackWidgetMotionClass(
   widgetId: string,
   renderedWidget: string | null = null,
 ): string {
-  if (renderedWidget === widgetId) {
-    return 'pointer-events-none max-h-0 flex-[0] overflow-hidden opacity-0 scale-95';
+  // Opacity/scale only — keep flex slot size stable so siblings don't reflow mid-animation.
+  if (renderedWidget === widgetId || (expandedId !== null && expandedId !== widgetId)) {
+    return 'pointer-events-none opacity-0 scale-95';
   }
-  if (expandedId !== null && expandedId !== widgetId) {
-    return 'pointer-events-none max-h-0 flex-[0] overflow-hidden opacity-0 scale-95 -translate-y-1';
-  }
-  return 'pointer-events-auto max-h-none flex-[1] opacity-100 scale-100 translate-y-0';
+  return 'pointer-events-auto opacity-100 scale-100';
 }
 
 export function contextStackBackdropMotionClass(
