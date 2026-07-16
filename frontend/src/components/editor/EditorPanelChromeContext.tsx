@@ -4,7 +4,9 @@ import {
   createContext,
   useContext,
   useEffect,
-  type DependencyList,
+  useLayoutEffect,
+  useMemo,
+  useRef,
   type ReactNode,
 } from 'react';
 
@@ -30,25 +32,33 @@ export function EditorPanelChromeProvider({
   children: ReactNode;
   onChromeChange: (chrome: EditorPanelChrome | null) => void;
 }) {
+  const value = useMemo(
+    () => ({ setChrome: onChromeChange }),
+    [onChromeChange],
+  );
+
   return (
-    <EditorPanelChromeContext.Provider value={{ setChrome: onChromeChange }}>
+    <EditorPanelChromeContext.Provider value={value}>
       {children}
     </EditorPanelChromeContext.Provider>
   );
 }
 
-export function useRegisterEditorPanelChrome(
-  chrome: EditorPanelChrome | null,
-  deps: DependencyList,
-) {
+/** Register float-header chrome. Host must ignore no-op updates (see FloatLayer). */
+export function useRegisterEditorPanelChrome(chrome: EditorPanelChrome | null) {
   const context = useContext(EditorPanelChromeContext);
+  const chromeRef = useRef(chrome);
+  chromeRef.current = chrome;
+
+  useLayoutEffect(() => {
+    if (!context) return;
+    context.setChrome(chromeRef.current);
+  });
 
   useEffect(() => {
     if (!context) return undefined;
-    context.setChrome(chrome);
     return () => {
       context.setChrome(null);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, [context]);
 }

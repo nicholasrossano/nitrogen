@@ -25,6 +25,7 @@ import {
 import { FloatLayer, type AssessmentLogContext, type FloatWidget } from '@/components/editor/FloatLayer';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import {
+  floatWidgetForAssessmentReport,
   floatWidgetForCitation,
   floatWidgetForProjectMaterial,
   floatWidgetForVariablesWorkspace,
@@ -320,7 +321,9 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
       if (
         (widget.type === 'assessment_workspace'
           || widget.type === 'decision_log'
-          || widget.type === 'activity_log')
+          || widget.type === 'activity_log'
+          // Reports keep ?assessment= so refresh/back stay tied to the module.
+          || widget.type === 'document_viewer')
         && typeof widget.data?.instance_id === 'string'
         && widget.data.instance_id
       ) {
@@ -353,11 +356,16 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
       restoringAssessmentRef.current = null;
       return;
     }
+    // Decision/activity logs and assessment reports keep the same ?assessment=
+    // deep-link — do not yank them back to the workspace float.
     const alreadyOpen = (pinnedFloatWidgets ?? floatWidgets).some(
       (widget) =>
-        (widget.type === 'assessment_workspace'
+        (
+          widget.type === 'assessment_workspace'
           || widget.type === 'decision_log'
-          || widget.type === 'activity_log')
+          || widget.type === 'activity_log'
+          || widget.type === 'document_viewer'
+        )
         && widget.data?.instance_id === assessmentParam,
     );
     if (alreadyOpen) {
@@ -664,6 +672,15 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     anchor.click();
     URL.revokeObjectURL(url);
   }, []);
+
+  const handleOpenAssessmentReport = useCallback((payload: {
+    instanceId: string;
+    assessmentId: string;
+    title: string;
+    material: ProjectMaterial;
+  }) => {
+    replaceFloatContent([floatWidgetForAssessmentReport(payload)]);
+  }, [replaceFloatContent]);
 
   const handleOpenDocument = useCallback((citation: ResearchPanelCitation) => {
     openPinnedFloat([floatWidgetForCitation(citation)], resolveFloatLayoutForOpen());
@@ -1117,6 +1134,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
             onOpenDecisionLog={handleOpenDecisionLog}
             onOpenActivityLog={handleOpenActivityLog}
             onExportDecisionLog={handleExportDecisionLog}
+            onOpenAssessmentReport={handleOpenAssessmentReport}
             onOpenAssessment={handleReopenAssessmentFromLog}
             onAssessmentTitleChange={handleAssessmentTitleChange}
             onCompanionSidePanelOpenChange={setFloatCompanionOpen}

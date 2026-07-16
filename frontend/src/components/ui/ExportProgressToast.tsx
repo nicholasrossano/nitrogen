@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CheckCircle2, Loader2, X, XCircle } from 'lucide-react';
 
 export type ExportToastStepStatus = 'pending' | 'active' | 'done' | 'error';
@@ -20,10 +20,9 @@ interface ExportProgressToastProps {
   phase: ExportToastPhase;
   errorMessage?: string | null;
   onDismiss: () => void;
+  /** When true, success copy reflects opening the document viewer instead of a download. */
+  opensInViewer?: boolean;
 }
-
-const AUTO_DISMISS_MS = 4500;
-const TICK_MS = 80;
 
 export function buildExportToastSteps(exportFormat: string | null | undefined): ExportToastStep[] {
   if (exportFormat === 'docx') {
@@ -36,14 +35,13 @@ export function buildExportToastSteps(exportFormat: string | null | undefined): 
       },
       {
         id: 'writeup',
-        label: 'Drafting the write-up',
+        label: 'Drafting the report',
         detail: 'Reuses the latest version if nothing changed; otherwise iterates it for continuity.',
         status: 'pending',
       },
       {
         id: 'download',
-        label: 'Preparing download',
-        detail: 'Packaging the assessment document for your browser.',
+        label: 'Opening',
         status: 'pending',
       },
     ];
@@ -96,58 +94,25 @@ export function ExportProgressToast({
   phase,
   errorMessage,
   onDismiss,
+  opensInViewer = false,
 }: ExportProgressToastProps) {
   const [visible, setVisible] = useState(false);
-  const [progress, setProgress] = useState(1);
-  const remainingRef = useRef(AUTO_DISMISS_MS);
-  const lastTickRef = useRef(Date.now());
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const settled = phase === 'success' || phase === 'error';
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => setVisible(true));
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  useEffect(() => {
-    if (!settled) return;
-
-    remainingRef.current = AUTO_DISMISS_MS;
-    lastTickRef.current = Date.now();
-    setProgress(1);
-
-    timerRef.current = setInterval(() => {
-      const now = Date.now();
-      remainingRef.current -= now - lastTickRef.current;
-      lastTickRef.current = now;
-
-      const next = Math.max(0, remainingRef.current / AUTO_DISMISS_MS);
-      setProgress(next);
-
-      if (remainingRef.current <= 0) {
-        if (timerRef.current) clearInterval(timerRef.current);
-        setVisible(false);
-        setTimeout(onDismiss, 200);
-      }
-    }, TICK_MS);
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [settled, onDismiss]);
-
   const handleDismiss = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
     setVisible(false);
     setTimeout(onDismiss, 200);
   };
 
   const headerLabel =
     phase === 'error'
-      ? 'Export failed'
+      ? (opensInViewer ? 'Report failed' : 'Export failed')
       : phase === 'success'
-        ? 'Export ready'
+        ? (opensInViewer ? 'Report ready' : 'Export ready')
         : title;
 
   return (
@@ -169,13 +134,13 @@ export function ExportProgressToast({
           )}
           <div className="min-w-0">
             <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-widest mb-1">
-              Assessment export
+              {opensInViewer ? 'Assessment report' : 'Assessment export'}
             </p>
             <p className="text-sm font-medium text-text-primary leading-snug">{headerLabel}</p>
             {phase === 'error' && errorMessage && (
               <p className="text-xs text-red-400 mt-1 leading-snug">{errorMessage}</p>
             )}
-            {phase === 'success' && (
+            {phase === 'success' && !opensInViewer && (
               <p className="text-xs text-text-tertiary mt-1 leading-snug">
                 Your download should start automatically.
               </p>
@@ -221,16 +186,6 @@ export function ExportProgressToast({
             </div>
           </div>
         ))}
-      </div>
-
-      <div className="h-[3px] bg-surface-subtle overflow-hidden">
-        <div
-          className={`h-full origin-left ${phase === 'error' ? 'bg-red-400' : 'bg-accent'}`}
-          style={{
-            transform: `scaleX(${settled ? progress : 1})`,
-            transition: settled ? `transform ${TICK_MS}ms linear` : 'none',
-          }}
-        />
       </div>
     </div>
   );

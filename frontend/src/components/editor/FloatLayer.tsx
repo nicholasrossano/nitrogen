@@ -69,6 +69,10 @@ export type AssessmentLogContext = {
   title: string;
 };
 
+export type AssessmentReportPayload = AssessmentLogContext & {
+  material: ProjectMaterial;
+};
+
 interface FloatLayerProps {
   widgets: FloatWidget[];
   projectId?: string;
@@ -77,6 +81,7 @@ interface FloatLayerProps {
   onOpenDecisionLog?: (context: AssessmentLogContext) => void;
   onOpenActivityLog?: (context: AssessmentLogContext) => void;
   onExportDecisionLog?: (context: AssessmentLogContext) => void | Promise<void>;
+  onOpenAssessmentReport?: (payload: AssessmentReportPayload) => void | Promise<void>;
   onOpenAssessment?: (context: AssessmentLogContext) => void;
   onAssessmentTitleChange?: (instanceId: string, title: string) => void;
   /** True while AssessmentWorkspace hosts a companion column (activity log / deep dive). */
@@ -108,15 +113,25 @@ function stripLogTitlePrefix(title: string): string {
   return title.replace(/^\[Log\]\s*/i, '').trim();
 }
 
-/** Nested log widgets can navigate back to their parent assessment module. */
+/** Nested log/report widgets can navigate back to their parent assessment module. */
 function getNestedLogBackContext(widget: FloatWidget | undefined): AssessmentLogContext | null {
-  if (!widget || (widget.type !== 'activity_log' && widget.type !== 'decision_log')) {
+  if (
+    !widget
+    || (
+      widget.type !== 'activity_log'
+      && widget.type !== 'decision_log'
+      && widget.type !== 'document_viewer'
+    )
+  ) {
     return null;
   }
   const instanceId = typeof widget.data?.instance_id === 'string' ? widget.data.instance_id : '';
   const assessmentId = typeof widget.data?.assessment_id === 'string' ? widget.data.assessment_id : '';
   if (!instanceId || !assessmentId) return null;
-  const rawTitle = typeof widget.data?.title === 'string' ? widget.data.title : '';
+  const assessmentTitle = typeof widget.data?.assessment_title === 'string'
+    ? widget.data.assessment_title
+    : '';
+  const rawTitle = assessmentTitle || (typeof widget.data?.title === 'string' ? widget.data.title : '');
   const title = stripLogTitlePrefix(rawTitle) || 'Assessment';
   return { instanceId, assessmentId, title };
 }
@@ -146,6 +161,7 @@ export function FloatLayer({
   onOpenDecisionLog,
   onOpenActivityLog,
   onExportDecisionLog,
+  onOpenAssessmentReport,
   onOpenAssessment,
   onAssessmentTitleChange,
   onCompanionSidePanelOpenChange,
@@ -157,15 +173,38 @@ export function FloatLayer({
   const [childChrome, setChildChrome] = useState<EditorPanelChrome | null>(null);
 
   const handleChromeChange = useCallback((chrome: EditorPanelChrome | null) => {
-    setChildChrome(chrome);
+    // Bail when content is unchanged — register hook syncs every layout and would
+    // otherwise setState forever on fresh chrome object identities.
+    setChildChrome((prev) => {
+      if (prev === chrome) return prev;
+      if (prev == null || chrome == null) return chrome;
+      if (
+        prev.title === chrome.title
+        && prev.titleEditable === chrome.titleEditable
+        && prev.titleSaving === chrome.titleSaving
+        && prev.suffix === chrome.suffix
+        && prev.actions === chrome.actions
+      ) {
+        return prev;
+      }
+      return chrome;
+    });
   }, []);
 
-  const displayIndex = activeIndex ?? widgets.length - 1;
+  const displayIndex =
+    activeIndex != null && activeIndex < widgets.length
+      ? activeIndex
+      : Math.max(widgets.length - 1, 0);
   const widget = widgets[displayIndex];
+  const widgetsIdentity = widgets.map((item) => item.messageId).join('|');
 
   useEffect(() => {
-    setChildChrome(null);
-  }, [widget?.messageId]);
+    setActiveIndex(null);
+  }, [widgetsIdentity]);
+
+  // Do not clear chrome on messageId change — the previous widget's unmount
+  // cleanup already nulls it. Clearing after the new child's layout effect
+  // drops Export/actions until the next state update.
 
   const headerTitle = childChrome?.title ?? (widget ? getWidgetTitle(widget) : 'Output');
   const headerSuffix = childChrome?.suffix;
@@ -237,6 +276,7 @@ export function FloatLayer({
               onOpenDecisionLog={onOpenDecisionLog}
               onOpenActivityLog={onOpenActivityLog}
               onExportDecisionLog={onExportDecisionLog}
+              onOpenAssessmentReport={onOpenAssessmentReport}
               onOpenAssessment={onOpenAssessment}
               onAssessmentTitleChange={onAssessmentTitleChange}
               onCompanionSidePanelOpenChange={onCompanionSidePanelOpenChange}
@@ -261,6 +301,7 @@ function FloatWidgetRenderer({
   onOpenDecisionLog,
   onOpenActivityLog,
   onExportDecisionLog,
+  onOpenAssessmentReport,
   onOpenAssessment,
   onAssessmentTitleChange,
   onCompanionSidePanelOpenChange,
@@ -277,6 +318,7 @@ function FloatWidgetRenderer({
   onOpenDecisionLog?: (context: AssessmentLogContext) => void;
   onOpenActivityLog?: (context: AssessmentLogContext) => void;
   onExportDecisionLog?: (context: AssessmentLogContext) => void | Promise<void>;
+  onOpenAssessmentReport?: (payload: AssessmentReportPayload) => void | Promise<void>;
   onOpenAssessment?: (context: AssessmentLogContext) => void;
   onAssessmentTitleChange?: (instanceId: string, title: string) => void;
   onCompanionSidePanelOpenChange?: (open: boolean) => void;
@@ -341,6 +383,7 @@ function FloatWidgetRenderer({
           onOpenDecisionLog={onOpenDecisionLog}
           onOpenActivityLog={onOpenActivityLog}
           onExportDecisionLog={onExportDecisionLog}
+          onOpenAssessmentReport={onOpenAssessmentReport}
           onTitleChange={(title) => onAssessmentTitleChange?.(data.instance_id, title)}
           onCompanionSidePanelOpenChange={onCompanionSidePanelOpenChange}
         />

@@ -22,6 +22,8 @@ export function floatWidgetForProjectMaterial(file: ProjectMaterial): FloatWidge
       data: {
         evidence_doc_id: file.id,
         title: file.filename,
+        filename: file.filename,
+        file_type: file.file_type,
       },
       messageId: `document-${file.id}`,
     };
@@ -33,8 +35,30 @@ export function floatWidgetForProjectMaterial(file: ProjectMaterial): FloatWidge
       project_material_id: file.id,
       file_type: file.file_type,
       title: file.filename,
+      filename: file.filename,
     },
     messageId: `material-${file.id}`,
+  };
+}
+
+/** Assessment report saved to project Files — open like any other material, with back to assessment. */
+export function floatWidgetForAssessmentReport(payload: {
+  material: ProjectMaterial;
+  instanceId: string;
+  assessmentId: string;
+  title: string;
+}): FloatWidget {
+  const base = floatWidgetForProjectMaterial(payload.material);
+  return {
+    ...base,
+    data: {
+      ...base.data,
+      title: payload.material.filename,
+      assessment_title: payload.title,
+      instance_id: payload.instanceId,
+      assessment_id: payload.assessmentId,
+    },
+    messageId: `assessment-report-${payload.instanceId}`,
   };
 }
 
