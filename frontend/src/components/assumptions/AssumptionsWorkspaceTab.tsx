@@ -1,12 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle2, ExternalLink, FileText, Globe, MessageSquare, Plus, Sparkles, X } from 'lucide-react';
+import { ExternalLink, FileText, Globe, Info, Plus, X } from 'lucide-react';
 
 import { ReadOnlyDataTable, type ReadOnlyDataTableColumn } from '@/components/ui/ReadOnlyDataTable';
 import { WorkspaceTabLoader } from '@/components/ui';
 import { CitationChip } from '@/components/ui/CitationChip';
+import { CompanionSidePanel, COMPANION_SIDE_PANEL_WIDTH } from '@/components/ui/CompanionSidePanel';
 import { CustomDropdown } from '@/components/ui/CustomDropdown';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import {
   api,
@@ -17,6 +19,10 @@ import {
 import { getCached, invalidatePrefix, setCached, swrFetch, swrKeys } from '@/lib/swrCache';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import { AssumptionCommentsThread } from './AssumptionCommentsThread';
+import {
+  ASSUMPTION_STATUS_DEFINITIONS,
+  AssumptionStatusCapsule,
+} from './AssumptionStatusCapsule';
 
 const ASSUMPTION_UPDATED_EVENT = 'nitrogen:assumption-updated';
 const ASSUMPTION_DELETED_EVENT = 'nitrogen:assumption-deleted';
@@ -30,6 +36,8 @@ interface AssumptionsWorkspaceTabProps {
   onAddAssumptionInChat?: () => void;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   onOpenFile?: (file: ProjectMaterial) => void;
+  /** Notify float host when the selected-variable companion column is open. */
+  onCompanionSidePanelOpenChange?: (open: boolean) => void;
 }
 
 const STATUS_OPTIONS: Array<{ value: '' | AssumptionStatus; label: string }> = [
@@ -73,8 +81,13 @@ function MissingValuePill() {
   );
 }
 
-function formatSourceType(sourceType: string): string {
-  return sourceType.replace(/_/g, ' ');
+/** Falls back to the generic source type label when no more specific name is on record. */
+function formatSourceLabel(row: Assumption): string {
+  if (row.source_type === 'assessment' || row.source_type === 'assessment_approval') {
+    const assessmentName = row.source_reference?.assessment_name;
+    if (typeof assessmentName === 'string' && assessmentName.trim()) return assessmentName.trim();
+  }
+  return row.source_type.replace(/_/g, ' ');
 }
 
 function hostnameFromUrl(url: string): string | null {
@@ -201,7 +214,7 @@ function SourceCell({
 }) {
   const citation = sourceCitationFromAssumption(row);
   if (!citation) {
-    return <span className="text-text-secondary">{formatSourceType(row.source_type)}</span>;
+    return <span className="text-text-secondary">{formatSourceLabel(row)}</span>;
   }
 
   const label = citation.publisher || citation.title;
@@ -268,12 +281,16 @@ export function normalizeDraftValue(raw: string): string | null {
   return raw.trim();
 }
 
-const STATUS_STYLES: Record<AssumptionStatus, { bg: string; text: string; label: string }> = {
-  validated: { bg: 'bg-green-50', text: 'text-green-700', label: 'Validated' },
-  extracted: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Extracted' },
-  assumed: { bg: 'bg-yellow-50', text: 'text-yellow-700', label: 'Assumed' },
-  missing: { bg: 'bg-red-50', text: 'text-red-700', label: 'Missing' },
-};
+const STATUS_LEGEND_CONTENT = (
+  <ul className="space-y-1.5">
+    {ASSUMPTION_STATUS_DEFINITIONS.map(({ status, description }) => (
+      <li key={status}>
+        <AssumptionStatusCapsule status={status} />
+        <span className="ml-1.5">{description}</span>
+      </li>
+    ))}
+  </ul>
+);
 
 export function AssumptionsWorkspaceTab({
   projectId,
@@ -284,6 +301,7 @@ export function AssumptionsWorkspaceTab({
   onAddAssumptionInChat,
   onOpenDocument,
   onOpenFile,
+  onCompanionSidePanelOpenChange,
 }: AssumptionsWorkspaceTabProps) {
   const [status, setStatus] = useState<'' | AssumptionStatus>('');
   const [rows, setRows] = useState<Assumption[]>(
@@ -315,6 +333,7 @@ export function AssumptionsWorkspaceTab({
       const { data: next } = await swrFetch(key, () =>
         api.listAssumptions(projectId, { status }),
       );
+      // Keep the unfiltered mini-panel cache warm when loading all.
       if (!status) setCached(swrKeys.assumptions(projectId), next);
       setRows(next);
       setSelected((current) => next.find((row) => row.id === current?.id) ?? null);
@@ -338,12 +357,21 @@ export function AssumptionsWorkspaceTab({
     if (!focusAssumptionId) return;
     const match = rows.find((row) => row.id === focusAssumptionId);
     if (!match) return;
-    if (onAssumptionSelectInChat) {
-      onAssumptionSelectInChat(match);
+    // Prefer in-panel companion selection when the detail column is available.
+    if (showDetailPanel) {
+      setSelected((current) => (current?.id === match.id ? current : match));
       return;
     }
-    setSelected((current) => (current?.id === match.id ? current : match));
-  }, [focusAssumptionId, rows, onAssumptionSelectInChat]);
+    if (onAssumptionSelectInChat) {
+      onAssumptionSelectInChat(match);
+    }
+  }, [focusAssumptionId, rows, onAssumptionSelectInChat, showDetailPanel]);
+
+  useEffect(() => {
+    const open = Boolean(showDetailPanel && selected);
+    onCompanionSidePanelOpenChange?.(open);
+    return () => onCompanionSidePanelOpenChange?.(false);
+  }, [selected, showDetailPanel, onCompanionSidePanelOpenChange]);
 
   const matchesActiveFilters = useCallback((row: Assumption) => {
     if (status && row.status !== status) return false;
@@ -359,6 +387,7 @@ export function AssumptionsWorkspaceTab({
       if (!updated || updated.project_id !== projectId) return;
 
       invalidatePrefix(swrKeys.assumptions(projectId));
+
       const includeInTable = matchesActiveFilters(updated);
       setRows((prev) => {
         const existingIndex = prev.findIndex((row) => row.id === updated.id);
@@ -406,12 +435,14 @@ export function AssumptionsWorkspaceTab({
     !saving,
   );
   const handleAssumptionOpen = useCallback((row: Assumption) => {
-    if (onAssumptionSelectInChat) {
-      onAssumptionSelectInChat(row);
+    if (showDetailPanel) {
+      setSelected(row);
       return;
     }
-    setSelected(row);
-  }, [onAssumptionSelectInChat]);
+    if (onAssumptionSelectInChat) {
+      onAssumptionSelectInChat(row);
+    }
+  }, [onAssumptionSelectInChat, showDetailPanel]);
 
   const columns: ReadOnlyDataTableColumn<Assumption>[] = [
     {
@@ -427,12 +458,7 @@ export function AssumptionsWorkspaceTab({
             handleAssumptionOpen(row);
           }}
         >
-          <span className="block">{row.label}</span>
-          {Array.isArray(row.aliases) && row.aliases.some((a) => a && a !== row.label) ? (
-            <span className="mt-0.5 block text-[11px] font-normal text-text-secondary">
-              also: {row.aliases.filter((a) => a && a !== row.label).slice(0, 3).join(', ')}
-            </span>
-          ) : null}
+          {row.label}
         </button>
       ),
     },
@@ -498,94 +524,159 @@ export function AssumptionsWorkspaceTab({
   if (loading) return <WorkspaceTabLoader />;
 
   const detailOpen = Boolean(showDetailPanel && selected);
-  const detailPanelClass = embedded
-    ? 'flex min-h-0 h-full flex-col overflow-y-auto border-l border-divider bg-white p-4'
-    : 'rounded-xl border border-divider bg-white p-4';
 
-  return (
-    <div className={embedded ? 'flex h-full min-h-0 flex-col overflow-hidden' : 'h-full overflow-y-auto p-6'}>
-      <div
-        className={
-          embedded
-            ? detailOpen
-              ? 'grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_360px] gap-0'
-              : 'flex min-h-0 flex-1 flex-col'
-            : `mx-auto grid max-w-7xl gap-6 ${detailOpen ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : ''}`
-        }
-      >
-        <div className={embedded ? 'flex min-h-0 flex-col overflow-hidden px-4 pb-4 pt-4' : 'space-y-6'}>
-          {!embedded ? (
-            <div>
-              <h1 className="text-lg font-semibold text-text-primary">{PROJECT_VARIABLES.title}</h1>
-              <p className="mt-1 text-sm text-text-tertiary">
-                Project-wide values and claims used by assessments, forecasts, and outputs.
-                {showDetailPanel && !selected
-                  ? ` Select a ${PROJECT_VARIABLES.lowerSingular} to open it to explore it further.`
-                  : ''}
+  const detailFields = selected ? (
+    <div className="flex-1 overflow-y-auto overflow-x-hidden px-5 py-4 space-y-4">
+      <p className="text-xs text-text-tertiary">{selected.key}</p>
+
+      <label className="block">
+        <span className="text-xs font-medium text-text-tertiary">Value</span>
+        <input className="mt-1 w-full rounded-lg border border-stroke-subtle px-3 py-2 text-sm" value={draftValue} onChange={(event) => setDraftValue(event.target.value)} />
+      </label>
+
+      <label className="block">
+        <span className="text-xs font-medium text-text-tertiary">Unit</span>
+        <input className="mt-1 w-full rounded-lg border border-stroke-subtle px-3 py-2 text-sm" value={draftUnit} onChange={(event) => setDraftUnit(event.target.value)} />
+      </label>
+
+      <div className="flex items-center justify-end gap-2">
+        <button
+          type="button"
+          className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
+          onClick={handleCancel}
+          disabled={saving || !hasDraftChanges}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="btn-primary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
+          onClick={handleConfirm}
+          disabled={!canConfirm}
+        >
+          Confirm
+        </button>
+      </div>
+
+      <AssumptionCommentsThread assumptionId={selected.id} />
+    </div>
+  ) : null;
+
+  const tableBlock = (
+    <>
+      {error ? <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div> : null}
+
+      <div className={`flex flex-wrap items-center justify-between gap-2 ${embedded ? 'pb-4' : ''}`}>
+        <div className="flex flex-wrap items-center gap-2">
+          <CustomDropdown
+            value={status}
+            onChange={(value) => setStatus(value as '' | AssumptionStatus)}
+            options={STATUS_OPTIONS}
+            ariaLabel={`Filter ${PROJECT_VARIABLES.lower} by status`}
+          />
+          <Tooltip content={STATUS_LEGEND_CONTENT} width={240}>
+            <button
+              type="button"
+              className="flex items-center justify-center w-5 h-5 rounded-full text-text-tertiary hover:text-text-secondary hover:bg-black/[0.04] transition-colors"
+              aria-label="What do the statuses mean?"
+            >
+              <Info className="w-3.5 h-3.5" />
+            </button>
+          </Tooltip>
+        </div>
+        {onAddAssumptionInChat ? (
+          <button
+            type="button"
+            className="btn-primary !h-7 !text-xs !leading-none !px-2.5 !py-0 !rounded-lg shrink-0"
+            onClick={onAddAssumptionInChat}
+          >
+            <Plus className="w-3 h-3" />
+            Add {PROJECT_VARIABLES.lowerSingular}
+          </button>
+        ) : null}
+      </div>
+
+      {embedded ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <ReadOnlyDataTable
+            columns={columns}
+            rows={rows}
+            pageSize={25}
+            onRowClick={handleAssumptionOpen}
+            emptyState={
+              <div className="py-20 text-center">
+                <p className="text-sm font-medium text-text-secondary">No {PROJECT_VARIABLES.lower} yet</p>
+                <p className="mt-1 text-xs text-text-tertiary">
+                  Upload project materials or create assessments to start tracking {PROJECT_VARIABLES.lower}.
+                </p>
+              </div>
+            }
+          />
+        </div>
+      ) : (
+        <ReadOnlyDataTable
+          columns={columns}
+          rows={rows}
+          pageSize={25}
+          onRowClick={handleAssumptionOpen}
+          emptyState={
+            <div className="py-20 text-center">
+              <p className="text-sm font-medium text-text-secondary">No {PROJECT_VARIABLES.lower} yet</p>
+              <p className="mt-1 text-xs text-text-tertiary">
+                Upload project materials or create assessments to start tracking {PROJECT_VARIABLES.lower}.
               </p>
             </div>
-          ) : null}
+          }
+        />
+      )}
+    </>
+  );
 
-          {error ? <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div> : null}
-
-          <div className={`flex flex-wrap items-center justify-between gap-2 ${embedded ? 'pb-4' : ''}`}>
-            <div className="flex flex-wrap items-center gap-2">
-              <CustomDropdown
-                value={status}
-                onChange={(value) => setStatus(value as '' | AssumptionStatus)}
-                options={STATUS_OPTIONS}
-                ariaLabel={`Filter ${PROJECT_VARIABLES.lower} by status`}
-              />
-            </div>
-            {onAddAssumptionInChat ? (
-              <button
-                type="button"
-                className="btn-primary !h-7 !text-xs !leading-none !px-2.5 !py-0 !rounded-lg shrink-0"
-                onClick={onAddAssumptionInChat}
-              >
-                <Plus className="w-3 h-3" />
-                Add {PROJECT_VARIABLES.lowerSingular}
-              </button>
-            ) : null}
+  if (embedded) {
+    return (
+      <div className="flex h-full min-h-0 w-full min-w-0">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-4">
+          {tableBlock}
+        </div>
+        {detailOpen && selected ? (
+          <div
+            className="flex-shrink-0 h-full min-h-0 overflow-hidden"
+            style={{ width: COMPANION_SIDE_PANEL_WIDTH }}
+          >
+            <CompanionSidePanel
+              title={selected.label}
+              eyebrow={PROJECT_VARIABLES.titleSingular}
+              onClose={() => setSelected(null)}
+              ariaLabel={`${PROJECT_VARIABLES.titleSingular} details`}
+            >
+              {detailFields}
+            </CompanionSidePanel>
           </div>
+        ) : null}
+      </div>
+    );
+  }
 
-          {embedded ? (
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <ReadOnlyDataTable
-                columns={columns}
-                rows={rows}
-                pageSize={25}
-                onRowClick={handleAssumptionOpen}
-                emptyState={
-                  <div className="py-20 text-center">
-                    <p className="text-sm font-medium text-text-secondary">No {PROJECT_VARIABLES.lower} yet</p>
-                    <p className="mt-1 text-xs text-text-tertiary">
-                      Upload project materials or create assessments to start tracking {PROJECT_VARIABLES.lower}.
-                    </p>
-                  </div>
-                }
-              />
-            </div>
-          ) : (
-            <ReadOnlyDataTable
-              columns={columns}
-              rows={rows}
-              pageSize={25}
-              onRowClick={handleAssumptionOpen}
-              emptyState={
-                <div className="py-20 text-center">
-                  <p className="text-sm font-medium text-text-secondary">No {PROJECT_VARIABLES.lower} yet</p>
-                  <p className="mt-1 text-xs text-text-tertiary">
-                    Upload project materials or create assessments to start tracking {PROJECT_VARIABLES.lower}.
-                  </p>
-                </div>
-              }
-            />
-          )}
+  return (
+    <div className="h-full overflow-y-auto p-6">
+      <div
+        className={`mx-auto grid max-w-7xl gap-6 ${detailOpen ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : ''}`}
+      >
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-lg font-semibold text-text-primary">{PROJECT_VARIABLES.title}</h1>
+            <p className="mt-1 text-sm text-text-tertiary">
+              Project-wide values and claims used by assessments, forecasts, and outputs.
+              {showDetailPanel && !selected
+                ? ` Select a ${PROJECT_VARIABLES.lowerSingular} to open it to explore it further.`
+                : ''}
+            </p>
+          </div>
+          {tableBlock}
         </div>
 
         {detailOpen && selected ? (
-          <aside className={detailPanelClass}>
+          <aside className="rounded-xl border border-divider bg-white p-4">
             <div className="space-y-4">
               <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">
@@ -602,37 +693,7 @@ export function AssumptionsWorkspaceTab({
                   <X className="h-4 w-4" />
                 </button>
               </div>
-
-              <label className="block">
-                <span className="text-xs font-medium text-text-tertiary">Value</span>
-                <input className="mt-1 w-full rounded-lg border border-stroke-subtle px-3 py-2 text-sm" value={draftValue} onChange={(event) => setDraftValue(event.target.value)} />
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-medium text-text-tertiary">Unit</span>
-                <input className="mt-1 w-full rounded-lg border border-stroke-subtle px-3 py-2 text-sm" value={draftUnit} onChange={(event) => setDraftUnit(event.target.value)} />
-              </label>
-
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
-                  onClick={handleCancel}
-                  disabled={saving || !hasDraftChanges}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="btn-primary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
-                  onClick={handleConfirm}
-                  disabled={!canConfirm}
-                >
-                  Confirm
-                </button>
-              </div>
-
-              <AssumptionCommentsThread assumptionId={selected.id} />
+              {detailFields}
             </div>
           </aside>
         ) : null}

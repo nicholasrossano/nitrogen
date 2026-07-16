@@ -102,7 +102,7 @@ class ProjectChatRouter:
             clarifying_asked=clarifying_asked,
             user_message_count=user_message_count,
             model_inputs_context=model_inputs_context or "No model has been run yet.",
-            assumptions_context=assumptions_context or "No project assumptions tracked yet.",
+            assumptions_context=assumptions_context or "No project variables tracked yet.",
         )
         system_prompt = f"{system_prompt}\n\n{format_assessment_selection_context()}"
         if not onboarding_mode:

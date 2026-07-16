@@ -72,9 +72,9 @@ def _build_focused_assumption_context(assumption: Assumption | None) -> str:
     unit = f" {assumption.unit}" if assumption.unit else ""
     assessments = ", ".join(assumption.used_in_assessments or [])
     lines = [
-        "## Focused Assumption",
-        "- This chat is scoped to one project assumption. Keep responses focused on it unless the user changes topic.",
-        f"- Assumption id: {assumption.id}",
+        "## Focused Variable",
+        "- This chat is scoped to one project variable. Keep responses focused on it unless the user changes topic.",
+        f"- Variable id: {assumption.id}",
         f"- Label: {assumption.label}",
         f"- Key: {assumption.key}",
         f"- Status: {status}",
@@ -423,7 +423,7 @@ async def _get_or_create_chat(
             if chat.assumption_id and chat.assumption_id != assumption_id:
                 raise HTTPException(
                     status_code=409,
-                    detail="This chat is already scoped to a different assumption.",
+                    detail="This chat is already scoped to a different variable.",
                 )
             if chat.assumption_id is None:
                 chat.assumption_id = assumption_id
@@ -707,14 +707,14 @@ async def chat_stream(
                 try:
                     requested_assumption_id = uuid.UUID(raw_assumption_id)
                 except ValueError as exc:
-                    raise HTTPException(status_code=400, detail="Invalid assumption_id format") from exc
+                    raise HTTPException(status_code=400, detail="Invalid variable id format") from exc
                 focused_assumption = await db.get(Assumption, requested_assumption_id)
                 if focused_assumption is None:
-                    raise HTTPException(status_code=404, detail="Assumption not found")
+                    raise HTTPException(status_code=404, detail="Variable not found")
                 if resolved_initiative_id and focused_assumption.project_id != resolved_initiative_id:
                     raise HTTPException(
                         status_code=400,
-                        detail="Assumption does not belong to the selected initiative.",
+                        detail="Variable does not belong to the selected project.",
                     )
 
             chat = await _get_or_create_chat(
@@ -733,7 +733,7 @@ async def chat_stream(
             ):
                 raise HTTPException(
                     status_code=400,
-                    detail="Focused assumption does not belong to this chat initiative.",
+                    detail="Focused variable does not belong to this chat project.",
                 )
 
             user_msg = CoreChatMessage(

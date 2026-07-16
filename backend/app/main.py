@@ -130,6 +130,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Needed so blob downloads can read the server-provided filename.
+    expose_headers=["Content-Disposition"],
 )
 
 _DISK_FULL_NAMES = {"DiskFullError", "DiskFull"}
