@@ -83,6 +83,8 @@ interface FloatLayerProps {
   onCompanionSidePanelOpenChange?: (open: boolean) => void;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   onOpenFile?: (file: ProjectMaterial) => void;
+  /** Persist selected variable id for the Variables workspace float (URL sync). */
+  onVariablesSelectionChange?: (variableId: string | null) => void;
 }
 
 function getWidgetTitle(widget: FloatWidget): string {
@@ -149,6 +151,7 @@ export function FloatLayer({
   onCompanionSidePanelOpenChange,
   onOpenDocument,
   onOpenFile,
+  onVariablesSelectionChange,
 }: FloatLayerProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [childChrome, setChildChrome] = useState<EditorPanelChrome | null>(null);
@@ -239,6 +242,7 @@ export function FloatLayer({
               onCompanionSidePanelOpenChange={onCompanionSidePanelOpenChange}
               onOpenDocument={onOpenDocument}
               onOpenFile={onOpenFile}
+              onVariablesSelectionChange={onVariablesSelectionChange}
             />
           </EditorPanelChromeProvider>
         </ErrorBoundary>
@@ -262,6 +266,7 @@ function FloatWidgetRenderer({
   onCompanionSidePanelOpenChange,
   onOpenDocument,
   onOpenFile,
+  onVariablesSelectionChange,
 }: {
   type: string;
   data: Record<string, any>;
@@ -277,6 +282,7 @@ function FloatWidgetRenderer({
   onCompanionSidePanelOpenChange?: (open: boolean) => void;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   onOpenFile?: (file: ProjectMaterial) => void;
+  onVariablesSelectionChange?: (variableId: string | null) => void;
 }) {
   switch (type) {
     case 'lcoe_inputs':
@@ -303,6 +309,7 @@ function FloatWidgetRenderer({
           focusVariableId={
             typeof data.focus_variable_id === 'string' ? data.focus_variable_id : (typeof data.focus_assumption_id === 'string' ? data.focus_assumption_id : null)
           }
+          onSelectedVariableIdChange={onVariablesSelectionChange}
           onOpenDocument={onOpenDocument}
           onOpenFile={onOpenFile}
           onCompanionSidePanelOpenChange={onCompanionSidePanelOpenChange}
