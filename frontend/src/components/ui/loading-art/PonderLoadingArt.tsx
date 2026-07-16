@@ -16,10 +16,9 @@ import { resolveCssColorValue } from './utils';
 const DEFAULT_SIZE = 280;
 
 // ── Geometry: union of overlapping circular lobes ────────────────────────────
-// Real cartoon thought bubbles are not blobs with sharp harmonics — they're a
-// CLOUD OF OVERLAPPING CIRCLES.  Each lobe is a perfect disc.  Adjacent lobes
-// overlap, so the union has smooth rounded scallops where they meet (the
-// pointy "valleys" between rounded peaks).  No high-frequency sin/cos shapes.
+// Thought-bubble silhouette is a union of overlapping circles (not a blob with
+// sharp harmonics). Each lobe is a disc; adjacent lobes overlap so the outline
+// has smooth rounded scallops where they meet. Avoid high-frequency sin/cos shapes.
 //
 // Cloud layout:
 //   - 1 large core lobe
