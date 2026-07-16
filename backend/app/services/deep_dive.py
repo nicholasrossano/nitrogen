@@ -4,8 +4,8 @@ Shared deep-dive overview service.
 All deep-dive surfaces use this one lightweight pipeline:
   1. Build an assessment-aware search prompt.
   2. Run one authoritative web-search LLM call.
-  3. Run fast project-evidence RAG in parallel.
-  4. Return a cited overview payload for inspector panels.
+  3. Map url_citation annotations onto overview sentences.
+  4. Return a cited overview payload — footer sources are only those cited inline.
 """
 
 import asyncio
@@ -14,6 +14,7 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 from urllib.parse import urlparse
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -120,6 +121,181 @@ def _clean_overview_text(text: str) -> str:
         if cleaned.lower().startswith(prefix.lower()):
             return cleaned[len(prefix):].strip()
     return cleaned
+
+
+def _index_shift_after_clean(raw: str, cleaned: str) -> int:
+    """How many leading characters cleaning removed from the raw overview text."""
+    if not raw or not cleaned:
+        return 0
+    pos = raw.find(cleaned)
+    if pos >= 0:
+        return pos
+    stripped = raw.strip()
+    pos = stripped.find(cleaned)
+    if pos >= 0:
+        return (len(raw) - len(raw.lstrip())) + pos
+    return 0
+
+
+def _split_overview_sentences(text: str, *, limit: int = 3) -> list[tuple[str, int, int]]:
+    """Split overview text into up to `limit` sentences with [start, end) spans."""
+    normalized = text.replace("\n", " ")
+    if not normalized.strip():
+        return []
+
+    spans: list[tuple[str, int, int]] = []
+    cursor = 0
+    while cursor < len(normalized) and len(spans) < limit:
+        next_break = normalized.find(". ", cursor)
+        if next_break < 0:
+            part = normalized[cursor:].strip()
+            if part:
+                start = normalized.find(part, cursor)
+                if start < 0:
+                    start = cursor
+                end = len(normalized)
+                sentence = part if part.endswith((".", "!", "?")) else f"{part}."
+                spans.append((sentence, start, end))
+            break
+
+        part = normalized[cursor:next_break].strip()
+        if part:
+            start = normalized.find(part, cursor)
+            if start < 0:
+                start = cursor
+            # Include the period in the span so annotation indices on it map here.
+            end = next_break + 1
+            sentence = part if part.endswith((".", "!", "?")) else f"{part}."
+            spans.append((sentence, start, end))
+        cursor = next_break + 2
+
+    return spans
+
+
+def _sentence_index_for_offset(spans: list[tuple[str, int, int]], offset: int) -> int | None:
+    for idx, (_text, start, end) in enumerate(spans):
+        if start <= offset < end:
+            return idx
+    return None
+
+
+def _sentence_index_for_url(spans: list[tuple[str, int, int]], url: str) -> int | None:
+    if not url:
+        return None
+    for idx, (sentence, _start, _end) in enumerate(spans):
+        if url in sentence:
+            return idx
+    # Match by domain when the model drops the full URL from the prose.
+    try:
+        host = urlparse(url).netloc.lstrip("www.")
+    except Exception:
+        host = ""
+    if host:
+        for idx, (sentence, _start, _end) in enumerate(spans):
+            if host in sentence:
+                return idx
+    return None
+
+
+def build_cited_overview(
+    overview_text: str,
+    citations: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build overview sentences + sources from web-search citations actually used.
+
+    Only sources referenced by at least one sentence appear in the returned
+    `sources` list. Citation numbers are dense (1..N) in first-use order.
+    """
+    cleaned = _clean_overview_text(overview_text)
+    shift = _index_shift_after_clean(overview_text, cleaned)
+    spans = _split_overview_sentences(cleaned)
+    if not spans:
+        return {"summary_items": [], "sources": []}
+
+    # citation_number -> DeepDiveSource, assigned on first use
+    sources_by_number: dict[int, DeepDiveSource] = {}
+    url_to_number: dict[str, int] = {}
+    per_sentence: list[list[int]] = [[] for _ in spans]
+
+    def _citation_number_for(citation: dict[str, Any]) -> int | None:
+        url = (citation.get("url") or "").strip()
+        if not url:
+            return None
+        existing = url_to_number.get(url)
+        if existing is not None:
+            return existing
+        number = len(sources_by_number) + 1
+        publisher = None
+        try:
+            publisher = urlparse(url).netloc.lstrip("www.") or None
+        except Exception:
+            pass
+        sources_by_number[number] = DeepDiveSource(
+            title=(citation.get("title") or "").strip() or "Web Source",
+            url=url,
+            source_type="web",
+            publisher=publisher,
+        )
+        url_to_number[url] = number
+        return number
+
+    for citation in citations:
+        url = (citation.get("url") or "").strip()
+        if not url:
+            continue
+
+        sentence_idx: int | None = None
+        start_index = citation.get("start_index")
+        if isinstance(start_index, int):
+            sentence_idx = _sentence_index_for_offset(spans, start_index - shift)
+        if sentence_idx is None:
+            sentence_idx = _sentence_index_for_url(spans, url)
+        # Annotated citations are model-cited even when span mapping fails —
+        # attach to the first sentence so the footer stays aligned with use.
+        if sentence_idx is None:
+            sentence_idx = 0
+
+        number = _citation_number_for(citation)
+        if number is None:
+            continue
+        if number not in per_sentence[sentence_idx]:
+            per_sentence[sentence_idx].append(number)
+
+    # Drop sources that never landed on a sentence (should not happen).
+    cited_numbers = {n for nums in per_sentence for n in nums}
+    sources = [sources_by_number[n] for n in sorted(cited_numbers)]
+    # Renumber densely if any gaps (defensive — first-use order is already dense).
+    if cited_numbers != set(range(1, len(sources) + 1)):
+        remap = {old: new for new, old in enumerate(sorted(cited_numbers), 1)}
+        per_sentence = [[remap[n] for n in nums if n in remap] for nums in per_sentence]
+        sources = [sources_by_number[old] for old in sorted(cited_numbers)]
+
+    summary_items = [
+        {"text": sentence, "source_indices": indices}
+        for (sentence, _start, _end), indices in zip(spans, per_sentence)
+    ]
+    return {"summary_items": summary_items, "sources": sources}
+
+
+def filter_sources_to_cited(
+    sources: list["DeepDiveSource"],
+    summary_citations: list[list[int]],
+) -> tuple[list["DeepDiveSource"], list[list[int]]]:
+    """Keep only sources referenced by summary_citations; renumber densely."""
+    cited = sorted({n for nums in summary_citations for n in nums if isinstance(n, int) and n >= 1})
+    if not cited:
+        return [], [[] for _ in summary_citations]
+
+    remap = {old: new for new, old in enumerate(cited, 1)}
+    filtered = [sources[old - 1] for old in cited if 0 < old <= len(sources)]
+    # If some citation numbers were out of range, rebuild remap from kept sources.
+    if len(filtered) != len(cited):
+        valid = [old for old in cited if 0 < old <= len(sources)]
+        remap = {old: new for new, old in enumerate(valid, 1)}
+        filtered = [sources[old - 1] for old in valid]
+
+    renumbered = [[remap[n] for n in nums if n in remap] for nums in summary_citations]
+    return filtered, renumbered
 
 
 # ---------------------------------------------------------------------------
@@ -429,14 +605,13 @@ class DeepDiveResult:
 
 class DeepDiveService:
     """
-    Runs targeted web research + LLM analysis for a single project plan sub-item.
+    Runs targeted web research for a single plan/assessment item overview.
 
     Flow:
-      1. gpt-4o-mini generates 3 precision search queries from item title/rationale/geo.
-      2. Fire all 3 web searches in parallel via TieredRetrievalService.
-      3. Deduplicate results by URL.
-      4. Call main LLM with structured function calling to produce the deep dive output.
-      5. Return typed DeepDiveResult.
+      1. Build an assessment-aware search prompt from item + project context.
+      2. Run one web-search LLM call with citations.
+      3. Map provider citation spans onto overview sentences.
+      4. Return only sources that appear in those inline citations.
     """
     QUERY_GEN_TIMEOUT_SECONDS = 8.0
     STRUCTURED_TIMEOUT_SECONDS = 12.0
@@ -495,56 +670,24 @@ class DeepDiveService:
             assessment_settings.label,
         )
 
-        # Run one web-search overview and fast project evidence lookup in parallel.
-        rag_query = f"{item_title} {item_rationale or ''}"
-        overview_coro = self._generate_overview_with_web_search(search_prompt)
-        evidence_coro = self.rag.retrieve(
-            query=rag_query,
-            project_id=initiative.id,
-            sources=["evidence"],
-            evidence_top_k=3,
-        )
-        overview_result, evidence_chunks_result = await asyncio.gather(
-            overview_coro,
-            evidence_coro,
-            return_exceptions=True,
-        )
+        # Overview citations come only from web-search url_citation annotations
+        # (sources the model actually cited), not from parallel RAG "looked at" hits.
+        try:
+            overview_result = await self._generate_overview_with_web_search(search_prompt)
+        except Exception as overview_exc:
+            logger.warning("Deep dive overview web search failed: %s", overview_exc)
+            overview_result = {"summary_items": [], "sources": []}
 
-        if isinstance(overview_result, BaseException):
-            logger.warning("Deep dive overview web search failed: %s", overview_result)
-            summary_items = []
-            web_sources = []
-        else:
-            summary_items = overview_result["summary_items"]
-            web_sources = overview_result["sources"]
-
-        # Collect evidence chunks (RAG results from uploaded documents)
-        evidence_chunks = []
-        if not isinstance(evidence_chunks_result, BaseException):
-            evidence_chunks = evidence_chunks_result
-        else:
-            logger.warning("Evidence RAG failed: %s", evidence_chunks_result)
+        summary_items = overview_result["summary_items"]
+        sources: list[DeepDiveSource] = list(overview_result["sources"])
+        summary_citations = [item["source_indices"] for item in summary_items]
+        sources, summary_citations = filter_sources_to_cited(sources, summary_citations)
 
         logger.info(
-            "Deep dive gathered %d web sources + %d evidence chunks",
-            len(web_sources), len(evidence_chunks),
+            "Deep dive cited %d sources across %d overview sentences",
+            len(sources),
+            len(summary_items),
         )
-
-        # Build source list — only facts/documents the model explicitly cited.
-        sources: list[DeepDiveSource] = list(web_sources)
-        doc_index_to_citation_number: dict[int, int] = {}
-        for idx, chunk in enumerate(evidence_chunks, 1):
-            sources.append(DeepDiveSource(
-                title=chunk.source_title,
-                url=None,
-                source_type="evidence",
-                excerpt=chunk.content[:300] if chunk.content else None,
-                evidence_doc_id=str(chunk.source_doc_id),
-                chunk_id=str(chunk.chunk_id),
-            ))
-            doc_index_to_citation_number[idx] = len(sources)
-
-        summary_citations = [item["source_indices"] for item in summary_items]
 
         elapsed_ms = int((time.time() - start) * 1000)
         return DeepDiveResult(
@@ -610,42 +753,7 @@ class DeepDiveService:
             )
             return {"summary_items": [], "sources": []}
 
-        sources: list[DeepDiveSource] = []
-        for citation in citations:
-            url = citation.get("url", "") or ""
-            if not url:
-                continue
-            title = citation.get("title", "") or "Web Source"
-            publisher = None
-            try:
-                publisher = urlparse(url).netloc.lstrip("www.") or None
-            except Exception:
-                pass
-            sources.append(DeepDiveSource(
-                title=title,
-                url=url,
-                source_type="web",
-                publisher=publisher,
-            ))
-
-        overview_text = _clean_overview_text(overview_text)
-        sentences = [
-            sentence.strip()
-            for sentence in overview_text.replace("\n", " ").split(". ")
-            if sentence.strip()
-        ][:3]
-        if not sentences:
-            return {"summary_items": [], "sources": sources}
-
-        citation_numbers = list(range(1, min(len(sources), 3) + 1))
-        summary_items = []
-        for idx, sentence in enumerate(sentences):
-            text = sentence if sentence.endswith((".", "!", "?")) else f"{sentence}."
-            summary_items.append({
-                "text": text,
-                "source_indices": citation_numbers if idx == 0 else [],
-            })
-        return {"summary_items": summary_items, "sources": sources}
+        return build_cited_overview(overview_text, citations)
 
     async def _generate_search_queries(
         self,
