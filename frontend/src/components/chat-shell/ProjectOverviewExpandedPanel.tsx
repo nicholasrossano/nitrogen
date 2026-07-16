@@ -7,6 +7,7 @@ import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel
 import { ShareProjectModal } from '@/components/sharing/ShareProjectModal';
 import { TourAnchor } from '@/components/tour/TourAnchor';
 import { api, type Project, type ProjectShare } from '@/lib/api';
+import { getCached, swrFetch, swrKeys } from '@/lib/swrCache';
 import {
   buildCollaborators,
   CollaboratorRow,
@@ -39,12 +40,19 @@ export function ProjectOverviewExpandedPanel({
   const showShareModal = shareModalOpen ?? internalShareModalOpen;
 
   const loadShares = useCallback(async () => {
-    setCollaboratorsLoading(true);
+    const key = swrKeys.shares(project.id);
+    const cached = getCached<ProjectShare[]>(key);
+    if (cached) {
+      setShares(cached);
+      setCollaboratorsLoading(false);
+    } else {
+      setCollaboratorsLoading(true);
+    }
     try {
-      const data = await api.getShares(project.id);
+      const { data } = await swrFetch(key, () => api.getShares(project.id));
       setShares(data);
     } catch {
-      setShares([]);
+      if (!cached) setShares([]);
     } finally {
       setCollaboratorsLoading(false);
     }

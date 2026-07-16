@@ -164,11 +164,14 @@ export function ChatContextStack({
       setProjectMaterials([]);
       return;
     }
-    try {
-      const materials = await api.getMaterials(projectId);
-      setProjectMaterials(materials);
-    } catch {
-      setProjectMaterials([]);
+    const store = useProjectStore.getState();
+    if (store.materialsProjectId === projectId) {
+      setProjectMaterials(store.projectMaterials);
+    }
+    await store.loadMaterials(projectId);
+    const next = useProjectStore.getState();
+    if (next.materialsProjectId === projectId) {
+      setProjectMaterials(next.projectMaterials);
     }
   }, [projectId]);
 
