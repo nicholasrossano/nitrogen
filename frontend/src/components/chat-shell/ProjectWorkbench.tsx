@@ -12,11 +12,13 @@ import {
 import {
   ASSESSMENT_SEARCH_PARAM,
   CONTEXT_PANEL_SEARCH_PARAM,
+  VARIABLE_SEARCH_PARAM,
   buildProjectWorkbenchPath,
   contextStackBackdropMotionClass,
   contextStackTransitionClass,
   parseAssessmentParam,
   parseContextPanelParam,
+  parseVariableParam,
   type ContextPanelExpandMotion,
   type ExpandedWidgetChangeOptions,
 } from '@/components/chat-shell/chatContextStackMotion';
@@ -97,6 +99,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   const activeChatId = searchParams.get('chat');
   const panelParam = parseContextPanelParam(searchParams.get(CONTEXT_PANEL_SEARCH_PARAM));
   const assessmentParam = parseAssessmentParam(searchParams.get(ASSESSMENT_SEARCH_PARAM));
+  const variableParam = parseVariableParam(searchParams.get(VARIABLE_SEARCH_PARAM));
   const restoringAssessmentRef = useRef<string | null>(null);
 
   const replaceWorkbenchSearchParams = useCallback((mutate: (params: URLSearchParams) => void) => {
@@ -107,12 +110,14 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     const chat = params.get('chat');
     const panel = parseContextPanelParam(params.get(CONTEXT_PANEL_SEARCH_PARAM));
     const assessment = parseAssessmentParam(params.get(ASSESSMENT_SEARCH_PARAM));
-    router.replace(buildProjectWorkbenchPath(projectId, { chat, panel, assessment }));
+    const variable = parseVariableParam(params.get(VARIABLE_SEARCH_PARAM));
+    router.replace(buildProjectWorkbenchPath(projectId, { chat, panel, assessment, variable }));
   }, [projectId, router, searchParams]);
 
   const clearContextPanelParam = useCallback(() => {
     replaceWorkbenchSearchParams((params) => {
       params.delete(CONTEXT_PANEL_SEARCH_PARAM);
+      params.delete(VARIABLE_SEARCH_PARAM);
     });
   }, [replaceWorkbenchSearchParams]);
 
@@ -207,16 +212,23 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
         setExpandMotionMode('stack');
       }
       chatShell?.setActiveContextWidget('variables');
-      const alreadyOpen = (pinnedFloatWidgets ?? floatWidgets).some(
+      const openWorkspace = (pinnedFloatWidgets ?? floatWidgets).find(
         (widget) => widget.type === 'variables_workspace',
       );
-      if (!alreadyOpen) {
+      const openFocusId =
+        typeof openWorkspace?.data?.focus_variable_id === 'string'
+          ? openWorkspace.data.focus_variable_id
+          : null;
+      if (!openWorkspace) {
         const layout: FloatLayout = hasMessages ? 'docked' : 'solo';
         setFloatLayout(layout);
         if (layout === 'solo') {
           setHasMessages(true);
         }
-        setPinnedFloatWidgets([floatWidgetForVariablesWorkspace(projectId)]);
+        setPinnedFloatWidgets([floatWidgetForVariablesWorkspace(projectId, variableParam)]);
+      } else if (variableParam && openFocusId !== variableParam) {
+        // Refresh / deep-link: keep the float mounted but apply the focused variable.
+        setPinnedFloatWidgets([floatWidgetForVariablesWorkspace(projectId, variableParam)]);
       }
       return;
     }
@@ -245,6 +257,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     panelParam,
     pinnedFloatWidgets,
     projectId,
+    variableParam,
   ]);
 
   useEffect(() => {
@@ -583,8 +596,17 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     replaceWorkbenchSearchParams((params) => {
       params.delete('chat');
       params.set(CONTEXT_PANEL_SEARCH_PARAM, 'variables');
+      if (focusVariableId) params.set(VARIABLE_SEARCH_PARAM, focusVariableId);
+      else params.delete(VARIABLE_SEARCH_PARAM);
     });
   }, [chatShell, projectId, replaceWorkbenchSearchParams, resolveFloatLayoutForOpen]);
+
+  const handleVariablesSelectionChange = useCallback((variableId: string | null) => {
+    replaceWorkbenchSearchParams((params) => {
+      if (variableId) params.set(VARIABLE_SEARCH_PARAM, variableId);
+      else params.delete(VARIABLE_SEARCH_PARAM);
+    });
+  }, [replaceWorkbenchSearchParams]);
 
   /** Swap float contents in place (assessment → decision/activity log) without changing dock layout. */
   const replaceFloatContent = useCallback((widgets: FloatWidget[]) => {
@@ -834,6 +856,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
       // Persist floor in the URL for refresh / deep-link (stack and sidebar).
       replaceWorkbenchSearchParams((params) => {
         params.delete('chat');
+        params.delete(VARIABLE_SEARCH_PARAM);
         params.set(CONTEXT_PANEL_SEARCH_PARAM, widget);
       });
       return;
@@ -1099,6 +1122,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
             onCompanionSidePanelOpenChange={setFloatCompanionOpen}
             onOpenDocument={handleOpenDocument}
             onOpenFile={handleOpenProjectFile}
+            onVariablesSelectionChange={handleVariablesSelectionChange}
           />
         </aside>
       )}
