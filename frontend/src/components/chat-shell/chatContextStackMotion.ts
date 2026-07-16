@@ -11,6 +11,8 @@ export type ExpandedWidgetChangeOptions = {
 export const CONTEXT_PANEL_SEARCH_PARAM = 'panel';
 /** Open assessment float — instance id beside the active floor (or solo when no panel/chat). */
 export const ASSESSMENT_SEARCH_PARAM = 'assessment';
+/** Selected variable inside the Variables float — survives refresh with ?panel=variables. */
+export const VARIABLE_SEARCH_PARAM = 'variable';
 
 export function parseContextPanelParam(value: string | null): ChatContextExpandedWidget | null {
   if (value === 'overview' || value === 'variables' || value === 'files' || value === 'assessments') {
@@ -27,6 +29,12 @@ export function parseAssessmentParam(value: string | null): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+export function parseVariableParam(value: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 /** Canonical project workbench URL — chat is default floor when panel/chat omitted. */
 export function buildProjectWorkbenchPath(
   projectId: string,
@@ -34,12 +42,14 @@ export function buildProjectWorkbenchPath(
     chat?: string | null;
     panel?: ChatContextExpandedWidget | null;
     assessment?: string | null;
+    variable?: string | null;
   },
 ): string {
   const params = new URLSearchParams();
   if (options?.chat) params.set('chat', options.chat);
   if (options?.panel) params.set(CONTEXT_PANEL_SEARCH_PARAM, options.panel);
   if (options?.assessment) params.set(ASSESSMENT_SEARCH_PARAM, options.assessment);
+  if (options?.variable) params.set(VARIABLE_SEARCH_PARAM, options.variable);
   const query = params.toString();
   return query ? `/projects/${projectId}?${query}` : `/projects/${projectId}`;
 }
