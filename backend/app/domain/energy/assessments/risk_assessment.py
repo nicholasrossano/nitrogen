@@ -70,7 +70,7 @@ class RiskAssessment(BaseAssessment):
             input_dependencies=[],
             produced_outputs=["risk_register"],
             downstream_dependencies=[],
-            assumptions_behavior="tracks",
+            variables_behavior="tracks",
             evidence_behavior="rag_grounded",
             decision_log_attribution=DecisionLogAttribution(
                 adapter_labels={"research_source": "Project materials and research retrieval"},
@@ -127,7 +127,7 @@ class RiskAssessment(BaseAssessment):
                         "evidence_status",
                         "select",
                         label="Evidence Status",
-                        options=["Supported", "Partially supported", "Assumption", "Needs evidence"],
+                        options=["Supported", "Partially supported", "Variable", "Needs evidence"],
                     ),
                 ],
                 population=[
@@ -746,7 +746,7 @@ def _risk_generation_system_prompt() -> str:
         "- Use project context aggressively: country, sector, delivery model, beneficiaries, technologies, agencies, documents, and precedents when available.\n"
         "- Do not invent unsupported facts. If a fact is not evidenced, phrase it as uncertainty, e.g. 'Unclear licensing requirements could delay contracting or approvals.'\n"
         "- Separate the broad category from the project-specific manifestation in the fields.\n"
-        "- Evidence/basis must say what project material, retrieved source, or explicit assumption supports the risk.\n\n"
+        "- Evidence/basis must say what project material, retrieved source, or explicit variable supports the risk.\n\n"
         "Internal specificity check before returning JSON: reject or rewrite any risk if it could apply to almost any project, "
         "lacks a clear consequence, does not connect to project context, implies unsupported facts, or duplicates another risk.\n\n"
         "Return JSON only: {\"risks\": [{\"title\", \"category\", \"affected_components\", "
@@ -816,7 +816,7 @@ def _default_risks(categories: list[dict[str, Any]], context: dict[str, Any]) ->
                     "description": "New or evolving compliance requirements can force redesign, additional documentation, or contractor rebids.",
                     "affected_components": "Technical scope; contracting; budget",
                     "basis": default_basis,
-                    "missing_information": "Applicable standards, pending policy updates, and grandfathering assumptions.",
+                    "missing_information": "Applicable standards, pending policy updates, and grandfathering variables.",
                     "evidence_status": "Needs evidence",
                 },
             ])
@@ -846,12 +846,12 @@ def _default_risks(categories: list[dict[str, Any]], context: dict[str, Any]) ->
         if "technical" in lowered or "design" in lowered:
             risks.extend([
                 {
-                    "title": f"Design assumptions may not hold under site and operating conditions{location_suffix}",
+                    "title": f"Design variables may not hold under site and operating conditions{location_suffix}",
                     "category": label,
-                    "description": "Early engineering assumptions may differ from field constraints, requiring redesign or rework.",
+                    "description": "Early engineering variables may differ from field constraints, requiring redesign or rework.",
                     "affected_components": "System design; bill of quantities; installation plan",
                     "basis": default_basis,
-                    "missing_information": "Validated site survey, load/profile data, and engineering assumptions register.",
+                    "missing_information": "Validated site survey, load/profile data, and engineering variables register.",
                     "evidence_status": "Needs evidence",
                 },
                 {
@@ -1102,14 +1102,14 @@ def _is_placeholder_risk_title(value: Any) -> bool:
     if not title:
         return True
     placeholder_phrases = (
-        "assumptions need validation",
-        "assumption needs validation",
+        "variables need validation",
+        "variable needs validation",
         "risk to be confirmed",
         "to be confirmed",
         "tbd",
         "needs validation",
         "category-specific execution risk",
-        "unresolved assumptions",
+        "unresolved variables",
     )
     return any(phrase in title for phrase in placeholder_phrases)
 

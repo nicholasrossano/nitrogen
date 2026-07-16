@@ -8,14 +8,14 @@ Backend single test case:
 
 ```bash
 cd backend
-python3 -m pytest -q -x tests/services/test_assumptions_service.py::test_normalize_missing_value_coerces_placeholder_tokens
+python3 -m pytest -q -x tests/services/test_variables_service.py::test_normalize_missing_value_coerces_placeholder_tokens
 ```
 
 Backend single test file:
 
 ```bash
 cd backend
-python3 -m pytest -q -x tests/services/test_assumptions_service.py
+python3 -m pytest -q -x tests/services/test_variables_service.py
 ```
 
 Backend unit-focused subset:
@@ -51,7 +51,7 @@ npm test -- --runInBand --silent --bail
 The root wrappers print a short success line. On failure, they print only the first relevant failure block and save the full log to ignored `.test-output/`.
 
 ```bash
-npm run test:backend:quiet -- tests/services/test_assumptions_service.py
+npm run test:backend:quiet -- tests/services/test_variables_service.py
 npm run test:frontend:quiet -- src/__tests__/components/ui/Button.test.tsx
 npm run test:quiet
 ```
@@ -124,4 +124,4 @@ Do not delete tests from this list without a separate cleanup PR. These are cand
 - `frontend/src/__tests__/components/assessments/AssessmentWorkspace.test.tsx` is a broad component test with many `waitFor` assertions. Consider splitting the most important flows into smaller focused tests before adding more cases.
 - `backend/tests/api/test_chat_stream.py` repeats a large mocked app setup across streaming scenarios. Consider a local fixture or helper factory before adding additional chat stream cases.
 - Registry and contract tests are valuable but overlap across adapters, resources, capabilities, MCP, and manifests. Keep the subset-style checks, but avoid adding exact full-set equality tests that churn whenever capabilities change.
-- `backend/tests/services/test_assumptions_service.py` is a high-value but dense service test file. Future additions should favor focused files by behavior area if the file keeps growing.
+- `backend/tests/services/test_variables_service.py` is a high-value but dense service test file. Future additions should favor focused files by behavior area if the file keeps growing.

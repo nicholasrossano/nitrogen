@@ -84,7 +84,7 @@ class PVWattsTool(BaseAssessment):
     def manifest(self) -> AssessmentManifest:
         return AssessmentManifest(
             **self.definition.__dict__,
-            goal="Estimate annual and monthly solar generation from site and system assumptions.",
+            goal="Estimate annual and monthly solar generation from site and system variables.",
             primary_ui_object="solar_yield_results",
             investigate_hint="For solar inputs, prefer site-specific geometry and equipment specs first, then fall back to climate-appropriate PV benchmarks and PVWatts-compatible defaults.",
             export_artifact_types=["xlsx"],
@@ -92,7 +92,7 @@ class PVWattsTool(BaseAssessment):
             input_dependencies=[],
             produced_outputs=["solar_annual_kwh", "solar_monthly_kwh", "solar_inputs"],
             downstream_dependencies=["lcoe_model"],
-            assumptions_behavior="tracks",
+            variables_behavior="tracks",
             evidence_behavior="none",
             decision_log_attribution=DecisionLogAttribution(
                 adapter_labels={"pvwatts": "NREL PVWatts API"},
@@ -187,7 +187,7 @@ class PVWattsTool(BaseAssessment):
         stage_input_meta: dict[str, dict[str, Any]] = {}
         for item in items:
             content = item.get("content", {})
-            key = content.get("field_name") or str(content.get("variable", "")).lower().replace(" ", "_")
+            key = content.get("field_name") or str(content.get("variable") or content.get("assumption") or "").lower().replace(" ", "_")
             val = content.get("value")
             if key:
                 stage_input_meta[key] = {

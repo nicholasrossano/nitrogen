@@ -585,7 +585,7 @@ export function CarbonModelWidget({
         <p className="text-xs text-text-tertiary mt-2">
           {PROJECT_TYPE_OPTIONS.find(o => o.value === currentMethodPack)?.label || currentMethodPack}
           {' '}&middot;{' '}
-          {result.assumption_count} {projectVariableLower(result.assumption_count)} used
+          {(result.variable_count ?? result.assumption_count ?? 0)} {projectVariableLower(result.variable_count ?? result.assumption_count ?? 0)} used
           &middot; {result.period_years}-year crediting period
         </p>
         {isRecalculating && (

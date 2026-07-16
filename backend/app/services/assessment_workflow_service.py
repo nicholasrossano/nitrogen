@@ -48,11 +48,11 @@ from app.models.project import Project
 from app.models.assessment_instance import AssessmentInstance
 from app.assessments.base import BaseAssessment, StageDef
 from app.assessments.utils import make_build_item
-from app.services.assumptions import (
-    AssumptionActor,
-    apply_assumptions_to_items,
-    assumptions_as_context,
-    sync_stage_assumptions,
+from app.services.variables import (
+    VariableActor,
+    apply_variables_to_items,
+    variables_as_context,
+    sync_stage_variables,
 )
 
 logger = logging.getLogger(__name__)
@@ -177,7 +177,7 @@ async def get_initiative_context(db: AsyncSession, project_id: Any) -> dict[str,
         "project_type": initiative.project_type or "",
         "project_plan": initiative.project_plan or {},
         "tool_inputs": dict(initiative.tool_inputs or {}),
-        "assumptions": await assumptions_as_context(db, initiative.id),
+        "variables": await variables_as_context(db, initiative.id),
     }
 
 
@@ -563,9 +563,9 @@ async def _execute_population_step(
             make_build_item(content=row, derivation="template")
             for row in rows
         ]
-        items = apply_assumptions_to_items(
+        items = apply_variables_to_items(
             items,
-            context.get("assumptions") or [],
+            context.get("variables") or [],
             assessment_id=assessment.definition.id,
         )
         existing = accumulated_data.get("items", [])
@@ -691,14 +691,14 @@ async def confirm_stage(
     stage_state["confirmed_by"] = confirmed_by
     stage_state["confirmed_by_email"] = confirmed_by_email
 
-    await sync_stage_assumptions(
+    await sync_stage_variables(
         db,
         project_id=inst.project_id,
         assessment_id=assessment.definition.id,
         assessment_instance_id=inst.id,
         stage_id=stage_id,
         stage_data=stage_state.get("data") or {},
-        actor=AssumptionActor(user_id=confirmed_by, email=confirmed_by_email or confirmed_by),
+        actor=VariableActor(user_id=confirmed_by, email=confirmed_by_email or confirmed_by),
         status="validated",
     )
 

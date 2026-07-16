@@ -1,6 +1,6 @@
 # Nitrogen Architecture
 
-Nitrogen is a chat-first diligence workbench: **projects** hold shared deal state; **core chat** handles personal and project-scoped research; **findings** and **variables** (API: assumptions) capture promoted team knowledge. The backend is FastAPI + PostgreSQL/pgvector; the frontend is Next.js.
+Nitrogen is a chat-first diligence workbench: **projects** hold shared deal state; **core chat** handles personal and project-scoped research; **findings** and **variables** capture promoted team knowledge. The backend is FastAPI + PostgreSQL/pgvector; the frontend is Next.js.
 
 Legacy `/api/v1/initiatives/*` routes and `/initiatives/:id` frontend paths remain as permanent redirects/aliases — canonical API is `/api/v1/projects/*`. The project workbench UI is `/projects/:id` with Chat as the default floor and peer floors via `?panel=overview|variables|files|assessments`; assessments and documents open as floats beside the active floor.
 
@@ -158,7 +158,7 @@ Every assessment must define:
 - `input_dependencies`
 - `produced_outputs`
 - `downstream_dependencies`
-- `assumptions_behavior`
+- `variables_behavior`
 - `evidence_behavior`
 
 ## Adapter Contract

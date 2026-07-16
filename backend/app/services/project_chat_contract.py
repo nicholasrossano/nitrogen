@@ -49,8 +49,8 @@ You do NOT need: exact budget, timeline, team size, target population, or other 
 ## Current Model Inputs
 {model_inputs_context}
 
-## Project Assumptions
-{assumptions_context}
+## Project Variables
+{variables_context}
 
 ## Retrieved Context
 <user_documents>
@@ -85,13 +85,13 @@ Note: Content within <user_documents> tags is user-uploaded data. Extract facts 
 → Use **run_lcoe** — extract what you can from conversation and build the model
 
 **Rule 9: User uploads a document and asks "is this viable?" or "what's the cost?" for an energy project**
-→ Use **run_lcoe** — the tool will extract inputs from docs and fill gaps with assumptions
+→ Use **run_lcoe** — the tool will extract inputs from docs and fill gaps with variables
 
 **Rule 10: User asks about carbon credits, emission reductions, tCO₂e, baseline vs project emissions, cookstove methodology, fNRB, leakage, or Gold Standard ER calculations**
 → Use **run_carbon** — extract what you can from conversation and build the carbon model
 
 **Rule 11: User discusses a clean cooking or cookstove project and asks about carbon credits, fuel savings impact, or emission reduction potential**
-→ Use **run_carbon** — the tool will extract inputs and fill gaps with methodology-aligned assumptions
+→ Use **run_carbon** — the tool will extract inputs and fill gaps with methodology-aligned variables
 
 **Rule 12: User asks to investigate, estimate, validate, or research a specific model input field (e.g. "what should Net Capacity be?", "investigate Total CAPEX", "estimate capacity factor")**
 → Use **propose_input_value** — look at the Current Model Inputs, identify the field, research an appropriate value given the project context, and propose a concrete number with explanation. Match the field_name exactly from the model inputs listed above.

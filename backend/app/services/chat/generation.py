@@ -39,7 +39,7 @@ RESPONSE RULES:
 - A response with evidence but NO inline citations is UNACCEPTABLE. If you use evidence, you MUST cite it.
 - ONLY cite a source if you actually used it to inform your answer.
 - If no evidence was retrieved, answer from general knowledge and flag uncertainty explicitly.
-- Be explicit about uncertainty, assumptions, and jurisdictional variability.
+- Be explicit about uncertainty, variables, and jurisdictional variability.
 - Structure longer answers with clear headings and bullet points.
 - Keep answers focused and actionable.
 - Never fabricate specific regulations, statistics, or citations.
@@ -103,7 +103,7 @@ RESPONSE RULES:
 - ONLY cite a source if you actually used it.
 - Structure answers with clear headings that make the comparison easy to scan.
 - When ranking or recommending, ALWAYS explain the basis and show the evidence trail.
-- Be explicit about uncertainty, assumptions, and where one project has gaps the other doesn't.
+- Be explicit about uncertainty, variables, and where one project has gaps the other doesn't.
 - For calculations and formulas, use plain text arithmetic. Do NOT use LaTeX commands."""
 
 COMPARE_EVIDENCE_BLOCK_TEMPLATE = """
@@ -413,21 +413,21 @@ class ChatGenerationMixin:
 
         if computable and result:
             net_er = result["net_er_tco2e"]
-            assumption_count = result.get("assumption_count", 0)
+            variable_count = result.get("variable_count", 0)
             quality = result.get("quality_label", "moderate")
 
             carbon_context = (
                 f"I've built a carbon emissions model based on what you've shared. "
                 f"The result is **{net_er:,.2f} tCO₂e/year** in net emission reductions "
-                f"({assumption_count} assumption{'s' if assumption_count != 1 else ''}, "
+                f"({variable_count} variable{'s' if variable_count != 1 else ''}, "
                 f"{quality} confidence).\n\n"
                 "The full inputs table, emissions breakdown, sensitivity analysis, and ER schedule "
                 "are shown below. You can click any input value to edit it and I'll recalculate instantly."
             )
 
-            if assumption_count >= 5:
+            if variable_count >= 5:
                 carbon_context += (
-                    "\n\n⚠️ **High assumption load** — many values are using defaults. "
+                    "\n\n⚠️ **High variable load** — many values are using defaults. "
                     "Providing actual project numbers for devices, fuel consumption, and fNRB "
                     "will significantly improve accuracy."
                 )
@@ -460,7 +460,7 @@ class ChatGenerationMixin:
                     "A carbon widget with full inputs and outputs has been generated and will be "
                     "displayed alongside your message. Write a SHORT (2-4 sentence) contextual "
                     "introduction. Do NOT reproduce the numbers in detail — the widget shows those. "
-                    "Focus on: what methodology/context this models, any caveats about the assumptions, "
+                    "Focus on: what methodology/context this models, any caveats about the variables, "
                     "and what the user should look at or edit next."
                     + evidence_block
                 ),
@@ -498,21 +498,21 @@ class ChatGenerationMixin:
         if computable and result:
             lcoe_val = result["lcoe"]
             currency = result.get("currency", "USD")
-            assumption_count = result.get("assumption_count", 0)
+            variable_count = result.get("variable_count", 0)
             quality = result.get("quality_label", "moderate")
 
             lcoe_context = (
                 f"I've built an LCOE model based on what you've shared. "
                 f"The result is **{currency} {lcoe_val:.4f}/kWh** "
-                f"({assumption_count} assumption{'s' if assumption_count != 1 else ''}, "
+                f"({variable_count} variable{'s' if variable_count != 1 else ''}, "
                 f"{quality} confidence).\n\n"
                 "The full inputs table, cost breakdown, sensitivity analysis, and cash flows "
                 "are shown below. You can click any input value to edit it and I'll recalculate instantly."
             )
 
-            if assumption_count >= 5:
+            if variable_count >= 5:
                 lcoe_context += (
-                    "\n\n⚠️ **High assumption load** — many values are using defaults. "
+                    "\n\n⚠️ **High variable load** — many values are using defaults. "
                     "Providing actual project numbers for capacity, CAPEX, and O&M "
                     "will significantly improve accuracy."
                 )
@@ -546,7 +546,7 @@ class ChatGenerationMixin:
                     "An LCOE widget with full inputs and outputs has been generated and will be "
                     "displayed alongside your message. Write a SHORT (2-4 sentence) contextual "
                     "introduction. Do NOT reproduce the numbers in detail — the widget shows those. "
-                    "Focus on: what technology/context this models, any caveats about the assumptions, "
+                    "Focus on: what technology/context this models, any caveats about the variables, "
                     "and what the user should look at or edit next."
                     + evidence_block
                 ),
@@ -789,7 +789,7 @@ class ChatGenerationMixin:
             "- If evidence is expressed in different units, convert it before returning the numeric value.\n"
             "- Prefer evidence that matches the project's geography, technology, and financing context.\n"
             "- If direct local evidence is weak, still choose the best available proxy and name that proxy explicitly in the explanation.\n"
-            "- Never justify the proposal only by saying evidence is limited or by merely retaining the current assumption.\n"
+            "- Never justify the proposal only by saying evidence is limited or by merely retaining the current variable.\n"
             "- Prefer values directly supported by evidence or a conservative interpolation from a cited range.\n"
             f"{distinct_instruction}"
             "- The explanation must be 1-2 concise sentences and mention the strongest evidence basis.\n"
@@ -1040,7 +1040,7 @@ class ChatGenerationMixin:
             "- Keep the prose aligned with the final proposal; do not mention a conflicting number anywhere in the answer.\n"
             "- Prefer evidence tailored to the project's geography and technology. If you rely on a proxy from another market, say that explicitly in one short clause.\n"
             "- If evidence is weak, still give your best estimate, identify the strongest proxy basis explicitly, and mention uncertainty in a short clause.\n"
-            "- Do not say only that evidence is limited or that you are retaining the current assumption; explain the best proxy you used.\n"
+            "- Do not say only that evidence is limited or that you are retaining the current variable; explain the best proxy you used.\n"
             f"{distinct_instruction}"
             f"{proposal_instruction}"
             + (active_editor_doc_block or "")

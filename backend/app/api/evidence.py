@@ -28,7 +28,7 @@ from app.services.document_conversion import (
     DocumentConversionError,
     prepare_uploaded_document,
 )
-from app.services.assumptions import AssumptionActor, extract_assumptions_from_sources
+from app.services.variables import VariableActor, extract_variables_from_sources
 from app.services.workspaces import require_workspace_member
 from app.core.rate_limit import limiter
 
@@ -199,13 +199,13 @@ async def upload_evidence(
     initiative.touch()
     await db.flush()
     try:
-        await extract_assumptions_from_sources(
+        await extract_variables_from_sources(
             db,
             initiative,
-            actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
+            actor=VariableActor(user_id=user.uid, email=user.email or user.uid),
         )
     except Exception:
-        logger.warning("Could not refresh assumptions after evidence text upload", exc_info=True)
+        logger.warning("Could not refresh variables after evidence text upload", exc_info=True)
     await db.commit()
 
     return EvidenceUploadResponse(

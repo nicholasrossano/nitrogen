@@ -30,7 +30,7 @@ async def test_export():
         recommendation="proceed",
         recommendation_rationale="Test rationale for the recommendation.",
         evidence_summary="Summary of evidence collected during testing.",
-        risks_and_assumptions="Test risks and assumptions.",
+        risks_and_assumptions="Test risks and variables.",
         open_questions=["Test question 1?", "Test question 2?"],
         citations=[
             CitationResponse(

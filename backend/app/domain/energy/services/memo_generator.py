@@ -148,7 +148,7 @@ Generate a structured memo with the following sections. Use citation numbers [1]
                             },
                             "risks_and_assumptions": {
                                 "type": "string",
-                                "description": "Key risks and assumptions with citations where relevant"
+                                "description": "Key risks and variables with citations where relevant"
                             },
                             "open_questions": {
                                 "type": "array",

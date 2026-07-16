@@ -1,4 +1,4 @@
-"""Golden tests for assumption extraction (deterministic recorded LLM path)."""
+"""Golden tests for variable extraction (deterministic recorded LLM path)."""
 
 from __future__ import annotations
 
@@ -21,10 +21,10 @@ EXTRACTION_FIXTURES = [
 def test_extraction_golden(fixture_path):
     fixture = load_fixture(fixture_path)
     predicted = run_recorded_extraction(fixture)
-    expected = fixture["expect"].get("assumptions") or []
+    expected = fixture["expect"].get("variables") or []
     precision, recall, unmatched = match_assumptions(predicted, expected)
 
-    assert unmatched == [], f"{fixture['id']}: unmatched expected assumptions: {unmatched}"
+    assert unmatched == [], f"{fixture['id']}: unmatched expected variables: {unmatched}"
     assert precision >= 0.99, f"{fixture['id']}: precision {precision:.3f} (false positives)"
     assert recall >= 0.99, f"{fixture['id']}: recall {recall:.3f}"
 
@@ -36,7 +36,7 @@ def test_extraction_golden(fixture_path):
 
 def test_emit_all_tanks_precision_emit_nothing_tanks_recall():
     fixture = load_fixture(next(p for p in EXTRACTION_FIXTURES if p.stem == "feasibility_memo_solar_kenya"))
-    expected = fixture["expect"]["assumptions"]
+    expected = fixture["expect"]["variables"]
     predicted_like = [
         {
             "label": e["label"],
@@ -59,14 +59,14 @@ def test_emit_all_tanks_precision_emit_nothing_tanks_recall():
 
 def test_config_gating_sensitivity_open_vocab_would_fail():
     """If we re-enabled config-only gating, open-vocab NPV would disappear."""
-    from app.assumptions.config import ASSUMPTION_BY_KEY
+    from app.variables.config import VARIABLE_BY_KEY
 
     fixture = load_fixture(next(p for p in EXTRACTION_FIXTURES if p.stem == "feasibility_memo_solar_kenya"))
     predicted = run_recorded_extraction(fixture)
     open_vocab = [p for p in predicted if p["key"] == "comparable_project_npv"]
     assert open_vocab, "open-vocab comparable NPV should survive post-gate path"
 
-    gated = [p for p in predicted if p["key"] in ASSUMPTION_BY_KEY]
-    assert all(p["key"] != "comparable_project_npv" or p["key"] in ASSUMPTION_BY_KEY for p in gated)
+    gated = [p for p in predicted if p["key"] in VARIABLE_BY_KEY]
+    assert all(p["key"] != "comparable_project_npv" or p["key"] in VARIABLE_BY_KEY for p in gated)
     # Config gate would drop comparable_project_npv
-    assert "comparable_project_npv" not in ASSUMPTION_BY_KEY
+    assert "comparable_project_npv" not in VARIABLE_BY_KEY

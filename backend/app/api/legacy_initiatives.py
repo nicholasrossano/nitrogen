@@ -6,7 +6,7 @@ from fastapi import APIRouter, status
 
 from app.api import (
     assessment_catalog,
-    assumptions,
+    variables,
     evidence,
     exports,
     google_drive,
@@ -77,12 +77,12 @@ _alias(
     ["POST"],
 )
 
-# Assumptions
-_alias("/initiatives/{project_id}/assumptions/summary", assumptions.get_assumptions_summary, ["GET"])
-_alias("/initiatives/{project_id}/assumptions", assumptions.get_assumptions, ["GET"])
-_alias("/initiatives/{project_id}/assumptions/resolve", assumptions.resolve_assumption, ["GET"])
-_alias("/initiatives/{project_id}/assumptions", assumptions.create_assumption, ["POST"])
-_alias("/initiatives/{project_id}/assumptions/refresh", assumptions.refresh_assumptions, ["POST"])
+# Legacy assumptions paths (entity renamed to variables; keep old URL shape)
+_alias("/initiatives/{project_id}/assumptions/summary", variables.get_variables_summary, ["GET"])
+_alias("/initiatives/{project_id}/assumptions", variables.get_variables, ["GET"])
+_alias("/initiatives/{project_id}/assumptions/resolve", variables.resolve_variable, ["GET"])
+_alias("/initiatives/{project_id}/assumptions", variables.create_variable, ["POST"])
+_alias("/initiatives/{project_id}/assumptions/refresh", variables.refresh_variables, ["POST"])
 
 # Shares
 _alias("/initiatives/{project_id}/shares", shares.list_shares, ["GET"])

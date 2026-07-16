@@ -70,7 +70,7 @@ class LCOETool(BaseAssessment):
         return AssessmentDefinition(
             id="lcoe_model",
             name="LCOE Model",
-            description="Calculate the Levelized Cost of Energy for a project — extracts inputs from conversation and documents, fills gaps with assumptions, and produces transparent cost estimates.",
+            description="Calculate the Levelized Cost of Energy for a project — extracts inputs from conversation and documents, fills gaps with variables, and produces transparent cost estimates.",
             icon="Calculator",
             output_type="lcoe",
             category="analysis",
@@ -89,13 +89,13 @@ class LCOETool(BaseAssessment):
             **self.definition.__dict__,
             goal="Estimate project levelized cost of energy and sensitivity ranges.",
             primary_ui_object="lcoe_results",
-            investigate_hint="Prefer project-specific engineering or vendor data when available; otherwise anchor assumptions to comparable technology, geography, and operating conditions.",
+            investigate_hint="Prefer project-specific engineering or vendor data when available; otherwise anchor variables to comparable technology, geography, and operating conditions.",
             export_artifact_types=["xlsx"],
             adapter_bindings={"core_engine": "lcoe"},
             input_dependencies=["solar_estimate"],
             produced_outputs=["lcoe_kwh", "lcoe_sensitivity", "lcoe_inputs"],
             downstream_dependencies=[],
-            assumptions_behavior="tracks",
+            variables_behavior="tracks",
             evidence_behavior="none",
             decision_log_attribution=DecisionLogAttribution(
                 adapter_labels={"lcoe": "LCOE engine"},
@@ -191,7 +191,7 @@ class LCOETool(BaseAssessment):
         tech_type = None
         for item in items:
             content = item.get("content", {})
-            var = content.get("variable", "")
+            var = content.get("variable") or content.get("assumption") or ""
             explicit_field_name = content.get("field_name")
             key = explicit_field_name if isinstance(explicit_field_name, str) and explicit_field_name else _variable_name_to_key(var)
             val = content.get("value")
@@ -404,7 +404,7 @@ class LCOETool(BaseAssessment):
             lcoe_result = (widget_data.get("result") or {})
             await _progress(
                 f"LCOE: {lcoe_result.get('currency', '')} {lcoe_result.get('lcoe', 0):.4f}/kWh "
-                f"({lcoe_result.get('assumption_count', 0)} assumptions)"
+                f"({lcoe_result.get('variable_count', 0)} variables)"
             )
         else:
             widget_type = "lcoe_inputs"

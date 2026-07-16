@@ -33,7 +33,7 @@ import {
 } from './chatSidebarLayout';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 
-export type NavItem = 'portfolio' | 'plan' | 'assumptions' | 'files' | 'chat' | 'research' | 'workspace';
+export type NavItem = 'portfolio' | 'plan' | 'variables' | 'files' | 'chat' | 'research' | 'workspace';
 
 interface NavItemConfig {
   key: NavItem;
@@ -54,7 +54,7 @@ const PROJECT_ITEMS: NavItemConfig[] = [
   { key: 'research', label: 'Overview', Icon: Home },
   { key: 'plan', label: 'Assessments', Icon: Map },
   { key: 'workspace', label: 'Assessments', Icon: Calculator },
-  { key: 'assumptions', label: PROJECT_VARIABLES.title, Icon: ListChecks },
+  { key: 'variables', label: PROJECT_VARIABLES.title, Icon: ListChecks },
 ];
 
 const PROJECT_RE = /^\/projects\/([^/]+)/;
@@ -115,7 +115,7 @@ export function SideDrawer() {
       const panel = searchParams.get('panel');
       if (panel === 'files') return 'files';
       if (panel === 'assessments' || panel === 'framework' || panel === 'plan') return 'plan';
-      if (panel === 'variables') return 'assumptions';
+      if (panel === 'variables') return 'variables';
       if (panel === 'overview') return 'research';
       return 'chat';
     }
@@ -146,7 +146,7 @@ export function SideDrawer() {
 
   const projectItems: NavRenderConfig[] = (
     isViewer
-      ? PROJECT_ITEMS.filter(i => !(['research', 'assumptions', 'workspace'] as NavItem[]).includes(i.key))
+      ? PROJECT_ITEMS.filter(i => !(['research', 'variables', 'workspace'] as NavItem[]).includes(i.key))
       : PROJECT_ITEMS
   ).map((item) => {
     const lockedDuringOnboarding = isOnboarding && item.key !== 'research';
@@ -198,7 +198,7 @@ export function SideDrawer() {
         router.push(`/projects/${chatProjectId}?panel=assessments`);
         return;
       }
-      if (item === 'assumptions' && chatProjectId) {
+      if (item === 'variables' && chatProjectId) {
         router.push(`/projects/${chatProjectId}?panel=variables`);
         return;
       }

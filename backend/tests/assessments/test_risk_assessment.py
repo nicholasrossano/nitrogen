@@ -101,7 +101,7 @@ def test_export_xlsx_includes_register_sheets():
         "risk_register": [{
             "risk_id": "R01",
             "category": "Technical Design",
-            "risk_title": "Design assumptions may not match site conditions",
+            "risk_title": "Design variables may not match site conditions",
             "description": "Engineering inputs need validation.",
             "affected_components": "System design",
             "inherent_rating": "Substantial",
@@ -119,7 +119,7 @@ def test_export_xlsx_includes_register_sheets():
         }],
         "top_risks": [{
             "risk_id": "R01",
-            "risk_title": "Design assumptions may not match site conditions",
+            "risk_title": "Design variables may not match site conditions",
             "why_it_matters": "Procurement could be mis-specified.",
             "mitigation_summary": "Complete site validation.",
         }],
@@ -219,7 +219,7 @@ async def test_generate_risks_falls_back_to_concrete_category_specific_rows(monk
 
     assert len(risks) >= 4
     titles = [risk["title"].lower() for risk in risks]
-    assert not any("assumptions need validation" in title for title in titles)
+    assert not any("variables need validation" in title for title in titles)
     assert not any("category-specific execution risk" in title for title in titles)
     assert any("permitting" in title or "approval" in title for title in titles)
-    assert any("design assumptions" in title or "integration" in title for title in titles)
+    assert any("design variables" in title or "integration" in title for title in titles)

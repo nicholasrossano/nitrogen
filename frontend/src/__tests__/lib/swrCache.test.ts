@@ -73,13 +73,13 @@ describe('swrCache', () => {
   });
 
   it('invalidate and invalidatePrefix remove entries', () => {
-    setCached('assumptions:p1', [1]);
-    setCached('assumptions:p1:validated', [2]);
+    setCached('variables:p1', [1]);
+    setCached('variables:p1:validated', [2]);
     setCached('other', 3);
     invalidate('other');
     expect(getCached('other')).toBeUndefined();
-    invalidatePrefix('assumptions:p1');
-    expect(getCached('assumptions:p1')).toBeUndefined();
-    expect(getCached('assumptions:p1:validated')).toBeUndefined();
+    invalidatePrefix('variables:p1');
+    expect(getCached('variables:p1')).toBeUndefined();
+    expect(getCached('variables:p1:validated')).toBeUndefined();
   });
 });

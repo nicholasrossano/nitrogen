@@ -21,7 +21,7 @@ async def test_lcoe_compute_stage_preserves_input_status_and_source(monkeypatch:
                     "field_name": "net_capacity_kw",
                     "value": 100,
                     "status": "assumed",
-                    "source": "assumption",
+                    "source": "variable",
                 }
             }
         }
@@ -65,7 +65,7 @@ async def test_carbon_compute_stage_preserves_input_status_and_source(monkeypatc
                     "field_name": "devices_households",
                     "value": 1000,
                     "status": "assumed",
-                    "source": "assumption",
+                    "source": "variable",
                 }
             }
         }
@@ -114,7 +114,7 @@ async def test_pvwatts_compute_external_preserves_input_status_and_source(
                             "field_name": "system_capacity",
                             "value": 12.0,
                             "status": "assumed",
-                            "source": "assumption",
+                            "source": "variable",
                         }
                     }
                 }

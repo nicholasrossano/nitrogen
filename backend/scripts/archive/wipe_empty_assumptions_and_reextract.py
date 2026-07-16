@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-time maintenance: wipe empty assumptions, then re-extract from project sources.
+"""One-time maintenance: wipe empty variables, then re-extract from project sources.
 
 Usage:
   cd backend && python3 scripts/wipe_empty_assumptions_and_reextract.py --dry-run
@@ -21,10 +21,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
-from app.models.assumption import Assumption, AssumptionBinding
+from app.models.variable import Variable, VariableBinding
 from app.models.chat import CoreChat
 from app.models.project import Project
-from app.services.assumptions import AssumptionActor, extract_assumptions_from_sources
+from app.services.variables import VariableActor, extract_variables_from_sources
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger("wipe_reextract")
@@ -55,7 +55,7 @@ def _is_empty_value(value) -> bool:
     return False
 
 
-def is_empty_assumption(row: Assumption) -> bool:
+def is_empty_assumption(row: Variable) -> bool:
     if row.status in EMPTY_STATUSES:
         return True
     if row.source_type in EMPTY_SOURCE_TYPES:
@@ -64,10 +64,10 @@ def is_empty_assumption(row: Assumption) -> bool:
 
 
 async def wipe_empty(db: AsyncSession, *, apply: bool) -> list:
-    result = await db.execute(select(Assumption))
+    result = await db.execute(select(Variable))
     rows = list(result.scalars().all())
     empties = [r for r in rows if is_empty_assumption(r)]
-    logger.info("assumptions total=%s empty=%s keep=%s", len(rows), len(empties), len(rows) - len(empties))
+    logger.info("variables total=%s empty=%s keep=%s", len(rows), len(empties), len(rows) - len(empties))
     for row in empties[:20]:
         logger.info(
             "  wipe candidate key=%s status=%s source=%s value=%r project=%s",
@@ -85,17 +85,17 @@ async def wipe_empty(db: AsyncSession, *, apply: bool) -> list:
 
     empty_ids = [r.id for r in empties]
 
-    # Detach assumption-scoped chats (FK is SET NULL, but be explicit).
-    chat_result = await db.execute(select(CoreChat).where(CoreChat.assumption_id.in_(empty_ids)))
+    # Detach variable-scoped chats (FK is SET NULL, but be explicit).
+    chat_result = await db.execute(select(CoreChat).where(CoreChat.variable_id.in_(empty_ids)))
     chats = list(chat_result.scalars().all())
     for chat in chats:
-        chat.assumption_id = None
-    logger.info("cleared assumption_id on %s chats", len(chats))
+        chat.variable_id = None
+    logger.info("cleared variable_id on %s chats", len(chats))
 
-    await db.execute(delete(AssumptionBinding).where(AssumptionBinding.assumption_id.in_(empty_ids)))
-    await db.execute(delete(Assumption).where(Assumption.id.in_(empty_ids)))
+    await db.execute(delete(VariableBinding).where(VariableBinding.variable_id.in_(empty_ids)))
+    await db.execute(delete(Variable).where(Variable.id.in_(empty_ids)))
     await db.flush()
-    logger.info("deleted %s empty assumptions", len(empties))
+    logger.info("deleted %s empty variables", len(empties))
     return empties
 
 
@@ -133,10 +133,10 @@ async def reextract(db: AsyncSession, projects: list[Project], *, apply: bool) -
             logger.info("  would extract project=%s name=%r", p.id, p.name)
         return
 
-    actor = AssumptionActor.system()
+    actor = VariableActor.system()
     for project in projects:
         try:
-            created, updated, touched = await extract_assumptions_from_sources(
+            created, updated, touched = await extract_variables_from_sources(
                 db,
                 project,
                 actor=actor,

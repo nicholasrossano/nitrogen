@@ -473,7 +473,7 @@ export function LCOEModelWidget({
           </Tooltip>
         </div>
         <p className="text-xs text-text-tertiary mt-2">
-          {result.assumption_count} {projectVariableLower(result.assumption_count)} used
+          {(result.variable_count ?? result.assumption_count ?? 0)} {projectVariableLower(result.variable_count ?? result.assumption_count ?? 0)} used
           &middot; {result.lifetime_energy_kwh.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh total production
         </p>
         {isRecalculating && (

@@ -8,15 +8,15 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
 
-class Assumption(Base):
+class Variable(Base):
     """Reusable project-level value or claim."""
 
-    __tablename__ = "assumptions"
+    __tablename__ = "variables"
 
     __table_args__ = (
-        Index("ix_assumptions_project_key", "project_id", "key"),
-        Index("ix_assumptions_project_status", "project_id", "status"),
-        Index("ix_assumptions_source_type", "source_type"),
+        Index("ix_variables_project_key", "project_id", "key"),
+        Index("ix_variables_project_status", "project_id", "status"),
+        Index("ix_variables_source_type", "source_type"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -56,22 +56,22 @@ class Assumption(Base):
     )
 
 
-class AssumptionComment(Base):
-    """User comment attached to a project assumption."""
+class VariableComment(Base):
+    """User comment attached to a project variable."""
 
-    __tablename__ = "assumption_comments"
+    __tablename__ = "variable_comments"
 
     __table_args__ = (
-        Index("ix_assumption_comments_assumption_created", "assumption_id", "created_at"),
-        Index("ix_assumption_comments_project_created", "project_id", "created_at"),
+        Index("ix_variable_comments_variable_created", "variable_id", "created_at"),
+        Index("ix_variable_comments_project_created", "project_id", "created_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    assumption_id: Mapped[uuid.UUID] = mapped_column(
+    variable_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("assumptions.id", ondelete="CASCADE"),
+        ForeignKey("variables.id", ondelete="CASCADE"),
         nullable=False,
     )
     project_id: Mapped[uuid.UUID] = mapped_column(
@@ -89,20 +89,20 @@ class AssumptionComment(Base):
     )
 
 
-class AssumptionBinding(Base):
-    """Structured mapping between a assessment variable and a project assumption."""
+class VariableBinding(Base):
+    """Structured mapping between a assessment variable and a project variable."""
 
-    __tablename__ = "assumption_bindings"
+    __tablename__ = "variable_bindings"
 
     __table_args__ = (
         Index(
-            "ix_assumption_bindings_project_assessment_field",
+            "ix_variable_bindings_project_assessment_field",
             "project_id",
             "assessment_id",
             "field_name",
         ),
-        Index("ix_assumption_bindings_assumption", "assumption_id"),
-        Index("ix_assumption_bindings_assessment_instance", "assessment_instance_id"),
+        Index("ix_variable_bindings_variable", "variable_id"),
+        Index("ix_variable_bindings_assessment_instance", "assessment_instance_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -113,9 +113,9 @@ class AssumptionBinding(Base):
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
     )
-    assumption_id: Mapped[uuid.UUID] = mapped_column(
+    variable_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("assumptions.id", ondelete="CASCADE"),
+        ForeignKey("variables.id", ondelete="CASCADE"),
         nullable=False,
     )
     assessment_id: Mapped[str] = mapped_column(String(160), nullable=False)

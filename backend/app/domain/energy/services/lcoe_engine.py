@@ -23,7 +23,7 @@ from app.schemas.provenance import Derivation, ItemProvenance, ValidationStatus
 # ---------------------------------------------------------------------------
 
 InputStatus = Literal["validated", "extracted", "assumed", "missing"]
-InputSource = Literal["chat", "doc", "user", "assumption"]
+InputSource = Literal["chat", "doc", "user", "variable"]
 
 
 @dataclass
@@ -101,7 +101,7 @@ class LCOEResult:
     replacement_share: float
 
     lifetime_energy_kwh: float
-    assumption_count: int
+    variable_count: int
     quality_label: str  # "high", "moderate", "low"
 
     cash_flows: list[CashFlowRow] = field(default_factory=list)
@@ -117,7 +117,7 @@ class LCOEResult:
             "fuel_share": round(self.fuel_share, 4),
             "replacement_share": round(self.replacement_share, 4),
             "lifetime_energy_kwh": round(self.lifetime_energy_kwh, 2),
-            "assumption_count": self.assumption_count,
+            "variable_count": self.variable_count,
             "quality_label": self.quality_label,
             "cash_flows": [r.to_dict() for r in self.cash_flows],
         }
@@ -142,7 +142,7 @@ class SensitivityPoint:
 
 
 # ---------------------------------------------------------------------------
-# Default assumptions by technology
+# Default variables by technology
 # ---------------------------------------------------------------------------
 
 TECH_DEFAULTS: dict[str, dict[str, Any]] = {
@@ -264,7 +264,7 @@ class LCOEEngine:
             raise ValueError("Construction period cannot be negative")
 
         base_annual_energy = capacity_kw * capacity_factor * 8760  # kWh/yr
-        assumption_count = sum(1 for i in inputs.values() if i.status == "assumed")
+        variable_count = sum(1 for i in inputs.values() if i.status == "assumed")
 
         def _discount_factor(year: int) -> float:
             if discount_rate <= 0:
@@ -386,9 +386,9 @@ class LCOEEngine:
         lcoe = npv_cost / npv_energy
 
         quality = "high"
-        if assumption_count >= 5:
+        if variable_count >= 5:
             quality = "low"
-        elif assumption_count >= 2:
+        elif variable_count >= 2:
             quality = "moderate"
 
         return LCOEResult(
@@ -401,7 +401,7 @@ class LCOEEngine:
             fuel_share=sum_fuel_disc / npv_cost if npv_cost else 0,
             replacement_share=sum_repl_disc / npv_cost if npv_cost else 0,
             lifetime_energy_kwh=lifetime_energy,
-            assumption_count=assumption_count,
+            variable_count=variable_count,
             quality_label=quality,
             cash_flows=rows,
         )
@@ -545,7 +545,7 @@ class LCOEEngine:
                     label=label,
                     value=default_val,
                     unit=unit,
-                    source="assumption",
+                    source="variable",
                     status="assumed",
                     rationale=rationale,
                     category=category,
@@ -560,7 +560,7 @@ class LCOEEngine:
                     label=label,
                     value=None,
                     unit=unit,
-                    source="assumption",
+                    source="variable",
                     status="missing",
                     category=category,
                     field_type=field_type,
