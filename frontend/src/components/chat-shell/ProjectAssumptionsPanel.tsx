@@ -95,10 +95,10 @@ export function ProjectAssumptionsPanel({
                       : 'disabled:cursor-default'
                   } disabled:hover:bg-white`}
                 >
-                  <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-medium text-text-primary leading-snug">{row.label}</span>
                     <span
-                      className={`shrink-0 inline-flex px-1.5 py-0.5 rounded-full border text-[9px] font-medium capitalize ${STATUS_CLASS[row.status]}`}
+                      className={`shrink-0 inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide leading-none ${STATUS_CLASS[row.status]}`}
                     >
                       {row.status}
                     </span>

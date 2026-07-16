@@ -310,8 +310,10 @@ export function ChatContextStack({
             plannedAssessmentIds={frameworkPlannedAssessmentIds}
             assessmentInstances={frameworkAssessmentInstances}
             loading={frameworkAssessmentsLoading}
+            readOnly={frameworkReadOnly}
             onViewAll={handleExpandAssessments}
             onOpenAssessment={onOpenWorkspaceAssessment}
+            onStartAssessment={frameworkReadOnly ? undefined : onCreateAssessmentInstanceInAssessmentsView}
           />
         </ContextStackWidgetSlot>
 
