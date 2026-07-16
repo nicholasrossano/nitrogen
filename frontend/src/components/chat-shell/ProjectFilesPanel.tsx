@@ -58,7 +58,7 @@ export function ProjectFilesPanel({
 
   return (
     <aside
-      className={`flex flex-col min-h-0 max-h-[min(32vh,14rem)] overflow-hidden shrink-0 ${CHAT_FLOATING_PANEL_CHROME}`}
+      className={`flex h-full min-h-0 flex-col overflow-hidden ${CHAT_FLOATING_PANEL_CHROME}`}
     >
       <div className="px-4 py-3 shrink-0">
         <div className="flex items-center justify-between gap-2">

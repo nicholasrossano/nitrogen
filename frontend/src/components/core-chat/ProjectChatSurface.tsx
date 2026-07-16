@@ -13,7 +13,6 @@ import { ConversationView } from './ConversationView';
 import { LandingInput } from './LandingInput';
 import { ProjectOverviewHeader } from './ProjectOverviewHeader';
 import { ProjectOutputsSection } from '@/components/chat-shell/ProjectOutputsSection';
-import { ProjectRecommendedAssessmentsSection } from '@/components/chat-shell/ProjectRecommendedAssessmentsSection';
 import { CompareProjectPicker, CompareChip } from './CompareProjectPicker';
 import type { CompareProject } from './CompareProjectPicker';
 import { AssessmentPicker } from '@/components/chat/AssessmentPicker';
@@ -1060,10 +1059,10 @@ export function ProjectChatSurface({
                 )}
               </button>
               <Link
-                href={`/projects/${project.id}?view=framework`}
+                href={`/projects/${project.id}?panel=assessments`}
                 className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors hover:bg-accent-hover hover:border-accent-hover"
               >
-                View Framework Plan
+                View Assessments
               </Link>
             </>
           ) : undefined}
@@ -1074,16 +1073,10 @@ export function ProjectChatSurface({
           showAttachments={!allowInitialProjectOnboarding}
           belowComposerContent={
             hideTiles && onOpenWorkspaceAssessment ? (
-              <>
-                <ProjectOutputsSection
-                  projectId={projectId}
-                  onOpenOutput={onOpenWorkspaceAssessment}
-                />
-                <ProjectRecommendedAssessmentsSection
-                  projectId={projectId}
-                  onOpenAssessment={onOpenWorkspaceAssessment}
-                />
-              </>
+              <ProjectOutputsSection
+                projectId={projectId}
+                onOpenOutput={onOpenWorkspaceAssessment}
+              />
             ) : null
           }
         />

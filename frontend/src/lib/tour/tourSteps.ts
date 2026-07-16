@@ -1,6 +1,5 @@
 export type TourGroup =
   | 'welcome'
-  | 'feature-framework'
   | 'feature-assessments'
   | 'feature-variables'
   | 'feature-files'
@@ -22,15 +21,6 @@ export interface TourStep {
   trigger?: 'route' | 'mount';
   /** Used when trigger is `route` (or omitted and routeMatch is set). */
   routeMatch?: (pathname: string, search: string) => boolean;
-}
-
-function searchParamsOf(search: string): URLSearchParams {
-  return new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
-}
-
-function projectView(pathname: string, search: string): string | null {
-  if (!pathname.startsWith('/projects/')) return null;
-  return searchParamsOf(search).get('view');
 }
 
 export const TOUR_STEPS: TourStep[] = [
@@ -67,7 +57,7 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'welcome-context-stack',
     group: 'welcome',
     title: 'Project context',
-    body: 'Overview, Variables, and Files stay parked on the right so you can peek at them while you chat.',
+    body: 'Overview, Variables, Assessments, and Files stay parked on the right so you can peek at them while you chat.',
     placement: 'left',
   },
   {
@@ -95,28 +85,12 @@ export const TOUR_STEPS: TourStep[] = [
     trigger: 'mount',
   },
   {
-    id: 'feature-framework',
-    group: 'feature-framework',
-    title: 'Framework',
-    body: 'Structure your assessment plan here and decide which analyses you will run.',
-    placement: 'right',
-    trigger: 'route',
-    routeMatch: (pathname, search) => {
-      const view = projectView(pathname, search);
-      return view === 'plan' || view === 'framework';
-    },
-  },
-  {
     id: 'feature-assessments',
     group: 'feature-assessments',
     title: 'Assessments',
-    body: 'Open finished and in-progress analyses for this project from the Assessments area.',
-    placement: 'right',
-    trigger: 'route',
-    routeMatch: (pathname, search) => {
-      const view = projectView(pathname, search);
-      return view === 'workspace' || view === 'assessments';
-    },
+    body: 'Plan which analyses to run, track status at a glance, and open any assessment from here.',
+    placement: 'bottom',
+    trigger: 'mount',
   },
   {
     id: 'feature-variables',

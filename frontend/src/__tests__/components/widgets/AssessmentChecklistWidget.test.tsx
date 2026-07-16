@@ -89,7 +89,7 @@ describe('AssessmentChecklistWidget', () => {
 
     await waitFor(() => {
       expect(selectTools).toHaveBeenCalledWith('initiative-123', ['landscape_mapping']);
-      expect(replace).toHaveBeenCalledWith('/projects/initiative-123?view=framework');
+      expect(replace).toHaveBeenCalledWith('/projects/initiative-123?panel=assessments');
     });
   });
 });

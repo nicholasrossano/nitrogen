@@ -50,7 +50,7 @@ const GLOBAL_ITEMS: NavItemConfig[] = [
 
 const PROJECT_ITEMS: NavItemConfig[] = [
   { key: 'research', label: 'Overview', Icon: Home },
-  { key: 'plan', label: 'Framework', Icon: Map },
+  { key: 'plan', label: 'Assessments', Icon: Map },
   { key: 'workspace', label: 'Assessments', Icon: Calculator },
   { key: 'assumptions', label: PROJECT_VARIABLES.title, Icon: ListChecks },
 ];
@@ -101,7 +101,7 @@ export function SideDrawer() {
 
   const chatShell = useChatShell();
   const { chatSidebarCollapsed, toggleChatSidebar } = useChatSidebar();
-  const isChatShell = pathname.startsWith('/chat') || pathname === '/';
+  const isChatShell = pathname.startsWith('/chat') || pathname === '/' || pathname.startsWith('/projects/');
 
   const projectId = useMemo(() => {
     const m = PROJECT_RE.exec(pathname);
@@ -110,18 +110,15 @@ export function SideDrawer() {
 
   const activeItem: NavItem = useMemo(() => {
     if (isChatShell) {
-      if (searchParams.get('panel') === 'files') return 'files';
+      const panel = searchParams.get('panel');
+      if (panel === 'files') return 'files';
+      if (panel === 'assessments' || panel === 'framework' || panel === 'plan') return 'plan';
+      if (panel === 'variables') return 'assumptions';
+      if (panel === 'overview') return 'research';
       return 'chat';
     }
-    if (!projectId) return searchParams.get('view') === 'files' ? 'files' : 'portfolio';
-    const view = searchParams.get('view');
-    if (view === 'research' || view === 'explore') return 'research';
-    if (view === 'plan' || view === 'framework') return 'plan';
-    if (view === 'assumptions') return 'assumptions';
-    if (view === 'workspace' || view === 'assessments') return 'workspace';
-    if (view === 'files') return 'files';
-    return 'research';
-  }, [projectId, isChatShell, pathname, searchParams]);
+    return 'portfolio';
+  }, [isChatShell, searchParams]);
 
   const hasProject = !!projectId;
   const project = useProjectStore((s) => s.project);
@@ -140,7 +137,8 @@ export function SideDrawer() {
   } = useWorkspaceStore();
   const [workspaceSwitching, setWorkspaceSwitching] = useState(false);
 
-  const showMaterials = hasProject && !isViewer;
+  // Upload dropzone is classic-drawer only (e.g. /art-lab). Workbench Files floor owns uploads.
+  const showMaterials = !isChatShell && hasProject && !isViewer;
   const fileScope = hasProject ? 'project' : 'workspace';
   const fileScopeLabel = fileScope === 'workspace' ? 'Workspace files' : 'Project files';
 
@@ -177,47 +175,55 @@ export function SideDrawer() {
     '--side-drawer-expanded-width': `calc(${longestLabelLength}ch + 3.75rem)`,
   } as CSSProperties;
 
-  const chatProjectId = searchParams.get('project') ?? readLastProjectId();
+  const chatProjectId = projectId ?? searchParams.get('project') ?? readLastProjectId();
 
   const handleNav = useCallback((item: NavItem) => {
     if (navHandlerRef.current?.(item)) return;
     if (isChatShell) {
       if (item === 'chat') {
-        router.push(chatProjectId ? `/chat?project=${chatProjectId}` : '/chat');
+        router.push(chatProjectId ? `/projects/${chatProjectId}` : '/chat');
         return;
       }
       if (item === 'files') {
-        // Open the same Files floor used by the mini context stack.
-        const params = new URLSearchParams();
-        if (chatProjectId) params.set('project', chatProjectId);
-        params.set('panel', 'files');
-        router.push(`/chat?${params.toString()}`);
+        if (chatProjectId) {
+          router.push(`/projects/${chatProjectId}?panel=files`);
+          return;
+        }
+        router.push('/chat');
+        return;
+      }
+      if (item === 'plan' && chatProjectId) {
+        router.push(`/projects/${chatProjectId}?panel=assessments`);
+        return;
+      }
+      if (item === 'assumptions' && chatProjectId) {
+        router.push(`/projects/${chatProjectId}?panel=variables`);
+        return;
+      }
+      if (item === 'research' && chatProjectId) {
+        router.push(`/projects/${chatProjectId}?panel=overview`);
+        return;
+      }
+      if (item === 'workspace' && chatProjectId) {
+        router.push(`/projects/${chatProjectId}?panel=assessments`);
+        return;
+      }
+      if (item === 'portfolio') {
+        router.push(chatProjectId ? `/projects/${chatProjectId}` : '/chat');
         return;
       }
     }
-    if (item === 'files' && !hasProject) {
-      const params = new URLSearchParams();
-      if (chatProjectId) params.set('project', chatProjectId);
-      params.set('panel', 'files');
-      router.push(`/chat?${params.toString()}`);
-      return;
-    }
-    if (item === 'files' && hasProject && projectId) {
-      router.replace(`/projects/${projectId}?view=files`);
-      return;
-    }
     if (item === 'portfolio') {
-      router.push(isChatShell ? (chatProjectId ? `/chat?project=${chatProjectId}` : '/chat') : '/');
+      router.push('/');
       return;
     }
-  }, [chatProjectId, hasProject, projectId, isChatShell, navHandlerRef, router]);
+  }, [chatProjectId, isChatShell, navHandlerRef, router]);
 
   const renderNavButton = useCallback(({ key, label, Icon, disabled, disabledReason }: NavRenderConfig) => {
-    // Only Framework / Assessments use deferred tips here — they appear when you open that
-    // project view. Ever-present chat chrome (Files, Help, etc.) lives in the welcome tour.
+    // Assessments floor tips use surface=floor on FloorLayer. Sidebar wrappers share the
+    // same id for spotlight targeting but must not auto-start (no surface=floor).
     const tourId =
-      key === 'plan' ? 'feature-framework'
-      : key === 'workspace' ? 'feature-assessments'
+      key === 'plan' || key === 'workspace' ? 'feature-assessments'
       : null;
 
     const button = (
@@ -731,10 +737,7 @@ export function SideDrawer() {
         </div>
       </div>
 
-      {/* Spacer + divider below the files icon.
-          h-6 creates the visual gap; top-1/2 -translate-y-1/2 centers the line
-          inside that gap. Percentage insets make the divider scale proportionally
-          as the drawer expands. */}
+      {/* Spacer + divider below the files icon — classic drawer only. */}
       {showMaterials && (
         <div className="relative h-6">
           <div className="absolute left-[10%] right-[10%] top-1/2 -translate-y-1/2 h-px bg-black/[0.16]" />

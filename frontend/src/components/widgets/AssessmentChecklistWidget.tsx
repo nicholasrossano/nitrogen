@@ -146,7 +146,7 @@ export function AssessmentChecklistWidget({ data, projectId, isActive = true }: 
       if (afterSelect.error) {
         throw new Error(afterSelect.error);
       }
-      router.replace(`/projects/${projectId}?view=framework`);
+      router.replace(`/projects/${projectId}?panel=assessments`);
     } catch (nextError) {
       setConfirmedLocal(false);
       setError(nextError instanceof Error ? nextError.message : 'Failed to confirm framework.');

@@ -13,9 +13,9 @@ import {
 } from './chatContextStackMotion';
 
 /**
- * Primary work surface you navigate into and back out of (Overview / Variables / Files).
+ * Primary work surface you navigate into and back out of (Overview / Variables / Files / Assessments).
  * Chat is the default floor when no overlay FloorLayer is expanded (`expandedWidget == null`).
- * These use a back control (not dismiss X) because leaving them always returns to chat.
+ * These use a back control (not dismiss X) because leaving them returns to the Chat floor.
  */
 interface FloorLayerProps {
   widget: ChatContextExpandedWidget;

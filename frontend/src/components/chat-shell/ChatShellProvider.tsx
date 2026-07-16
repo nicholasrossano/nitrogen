@@ -5,7 +5,8 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ChatShellContext } from './ChatShellContext';
 import { resolveDefaultProjectId } from './ChangeProjectSelect';
 import {
-  CONTEXT_PANEL_SEARCH_PARAM,
+  buildProjectWorkbenchPath,
+  parseContextPanelParam,
   type ChatContextExpandedWidget,
 } from '@/components/chat-shell/chatContextStackMotion';
 import { api, type Project } from '@/lib/api';
@@ -48,20 +49,22 @@ export function resolveActiveProjectId(
   return fromRoute ?? readLastProjectId();
 }
 
+/** @deprecated Prefer buildProjectWorkbenchPath — kept for Settings delete flows on /chat. */
 export function buildChatPath(
   pathname: string,
   searchParams: URLSearchParams,
   projectId: string | null,
 ): string {
-  const basePath = pathname.startsWith('/chat') || pathname === '/'
-    ? '/chat'
-    : pathname;
-  const params = new URLSearchParams(searchParams.toString());
   if (projectId) {
-    params.set('project', projectId);
-  } else {
-    params.delete('project');
+    const chat = searchParams.get('chat');
+    return buildProjectWorkbenchPath(projectId, {
+      chat,
+      panel: parseContextPanelParam(searchParams.get('panel')),
+    });
   }
+  const basePath = pathname.startsWith('/chat') || pathname === '/' ? '/chat' : pathname;
+  const params = new URLSearchParams(searchParams.toString());
+  params.delete('project');
   const query = params.toString();
   return query ? `${basePath}?${query}` : basePath;
 }
@@ -76,7 +79,8 @@ export function ChatShellProvider({ children }: { children: ReactNode }) {
   const [activeContextWidget, setActiveContextWidget] = useState<ChatContextExpandedWidget | null>(null);
   const landingResetRef = useRef<(() => boolean) | null>(null);
 
-  const activeProjectId = searchParams.get('project');
+  const pathProjectId = /^\/projects\/([^/]+)/.exec(pathname)?.[1] ?? null;
+  const activeProjectId = pathProjectId ?? searchParams.get('project');
 
   const registerLandingReset = useCallback((handler: (() => boolean) | null) => {
     landingResetRef.current = handler;
@@ -89,20 +93,32 @@ export function ChatShellProvider({ children }: { children: ReactNode }) {
   const handleSelectChat = useCallback((chatId: string, projectId?: string | null) => {
     setActiveChatId(chatId);
     setActiveContextWidget(null);
-    if (projectId) writeLastProjectId(projectId);
+    if (projectId) {
+      writeLastProjectId(projectId);
+      router.replace(buildProjectWorkbenchPath(projectId, { chat: chatId }));
+      return;
+    }
     const params = new URLSearchParams();
     params.set('chat', chatId);
-    if (projectId) params.set('project', projectId);
     router.replace(`/chat?${params.toString()}`);
   }, [router]);
 
   const handleNewChat = useCallback((projectId?: string | null) => {
-    const currentProject = searchParams.get('project');
+    const currentProject = pathProjectId ?? searchParams.get('project');
     const currentChat = searchParams.get('chat');
+    const onProjectWorkbench = Boolean(pathProjectId);
     const onChatLandingPage = pathname === '/chat' || pathname === '/';
 
-    // Already on the chat landing page for this scope — nothing to do unless a
-    // sub-view (variables, editor panel, etc.) is open on top of the landing.
+    // Already on this project's chat floor — clear overlays unless switching project.
+    if (onProjectWorkbench && !currentChat) {
+      const leftOverlay = landingResetRef.current?.() ?? false;
+      if (leftOverlay) {
+        if (!projectId || projectId === currentProject) return;
+      } else if (projectId && currentProject === projectId) {
+        return;
+      }
+    }
+
     if (onChatLandingPage && !currentChat) {
       const leftOverlay = landingResetRef.current?.() ?? false;
       if (leftOverlay) {
@@ -116,16 +132,16 @@ export function ChatShellProvider({ children }: { children: ReactNode }) {
     setActiveChatId(null);
     if (projectId) {
       writeLastProjectId(projectId);
-      router.replace(`/chat?project=${projectId}`);
+      router.replace(buildProjectWorkbenchPath(projectId));
       return;
     }
     const lastProjectId = readLastProjectId();
     if (lastProjectId) {
-      router.replace(`/chat?project=${lastProjectId}`);
+      router.replace(buildProjectWorkbenchPath(lastProjectId));
       return;
     }
     router.replace('/chat');
-  }, [pathname, router, searchParams]);
+  }, [pathProjectId, pathname, router, searchParams]);
 
   const refreshDrawer = useCallback(() => {
     setDrawerRefreshKey((k) => k + 1);
@@ -139,17 +155,14 @@ export function ChatShellProvider({ children }: { children: ReactNode }) {
     setActiveContextWidget(null);
     writeLastProjectId(project.id);
     refreshDrawer();
-    router.replace(`/chat?project=${project.id}`);
+    router.replace(buildProjectWorkbenchPath(project.id));
   }, [activeWorkspace?.id, refreshDrawer, router]);
 
   const openProjectContextPanel = useCallback((projectId: string, widget: ChatContextExpandedWidget) => {
     writeLastProjectId(projectId);
     setActiveChatId(null);
     setActiveContextWidget(widget);
-    const params = new URLSearchParams();
-    params.set('project', projectId);
-    params.set(CONTEXT_PANEL_SEARCH_PARAM, widget);
-    router.replace(`/chat?${params.toString()}`);
+    router.replace(buildProjectWorkbenchPath(projectId, { panel: widget }));
   }, [router]);
 
   const value = useMemo(
@@ -192,4 +205,3 @@ export function useChatShellLandingReset(handler: () => boolean) {
     return () => chatShell?.registerLandingReset(null);
   }, [chatShell, handler]);
 }
-

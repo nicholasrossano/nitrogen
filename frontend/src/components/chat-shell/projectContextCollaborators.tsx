@@ -29,7 +29,7 @@ export function CollaboratorRow({ label, roleLabel, isOwner = false }: Collabora
   const initials = (label || '?')[0].toUpperCase();
 
   return (
-    <li className="flex items-center gap-2 py-1 min-h-[1.75rem]">
+    <li className="flex items-center gap-2 py-2 min-h-[2rem]">
       <div
         className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
           isOwner ? 'bg-accent/10' : 'bg-surface-subtle'
