@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Check, ExternalLink, Loader2 } from 'lucide-react';
 import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/AssessmentPicker';
 import { CHAT_FLOATING_PANEL_CHROME } from '@/components/ui/chatSidebarLayout';
@@ -82,21 +82,26 @@ interface ProjectAssessmentsPanelProps {
   plannedAssessmentIds: string[];
   assessmentInstances: AssessmentInstance[];
   loading?: boolean;
+  readOnly?: boolean;
   onViewAll?: () => void;
   onOpenAssessment?: (assessment: {
     instanceId: string;
     assessmentId: string;
     title?: string | null;
   }) => void;
+  onStartAssessment?: (assessmentId: string, assessmentName: string) => Promise<void>;
 }
 
 export function ProjectAssessmentsPanel({
   plannedAssessmentIds,
   assessmentInstances,
   loading = false,
+  readOnly = false,
   onViewAll,
   onOpenAssessment,
+  onStartAssessment,
 }: ProjectAssessmentsPanelProps) {
+  const [startingAssessmentId, setStartingAssessmentId] = useState<string | null>(null);
   const rows = useMemo(() => {
     const orderedIds = orderPlannedAssessmentsByFramework(plannedAssessmentIds).slice(0, MAX_ROWS);
     return orderedIds.map((assessmentId) => {
@@ -146,16 +151,25 @@ export function ProjectAssessmentsPanel({
           <ul className="space-y-1.5">
             {rows.map((row) => {
               const complete = row.instance?.is_plan_complete === true;
+              const isStarting = startingAssessmentId === row.assessmentId;
               return (
                 <li key={row.assessmentId}>
                   <button
                     type="button"
+                    disabled={isStarting}
                     onClick={() => {
                       if (row.instance && onOpenAssessment) {
                         onOpenAssessment({
                           instanceId: row.instance.id,
                           assessmentId: row.instance.assessment_id,
                           title: row.instance.display_name || row.instance.title || row.name,
+                        });
+                        return;
+                      }
+                      if (!readOnly && onStartAssessment) {
+                        setStartingAssessmentId(row.assessmentId);
+                        void onStartAssessment(row.assessmentId, row.name).finally(() => {
+                          setStartingAssessmentId(null);
                         });
                         return;
                       }
@@ -171,6 +185,8 @@ export function ProjectAssessmentsPanel({
                     >
                       {complete ? (
                         <Check className="w-3.5 h-3.5" strokeWidth={2.4} />
+                      ) : isStarting ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       ) : (
                         <span className="[&>svg]:h-3.5 [&>svg]:w-3.5">{row.icon}</span>
                       )}
@@ -179,7 +195,7 @@ export function ProjectAssessmentsPanel({
                       {row.name}
                     </span>
                     <span
-                      className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide ${row.status.className}`}
+                      className={`shrink-0 inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide leading-none ${row.status.className}`}
                     >
                       {row.status.label}
                     </span>
