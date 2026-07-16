@@ -35,9 +35,10 @@ async def run_web_search(
     *,
     input_text: str | None = None,
     search_context_size: str = "medium",
-) -> tuple[str, list[dict[str, str]]]:
+) -> tuple[str, list[dict[str, Any]]]:
     """
-    Returns (summary_text, citations) where each citation has url, title, snippet.
+    Returns (summary_text, citations) where each citation has url, title, snippet,
+    and optionally start_index/end_index when the provider supplies span annotations.
     """
     target = await resolve(
         user_id,
@@ -62,7 +63,7 @@ async def _openai_responses_search(
     search_context_size: str,
     *,
     is_byok: bool,
-) -> tuple[str, list[dict[str, str]]]:
+) -> tuple[str, list[dict[str, Any]]]:
     client = AsyncOpenAI(api_key=target.api_key, base_url=target.api_base)
     resp = await asyncio.wait_for(
         client.responses.create(
@@ -84,7 +85,7 @@ async def _openrouter_online_search(
     db: AsyncSession | None,
     prompt: str,
     target: Any,
-) -> tuple[str, list[dict[str, str]]]:
+) -> tuple[str, list[dict[str, Any]]]:
     model = _litellm_model_id(target)
     if ":online" not in model:
         model = f"{model}:online"
@@ -110,10 +111,16 @@ async def _openrouter_online_search(
     return text, citations
 
 
-def _parse_openai_responses_output(resp: Any) -> tuple[str, list[dict[str, str]]]:
-    citations: list[dict[str, str]] = []
-    seen_urls: set[str] = set()
+def _parse_openai_responses_output(resp: Any) -> tuple[str, list[dict[str, Any]]]:
+    """Extract message text and url_citation annotations with character spans.
+
+    Duplicate URLs are preserved when they cite different spans so callers can
+    map each annotation onto the sentence that used it.
+    """
+    citations: list[dict[str, Any]] = []
     summary_parts: list[str] = []
+    # Running offset into the joined summary text ("\n".join(parts)).
+    text_offset = 0
 
     for item in resp.output:
         if getattr(item, "type", None) != "message":
@@ -121,20 +128,31 @@ def _parse_openai_responses_output(resp: Any) -> tuple[str, list[dict[str, str]]
         for block in item.content:
             text = getattr(block, "text", "") or ""
             if text:
+                if summary_parts:
+                    text_offset += 1  # account for the join newline
                 summary_parts.append(text)
             for ann in getattr(block, "annotations", []) or []:
                 if getattr(ann, "type", None) != "url_citation":
                     continue
                 url = getattr(ann, "url", "") or ""
-                if not url or url in seen_urls:
+                if not url:
                     continue
-                seen_urls.add(url)
+                start_index = getattr(ann, "start_index", None)
+                end_index = getattr(ann, "end_index", None)
                 citations.append(
                     {
                         "url": url,
                         "title": getattr(ann, "title", "") or urlparse(url).netloc,
                         "snippet": text[:400] if text else "",
+                        "start_index": (
+                            start_index + text_offset if isinstance(start_index, int) else None
+                        ),
+                        "end_index": (
+                            end_index + text_offset if isinstance(end_index, int) else None
+                        ),
                     }
                 )
+            if text:
+                text_offset += len(text)
 
     return "\n".join(summary_parts), citations
