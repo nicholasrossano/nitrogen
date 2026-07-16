@@ -86,6 +86,7 @@ class AssessmentActivityLogEntryResponse(BaseModel):
     summary: str | None
     occurred_at: str
     is_decision_point: bool
+    kind: str | None = None
 
 
 class AssessmentActivityLogResponse(BaseModel):
@@ -291,11 +292,17 @@ def _all_required_stages_confirmed(assessment: BaseAssessment, state: dict[str, 
     )
 
 
-def _activity_event_label(event_type: str) -> str:
+def _activity_event_label(event_type: str, payload: dict | None = None) -> str:
+    if payload:
+        label = payload.get("label")
+        if isinstance(label, str) and label.strip():
+            return label.strip()
     if event_type == "agent_started":
         return "Started assessment run"
     if event_type == "agent_action":
         return "Completed agent action"
+    if event_type == "agent_milestone":
+        return "Agent milestone"
     if event_type == "agent_paused":
         return "Paused for review"
     if event_type == "agent_blocked":
@@ -308,6 +315,7 @@ async def _resume_assessment_agent_loop_background(
     instance_id: _uuid.UUID,
     actor_user_id: str | None,
     actor_email: str | None,
+    resume_from_stage_id: str | None = None,
 ) -> None:
     """Resume the agent loop outside the request/response lifecycle."""
     async with AsyncSessionLocal() as bg_db:
@@ -325,6 +333,7 @@ async def _resume_assessment_agent_loop_background(
                 assessment,
                 actor_user_id=actor_user_id,
                 actor_email=actor_email,
+                resume_from_stage_id=resume_from_stage_id,
             )
             await bg_db.commit()
         except Exception:
@@ -542,24 +551,33 @@ async def get_assessment_activity_log(
         select(DecisionEvent)
         .where(
             DecisionEvent.assessment_instance_id == inst.id,
-            DecisionEvent.event_type.in_(["agent_started", "agent_action", "agent_paused", "agent_blocked"]),
+            DecisionEvent.event_type.in_([
+                "agent_started",
+                "agent_action",
+                "agent_milestone",
+                "agent_paused",
+                "agent_blocked",
+            ]),
         )
         .order_by(DecisionEvent.sequence_number.asc())
     )).scalars().all())
 
-    entries = [
-        AssessmentActivityLogEntryResponse(
-            sequence_number=event.sequence_number,
-            event_type=event.event_type,
-            label=_activity_event_label(event.event_type),
-            stage_id=event.stage_id,
-            stage_title=stage_title_by_id.get(event.stage_id) if event.stage_id else None,
-            summary=(event.payload_json or {}).get("summary"),
-            occurred_at=event.created_at.isoformat(),
-            is_decision_point=event.event_type in {"agent_paused", "agent_blocked"},
+    entries = []
+    for event in events:
+        payload = event.payload_json or {}
+        entries.append(
+            AssessmentActivityLogEntryResponse(
+                sequence_number=event.sequence_number,
+                event_type=event.event_type,
+                label=_activity_event_label(event.event_type, payload),
+                stage_id=event.stage_id,
+                stage_title=stage_title_by_id.get(event.stage_id) if event.stage_id else None,
+                summary=payload.get("summary"),
+                occurred_at=event.created_at.isoformat(),
+                is_decision_point=event.event_type in {"agent_paused", "agent_blocked"},
+                kind=payload.get("kind") if isinstance(payload.get("kind"), str) else None,
+            )
         )
-        for event in events
-    ]
     await db.commit()
     return AssessmentActivityLogResponse(
         assessment_instance_id=str(inst.id),
@@ -591,7 +609,14 @@ async def populate_stage_endpoint(
     _get_stage_def_or_404(assessment, stage_id, instance_id)
 
     prior_approved = ((inst.workflow_state or {}).get("final_approval") or {}).get("status") == "approved"
-    state = await populate_stage(db, inst, assessment, stage_id)
+    state = await populate_stage(
+        db,
+        inst,
+        assessment,
+        stage_id,
+        actor_user_id=user.uid,
+        actor_email=user.email,
+    )
     mark_user_engaged(state)
     save_workflow_state(inst, state)
     await append_decision_event(
@@ -687,9 +712,13 @@ async def confirm_stage_endpoint(
         )
 
     # Mark as running immediately so polling UIs start streaming updates.
+    stage_title = next(
+        (stage.title for stage in assessment.stage_defs if stage.id == stage_id),
+        stage_id,
+    )
     inst.status = AssessmentInstanceStatus.GENERATING
     inst.agent_loop_state = AssessmentAgentLoopState.RUNNING.value
-    inst.agent_current_action = "Continuing assessment run"
+    inst.agent_current_action = f"Continuing after {stage_title}"
     inst.agent_last_summary = None
     await db.commit()
     asyncio.create_task(
@@ -697,6 +726,7 @@ async def confirm_stage_endpoint(
             instance_id=instance_id,
             actor_user_id=user.uid,
             actor_email=user.email,
+            resume_from_stage_id=stage_id,
         )
     )
 
