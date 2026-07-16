@@ -10,6 +10,9 @@ import {
 
 export interface EditorPanelChrome {
   title: string;
+  titleEditable?: boolean;
+  onSaveTitle?: (title: string) => void | Promise<void>;
+  titleSaving?: boolean;
   suffix?: string | null;
   actions?: ReactNode;
 }

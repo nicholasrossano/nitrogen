@@ -175,20 +175,32 @@ class LandscapeMappingAssessment(BaseAssessment):
         self,
         confirmed_stages: dict[str, Any],
         context: dict,
+        *,
+        previous_content: dict[str, Any] | None = None,
+        change_summary: str | None = None,
     ) -> dict[str, Any]:
         """Generate the write-up as a JSON dict (cacheable). Called by the export endpoint."""
         theme_items = (confirmed_stages.get("themes") or {}).get("data", {}).get("items", [])
         entity_items = (confirmed_stages.get("entities") or {}).get("data", {}).get("items", [])
+        deep_dives = self._extract_map_deep_dives(confirmed_stages)
 
         themes = [i["content"].get("label", "") for i in theme_items]
         by_theme: dict[str, list[str]] = {t: [] for t in themes}
         for item in entity_items:
             cat = item["content"].get("category", "")
             name = item["content"].get("name", "")
-            if cat in by_theme:
-                by_theme[cat].append(name)
+            item_id = item.get("id", "")
+            dive = deep_dives.get(item_id) or {}
+            overview_bits = dive.get("what_this_is") or []
+            if isinstance(overview_bits, list) and overview_bits:
+                overview = " ".join(str(bit).strip() for bit in overview_bits if str(bit).strip())
+                line = f"{name} — {overview}" if overview else name
             else:
-                by_theme.setdefault("Other", []).append(name)
+                line = name
+            if cat in by_theme:
+                by_theme[cat].append(line)
+            else:
+                by_theme.setdefault("Other", []).append(line)
 
         outline_text = "\n".join(
             f"### {theme}\n" + "\n".join(f"  - {e}" for e in by_theme.get(theme, []))
@@ -204,30 +216,157 @@ class LandscapeMappingAssessment(BaseAssessment):
             if context_str else ""
         )
 
-        result = await llm_json(
-            system=(
-                "You are a senior landscape analyst producing a professional report. "
-                "Write a woven, prosaic landscape mapping document — NOT a list of sections for each entity. "
-                "Weave findings across categories into coherent analytical prose:\n"
-                "  • Executive Summary (3–5 sentences)\n"
-                "  • 3–5 thematic sections combining insights across categories (not one-per-category). "
-                "    Cite sources as [1], [2], etc.\n"
-                "  • Strategic Implications and Recommendations\n\n"
-                "Return JSON with keys: title, executive_summary, "
-                "sections (list of {heading, body}), strategic_implications, recommendations"
-            ),
-            user_msg=(
-                f"Project: Region={region}, Type={sector}\n\n"
-                f"Confirmed landscape:\n{outline_text}"
-                f"{evidence_block}"
-            ),
-            model="gpt-4.1",
-            context=context,
-        )
+        if previous_content:
+            import json as _json
+            result = await llm_json(
+                system=(
+                    "You are a senior landscape analyst revising a professional report. "
+                    "Update the previous writeup so it reflects the current landscape outline and "
+                    "deep-dive notes. Preserve structure and tone where still accurate; revise only "
+                    "what must change. Return JSON with keys: title, executive_summary, "
+                    "sections (list of {heading, body}), strategic_implications, recommendations"
+                ),
+                user_msg=(
+                    f"Change context: {change_summary or 'Inputs changed'}\n\n"
+                    f"Project: Region={region}, Type={sector}\n\n"
+                    f"Current landscape:\n{outline_text}"
+                    f"{evidence_block}\n\n"
+                    f"Previous writeup JSON:\n{_json.dumps(previous_content, default=str)}"
+                ),
+                model="gpt-4.1",
+                context=context,
+            )
+        else:
+            result = await llm_json(
+                system=(
+                    "You are a senior landscape analyst producing a professional report. "
+                    "Write a woven, prosaic landscape mapping document — NOT a list of sections for each entity. "
+                    "Weave findings across categories into coherent analytical prose:\n"
+                    "  • Executive Summary (3–5 sentences)\n"
+                    "  • 3–5 thematic sections combining insights across categories (not one-per-category). "
+                    "    Cite sources as [1], [2], etc.\n"
+                    "  • Strategic Implications and Recommendations\n\n"
+                    "Return JSON with keys: title, executive_summary, "
+                    "sections (list of {heading, body}), strategic_implications, recommendations"
+                ),
+                user_msg=(
+                    f"Project: Region={region}, Type={sector}\n\n"
+                    f"Confirmed landscape:\n{outline_text}"
+                    f"{evidence_block}"
+                ),
+                model="gpt-4.1",
+                context=context,
+            )
         result = result or {"title": "Landscape Mapping"}
         if citations:
             result["citations"] = citations
         return result
+
+    async def prepare_export_enrichment(
+        self,
+        *,
+        state: dict[str, Any],
+        confirmed_stages: dict[str, Any],
+        context: dict[str, Any],
+        db: Any = None,
+        project_id: Any = None,
+        user_id: str | None = None,
+    ) -> tuple[dict[str, Any], bool]:
+        """Ensure every map entity has a deep dive before writeup export."""
+        entity_items = (confirmed_stages.get("entities") or {}).get("data", {}).get("items", [])
+        existing = state.get("landscape_map_deep_dives")
+        if not isinstance(existing, dict):
+            existing = {}
+        if not entity_items or db is None or project_id is None:
+            if existing:
+                confirmed_stages = {
+                    **confirmed_stages,
+                    "landscape_map_deep_dives": {"data": {"records": existing}},
+                }
+            return confirmed_stages, False
+
+        records, changed = await self.ensure_all_map_deep_dives(
+            entity_items=entity_items,
+            existing_records=existing,
+            context=context,
+            db=db,
+            project_id=project_id,
+            user_id=user_id,
+        )
+        if changed or records:
+            state["landscape_map_deep_dives"] = records
+        confirmed_stages = {
+            **confirmed_stages,
+            "landscape_map_deep_dives": {"data": {"records": records}},
+        }
+        return confirmed_stages, changed
+
+    def export_input_fingerprint(
+        self,
+        confirmed_stages: dict[str, Any],
+        state: dict[str, Any] | None = None,
+    ) -> str:
+        from app.services.assessment_export import fingerprint_payload
+
+        deep_dives = self._extract_map_deep_dives(confirmed_stages)
+        if not deep_dives and state and isinstance(state.get("landscape_map_deep_dives"), dict):
+            deep_dives = state["landscape_map_deep_dives"]
+        return fingerprint_payload({
+            "themes": (confirmed_stages.get("themes") or {}).get("data"),
+            "entities": (confirmed_stages.get("entities") or {}).get("data"),
+            "landscape_map_deep_dives": deep_dives,
+        })
+
+    async def ensure_all_map_deep_dives(
+        self,
+        entity_items: list[dict[str, Any]],
+        existing_records: dict[str, dict[str, Any]],
+        context: dict[str, Any],
+        db: Any,
+        project_id: Any,
+        user_id: str | None = None,
+    ) -> tuple[dict[str, dict[str, Any]], bool]:
+        """Ensure every landscape entity has a cached deep dive before write-up export."""
+        from app.models.project import Project
+        from app.services.deep_dive import DeepDiveService
+
+        records: dict[str, dict[str, Any]] = dict(existing_records or {})
+        changed = False
+        initiative = await db.get(Project, project_id)
+        if initiative is None:
+            return records, False
+
+        service = DeepDiveService(db, user_id=user_id)
+        for item in entity_items:
+            item_id = item.get("id", "")
+            if not item_id:
+                continue
+            current = records.get(item_id) or {}
+            if self._is_map_deep_dive_complete(current):
+                continue
+            content = item.get("content") or {}
+            generated = await service.generate(
+                initiative=initiative,
+                item_id=item_id,
+                item_title=str(content.get("name") or content.get("label") or "Entity"),
+                item_classification=str(content.get("category") or ""),
+                item_rationale=str(content.get("why_they_matter") or content.get("description") or ""),
+                pillar_name=str(content.get("category") or "Landscape"),
+                assessment_type="landscape_mapping",
+            )
+            if isinstance(generated, dict):
+                serialized = generated
+            else:
+                serialized = {
+                    "item_id": generated.item_id,
+                    "item_title": generated.item_title,
+                    "pillar_name": generated.pillar_name,
+                    "what_this_is": list(generated.what_this_is or []),
+                    "summary_citations": list(generated.summary_citations or []),
+                }
+            records[item_id] = serialized
+            changed = True
+        return records, changed
 
     async def generate_export(self, confirmed_stages: dict[str, Any], context: dict) -> bytes:
         content = await self.generate_writeup_content(confirmed_stages, context)
@@ -371,3 +510,22 @@ class LandscapeMappingAssessment(BaseAssessment):
             )
 
         return buckets
+
+    @staticmethod
+    def _extract_map_deep_dives(confirmed_stages: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        synthetic = (confirmed_stages.get("landscape_map_deep_dives") or {}).get("data", {}).get("records")
+        if isinstance(synthetic, dict):
+            return synthetic
+        return {}
+
+    @staticmethod
+    def _is_map_deep_dive_complete(record: dict[str, Any]) -> bool:
+        """Return True when a landscape deep dive has usable overview text."""
+        if not isinstance(record, dict):
+            return False
+        what = record.get("what_this_is")
+        if isinstance(what, list) and any(str(bit).strip() for bit in what):
+            return True
+        if isinstance(what, str) and what.strip():
+            return True
+        return False

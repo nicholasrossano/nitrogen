@@ -1,4 +1,5 @@
-/** Overlay floors promoted from the mini stack. Chat is the default floor when this is null. */
+/** Overlay floors promoted from the mini stack. Chat is the default floor when this is null.
+ *  `variables` remains in the union for URL/capsule state but opens as a FloatLayer. */
 export type ChatContextExpandedWidget = 'overview' | 'variables' | 'files' | 'assessments';
 
 export type ContextPanelExpandMotion = 'stack' | 'center';
@@ -8,6 +9,8 @@ export type ExpandedWidgetChangeOptions = {
 };
 
 export const CONTEXT_PANEL_SEARCH_PARAM = 'panel';
+/** Open assessment float — instance id beside the active floor (or solo when no panel/chat). */
+export const ASSESSMENT_SEARCH_PARAM = 'assessment';
 
 export function parseContextPanelParam(value: string | null): ChatContextExpandedWidget | null {
   if (value === 'overview' || value === 'variables' || value === 'files' || value === 'assessments') {
@@ -18,17 +21,25 @@ export function parseContextPanelParam(value: string | null): ChatContextExpande
   return null;
 }
 
+export function parseAssessmentParam(value: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 /** Canonical project workbench URL — chat is default floor when panel/chat omitted. */
 export function buildProjectWorkbenchPath(
   projectId: string,
   options?: {
     chat?: string | null;
     panel?: ChatContextExpandedWidget | null;
+    assessment?: string | null;
   },
 ): string {
   const params = new URLSearchParams();
   if (options?.chat) params.set('chat', options.chat);
   if (options?.panel) params.set(CONTEXT_PANEL_SEARCH_PARAM, options.panel);
+  if (options?.assessment) params.set(ASSESSMENT_SEARCH_PARAM, options.assessment);
   const query = params.toString();
   return query ? `/projects/${projectId}?${query}` : `/projects/${projectId}`;
 }
@@ -45,7 +56,7 @@ export const contextStackPanelTransitionClass =
  * Chrome (border/shadow) for an expandable panel. When `flushOnExpand` is set, the
  * floating-card chrome fades out as the panel becomes visible, so it settles as a flush
  * "floor" surface instead of staying a floating card (used for widgets that become the
- * primary work surface, e.g. Variables).
+ * primary work surface, e.g. Overview / Files).
  */
 export function contextStackExpandedPanelChromeClass(
   visible: boolean,

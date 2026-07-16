@@ -368,7 +368,7 @@ export function AssumptionsChatPanel({
         <div>
           <p className="text-sm font-medium text-text-secondary">No {PROJECT_VARIABLES.lowerSingular} selected</p>
           <p className="mt-1 text-xs text-text-tertiary">
-            Select a row in the assumptions table, or ask chat to add a new assumption.
+            Select a row in the {PROJECT_VARIABLES.lower} table, or ask chat to add a new {PROJECT_VARIABLES.lowerSingular}.
           </p>
         </div>
       ) : loading ? (

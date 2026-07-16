@@ -158,7 +158,10 @@ export function ConversationView({
         label?: string | null;
         fieldContext?: FieldContext | null;
         modelInputsContext?: string | null;
+        _investigateAutoSend?: boolean;
       } | null;
+      // Workbench auto-sends investigate drafts; skip filling the composer.
+      if (detail?._investigateAutoSend) return;
       const text = detail?.text;
       const label = detail?.label ?? null;
       if (text) {

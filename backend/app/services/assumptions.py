@@ -11,6 +11,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.assessments.registry import get_assessment_registry
 from app.assumptions.config import (
     ASSUMPTION_BY_KEY,
     AssumptionDefinition,
@@ -20,6 +21,7 @@ from app.config import get_settings
 from app.core.llm_invoke import acompletion
 from app.core.model_catalog import Complexity, ModelRole
 from app.domain.resolver import get_active_domain
+from app.models.assessment_instance import AssessmentInstance
 from app.models.assumption import Assumption, AssumptionBinding, AssumptionComment
 from app.models.evidence import EvidenceChunk, EvidenceDoc
 from app.models.project import Project
@@ -254,7 +256,7 @@ async def _should_log_chat_assumption(
     answer_content: str,
 ) -> tuple[bool, str | None]:
     prompt = (
-        "Decide whether a cited chat fact should be saved as a reusable project assumption.\n\n"
+        "Decide whether a cited chat fact should be saved as a reusable project variable.\n\n"
         "Only return should_log=true when the cited fact is actually relevant to this project as a "
         "baseline, model input, planning assumption, or explicitly adopted proxy. Return false for "
         "general trivia, unrelated countries or sectors, background comparisons not adopted for the "
@@ -268,13 +270,13 @@ async def _should_log_chat_assumption(
         "type": "function",
         "function": {
             "name": "classify_assumption_relevance",
-            "description": "Decide whether a cited fact should be logged as a reusable project assumption.",
+            "description": "Decide whether a cited fact should be logged as a reusable project variable.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "should_log": {
                         "type": "boolean",
-                        "description": "True only if this should become a project assumption.",
+                        "description": "True only if this should become a project variable.",
                     },
                     "reason": {
                         "type": "string",
@@ -819,8 +821,48 @@ def apply_assumptions_to_items(
         content["source"] = "assumption"
         content["assumption_id"] = assumption.get("id")
         content["source_reference"] = assumption.get("source_reference")
-        content["rationale"] = f"Prefilled from project assumption: {assumption.get('label')}"
+        content["rationale"] = f"Prefilled from project variable: {assumption.get('label')}"
     return items
+
+
+def _base_assessment_name(assessment_id: str) -> str:
+    definition = get_assessment_registry().get_assessment(assessment_id)
+    if definition is not None:
+        return definition.definition.name
+    return assessment_id.replace("_", " ").strip() or "Assessment"
+
+
+def _assessment_display_name_from_instance(assessment_instance: Any, assessment_id: str) -> str:
+    """Human-readable, instance-specific label for an assessment-sourced assumption.
+
+    Mirrors the "<Assessment name> #<instance_number>" convention used elsewhere
+    (see `_resolve_assessment_name` / `_serialize_assessment_instance` in
+    `app/api/projects.py`) so the Variables source column can point at the exact
+    assessment run rather than the generic word "assessment".
+    """
+    base_name = _base_assessment_name(assessment_id)
+    title = getattr(assessment_instance, "title", None)
+    custom_title = title.strip() if isinstance(title, str) and title.strip() else None
+    instance_number = getattr(assessment_instance, "instance_number", None)
+    if custom_title:
+        return custom_title
+    if instance_number:
+        return f"{base_name} #{instance_number}"
+    return base_name
+
+
+async def _resolve_assessment_display_name(
+    db: AsyncSession,
+    assessment_id: str,
+    assessment_instance_id: UUID | None,
+) -> str:
+    base_name = _base_assessment_name(assessment_id)
+    if assessment_instance_id is None:
+        return base_name
+    inst = await db.get(AssessmentInstance, assessment_instance_id)
+    if inst is None:
+        return base_name
+    return _assessment_display_name_from_instance(inst, assessment_id)
 
 
 async def sync_stage_assumptions(
@@ -841,6 +883,7 @@ async def sync_stage_assumptions(
         return [], {}
     touched: list[Assumption] = []
     item_assumption_map: dict[str, str] = {}
+    assessment_name: str | None = None
     for item in items:
         content = item.get("content") if isinstance(item, dict) else None
         if not isinstance(content, dict):
@@ -867,6 +910,8 @@ async def sync_stage_assumptions(
         label = definition.label
         key = definition.key
         value_type = definition.value_type
+        if assessment_name is None:
+            assessment_name = await _resolve_assessment_display_name(db, assessment_id, assessment_instance_id)
         assumption, _created = await upsert_assumption(
             db,
             project_id=project_id,
@@ -878,6 +923,7 @@ async def sync_stage_assumptions(
             source_type="assessment",
             source_reference={
                 "assessment_id": assessment_id,
+                "assessment_name": assessment_name,
                 "stage_id": stage_id,
                 "field_name": field_key,
                 "variable": content.get("variable"),
@@ -1105,7 +1151,7 @@ def format_assumptions_for_prompt(assumptions: list[Assumption]) -> str:
         unit = f" {row.unit}" if row.unit else ""
         assessments = f" ({', '.join(row.used_in_assessments or [])})" if row.used_in_assessments else ""
         buckets[normalized_status].append(f"- {row.label}: {value}{unit}{assessments}")
-    parts = ["Project assumptions:"]
+    parts = ["Project variables:"]
     for status, lines in buckets.items():
         if lines:
             parts.append(f"{status.replace('_', ' ').title()}:\n" + "\n".join(lines))
@@ -1239,7 +1285,7 @@ async def extract_assumptions_from_sources(
         for d in definitions
     ]
     system_prompt = (
-        "Extract reusable project assumptions / variables from project materials. "
+        "Extract reusable project variables from project materials. "
         "Be conservative but open-vocabulary: you may extract parameters that are NOT in the "
         "known-keys list when the text states a concrete project value "
         "(for example a comparable-project NPV, custom metric, or bespoke cost).\n\n"
@@ -1345,6 +1391,7 @@ async def extract_assumptions_from_assessment(
     approved_at = datetime.now(timezone.utc).isoformat()
     touched: list[Assumption] = []
     assessment_id = getattr(assessment_instance, "assessment_id", None) or ""
+    assessment_name = _assessment_display_name_from_instance(assessment_instance, assessment_id)
 
     for stage_id, stage_data in stages.items():
         if not isinstance(stage_data, dict):
@@ -1378,6 +1425,7 @@ async def extract_assumptions_from_assessment(
                 source_reference={
                     "assessment_instance_id": str(assessment_instance.id),
                     "assessment_id": assessment_id,
+                    "assessment_name": assessment_name,
                     "stage_id": stage_id,
                     "field_name": field_name,
                     "quote": str(content.get("rationale") or "")[:500] or None,
@@ -1426,6 +1474,7 @@ async def extract_assumptions_from_assessment(
                     source_reference={
                         "assessment_instance_id": str(assessment_instance.id),
                         "assessment_id": assessment_id,
+                        "assessment_name": assessment_name,
                         "field_name": field_name,
                         "approved_at": approved_at,
                         "outcome": "pending",

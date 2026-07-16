@@ -61,6 +61,13 @@ from app.services.decision_log_service import (
 )
 from app.services.agent_runner_service import derive_assessment_run_state, run_assessment_agent_loop
 from app.services.assumptions import AssumptionActor, sync_stage_assumptions, sync_widget_assumptions
+from app.services.assessment_export import (
+    ExportInProgressError,
+    begin_export_lock,
+    clear_export_lock,
+    generate_assessment_export_bytes,
+    resolve_writeup_content,
+)
 
 ai_access = require_ai_access()
 
@@ -178,8 +185,10 @@ async def _assessment_export_filename(
     assessment_token = re.sub(r"[^\w.-]", "-", assessment.definition.name.lower()).strip("._-") or "assessment"
     number_token = inst.instance_number
     creator_token = await _instance_creator_token(db, inst)
-    date_token = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    base = f"{assessment_token}_n{number_token}_{creator_token}_{date_token}"
+    now = datetime.now(timezone.utc)
+    date_token = now.strftime("%Y-%m-%d")
+    time_token = now.strftime("%H%M")
+    base = f"{assessment_token}_n{number_token}_{creator_token}_{date_token}_{time_token}"
     if prefix:
         safe_prefix = re.sub(r"[^\w.-]", "_", prefix).strip("._") + "_"
     else:
@@ -1566,10 +1575,8 @@ async def export_assessment_output(
 ):
     """Generate and download the assessment export artifact from confirmed stage data.
 
-    For assessment assessments: generates DOCX via assessment.generate_export().
-    For calculator assessments: generates XLSX via assessment.generate_export().
-
-    The document is synthesized on demand — nothing is stored.
+    Narrative DOCX assessments: enrich remaining deep dives, then reuse or iterate
+    a cached writeup before rendering. Calculator assessments: deterministic XLSX.
     """
     inst, assessment = await _get_workflow_instance(db, instance_id, user)
 
@@ -1579,12 +1586,7 @@ async def export_assessment_output(
     state = await ensure_workflow_state(db, inst, assessment)
     context = await get_initiative_context(db, inst.project_id)
 
-    # Build confirmed_stages snapshot
-    confirmed_stages: dict[str, Any] = {
-        sid: s for sid, s in state["stages"].items()
-        if s.get("status") == "confirmed"
-    }
-
+    confirmed_stages: dict[str, Any] = _build_confirmed_stages_snapshot(state)
     if not confirmed_stages:
         raise HTTPException(
             status_code=400,
@@ -1592,24 +1594,44 @@ async def export_assessment_output(
         )
 
     try:
-        export_bytes = await assessment.generate_export(confirmed_stages, context)
-    except NotImplementedError:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Assessment '{assessment.definition.id}' does not implement generate_export()",
-        )
-    except AttributeError as exc:
-        if "export_xlsx" not in str(exc):
-            raise
-        logger.warning(
-            "Falling back to legacy calculator export for assessment '%s': %s",
-            assessment.definition.id,
-            exc,
-        )
-        export_bytes = await _generate_legacy_calculator_export(
-            assessment.definition.id,
-            confirmed_stages,
-        )
+        begin_export_lock(inst, state)
+        await db.commit()
+    except ExportInProgressError:
+        raise HTTPException(status_code=409, detail="Export already in progress")
+
+    try:
+        try:
+            export_bytes = await generate_assessment_export_bytes(
+                assessment=assessment,
+                inst=inst,
+                state=state,
+                confirmed_stages=confirmed_stages,
+                context=context,
+                db=db,
+                user_id=user.uid,
+            )
+        except NotImplementedError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Assessment '{assessment.definition.id}' does not implement generate_export()",
+            )
+        except AttributeError as exc:
+            if "export_xlsx" not in str(exc):
+                raise
+            logger.warning(
+                "Falling back to legacy calculator export for assessment '%s': %s",
+                assessment.definition.id,
+                exc,
+            )
+            export_bytes = await _generate_legacy_calculator_export(
+                assessment.definition.id,
+                confirmed_stages,
+            )
+    finally:
+        # Prefer the in-memory state mutated during export; fall back to DB reload.
+        locked_state = inst.workflow_state if isinstance(inst.workflow_state, dict) else state
+        clear_export_lock(inst, locked_state)
+        await db.commit()
 
     fmt = assessment.definition.export_format
     media_types = {
@@ -1639,7 +1661,7 @@ async def export_assessment_output(
 
 
 # ---------------------------------------------------------------------------
-# Write-up export (LLM-generated, cached)
+# Write-up export (LLM-generated, cached) — alias of main export for DOCX
 # ---------------------------------------------------------------------------
 
 @router.get("/assessment-workflow/{instance_id}/export/writeup")
@@ -1648,27 +1670,23 @@ async def export_writeup(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Export the write-up DOCX for an assessment assessment.
+    """Export the write-up DOCX for a narrative assessment.
 
-    The write-up is generated once by LLM and cached in workflow_state.
-    Subsequent calls return the cached version instantly unless backing
-    stages have been re-confirmed (which invalidates the cache).
+    Prefer GET .../export; this path remains for compatibility and shares the
+    same enrichment + cache + iteration orchestration.
     """
     from app.services.docx_exporter import DocxExporterService
 
     inst, assessment = await _get_workflow_instance(db, instance_id, user)
 
-    if not hasattr(assessment, "generate_writeup_content"):
+    if not assessment.supports_cached_writeup():
         raise HTTPException(
             status_code=400,
             detail=f"Assessment '{assessment.definition.id}' does not support write-up export",
         )
 
     state = await ensure_workflow_state(db, inst, assessment)
-    cached_exports = state.get("cached_exports") or {}
-    cached_writeup = cached_exports.get("writeup") or {}
     context = await get_initiative_context(db, inst.project_id)
-
     confirmed_stages: dict[str, Any] = _build_confirmed_stages_snapshot(state)
     if not confirmed_stages:
         raise HTTPException(
@@ -1676,53 +1694,30 @@ async def export_writeup(
             detail="At least one stage must be confirmed before generating a write-up",
         )
 
-    if isinstance(assessment, StakeholderAssessment):
-        stakeholder_items = (confirmed_stages.get("stakeholders") or {}).get("data", {}).get("items", [])
-        existing_records = _stakeholder_detail_records(state)
-        if stakeholder_items:
-            records, changed = await assessment.ensure_all_stakeholder_details(
-                stakeholder_items=stakeholder_items,
-                existing_records=existing_records,
+    try:
+        begin_export_lock(inst, state)
+        await db.commit()
+    except ExportInProgressError:
+        raise HTTPException(status_code=409, detail="Export already in progress")
+
+    try:
+        try:
+            content, _ = await resolve_writeup_content(
+                assessment=assessment,
+                inst=inst,
+                state=state,
+                confirmed_stages=confirmed_stages,
                 context=context,
                 db=db,
-                project_id=inst.project_id,
+                user_id=user.uid,
             )
-            if changed:
-                state["stakeholder_details"] = records
-                await _refresh_stakeholder_map_widget(assessment, state, context, records)
-                if state.get("cached_exports"):
-                    state["cached_exports"] = {}
-                save_workflow_state(inst, state, increment_version=True, user_initiated=True)
-                await db.commit()
-                cached_writeup = {}
-                confirmed_stages = _build_confirmed_stages_snapshot(state)
-            elif records:
-                confirmed_stages["stakeholder_details"] = {"data": {"records": records}}
-
-    # Use cache if valid (not explicitly invalidated)
-    content = cached_writeup.get("content") if not cached_writeup.get("invalidated") else None
-
-    if not content:
-        try:
-            if isinstance(assessment, StakeholderAssessment):
-                records = _stakeholder_detail_records(state)
-                if records:
-                    confirmed_stages["stakeholder_details"] = {"data": {"records": records}}
-            content = await assessment.generate_writeup_content(confirmed_stages, context)
         except Exception as e:
             logger.error("Write-up generation failed for instance %s: %s", instance_id, e, exc_info=True)
             raise HTTPException(status_code=500, detail=f"Write-up generation failed: {e}")
-
-        # Cache the generated content
-        state.setdefault("cached_exports", {})["writeup"] = {
-            "content": content,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "invalidated": False,
-        }
-        save_workflow_state(inst, state, user_initiated=True)
+    finally:
+        locked_state = inst.workflow_state if isinstance(inst.workflow_state, dict) else state
+        clear_export_lock(inst, locked_state)
         await db.commit()
-    else:
-        logger.info("Returning cached write-up for instance %s", instance_id)
 
     docx_bytes = DocxExporterService().generate_assessment_docx(
         content=content,
