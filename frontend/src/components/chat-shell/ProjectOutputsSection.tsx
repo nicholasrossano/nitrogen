@@ -7,27 +7,11 @@ import { useVisibleAssessments } from '@/hooks/useFeatureFlag';
 import { useAuth } from '@/lib/auth';
 import { api, type AssessmentInstance } from '@/lib/api';
 import { isAssessmentUserEngaged } from '@/lib/assessmentEngagement';
+import { stripCreatorHandleFromTitle } from '@/lib/assessmentDisplay';
 
 const MODULE_MAP = new Map(ALL_MODULES.map((module) => [module.id, module]));
 const HIDDEN_SCROLLBAR_CLASSNAME =
   'overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden';
-
-function stripCreatorHandleFromTitle(
-  title: string,
-  creatorHandle?: string | null,
-): string {
-  const trimmed = title.trim();
-  if (!trimmed) return trimmed;
-
-  if (creatorHandle?.trim()) {
-    const suffix = ` · @${creatorHandle.trim()}`;
-    if (trimmed.endsWith(suffix)) {
-      return trimmed.slice(0, -suffix.length).trim();
-    }
-  }
-
-  return trimmed.replace(/\s*·\s*@[\w.-]+$/i, '').trim();
-}
 
 function outputTitle(instance: AssessmentInstance): string {
   const moduleMeta = MODULE_MAP.get(instance.assessment_id);
@@ -169,18 +153,20 @@ export function ProjectOutputsSection({
       <p className="mb-3 pl-6 text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
         Outputs
       </p>
-      <div className="w-full overflow-visible rounded-2xl border border-stroke-subtle bg-white p-3 sm:p-4">
+      <div className="w-full overflow-visible rounded-2xl border border-stroke-subtle bg-white">
         {loading ? (
           <div className="flex justify-center py-5">
             <Loader2 className="h-4 w-4 animate-spin text-text-tertiary" />
           </div>
         ) : visibleOutputs.length === 0 ? (
-          <p className="mx-auto max-w-[50%] px-2 py-6 text-center text-sm leading-relaxed text-text-secondary">
+          <p className="mx-auto max-w-[50%] px-4 py-6 text-center text-sm leading-relaxed text-text-secondary">
             Start an assessment to see progress here. If your team members finalize their own assessments, those will show up here too.
           </p>
         ) : (
-          <div className={`w-full pl-3 ${HIDDEN_SCROLLBAR_CLASSNAME}`}>
-            <div className="flex w-max min-w-full flex-nowrap items-stretch gap-3 py-2 pr-3">
+          // Padding lives on the scroll content (not the bordered shell) so tiles
+          // fill the outline; overflow-x still needs py room or hover shadows clip.
+          <div className={`w-full ${HIDDEN_SCROLLBAR_CLASSNAME}`}>
+            <div className="flex w-max min-w-full flex-nowrap items-stretch gap-3 py-4 pl-4 pr-3 sm:pl-5">
               {visibleOutputs.map((instance) => {
                 const moduleMeta = MODULE_MAP.get(instance.assessment_id);
                 const title = outputTitle(instance);
@@ -190,7 +176,7 @@ export function ProjectOutputsSection({
                 return (
                   <div
                     key={instance.id}
-                    className="flex min-w-[14rem] flex-1 overflow-visible p-1"
+                    className="flex min-w-[14rem] flex-1 overflow-visible"
                   >
                     <button
                       type="button"
