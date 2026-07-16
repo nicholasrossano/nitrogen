@@ -5,6 +5,7 @@ import { Check, ExternalLink, Loader2 } from 'lucide-react';
 import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/AssessmentPicker';
 import { CHAT_FLOATING_PANEL_CHROME } from '@/components/ui/chatSidebarLayout';
 import type { AssessmentInstance } from '@/lib/api';
+import { assessmentHeaderTitle } from '@/lib/assessmentDisplay';
 
 const MAX_ROWS = 5;
 
@@ -162,7 +163,11 @@ export function ProjectAssessmentsPanel({
                         onOpenAssessment({
                           instanceId: row.instance.id,
                           assessmentId: row.instance.assessment_id,
-                          title: row.instance.display_name || row.instance.title || row.name,
+                          title: assessmentHeaderTitle(
+                            row.instance.title || row.instance.display_name,
+                            row.name,
+                            row.instance.creator_handle,
+                          ),
                         });
                         return;
                       }

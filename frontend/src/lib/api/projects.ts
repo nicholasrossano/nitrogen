@@ -47,6 +47,11 @@ export const projectsApi = {
       method: 'POST',
       body: JSON.stringify({ assessment_id: assessmentId }),
     }),
+  updateAssessmentInstance: (projectId: string, instanceId: string, data: { title?: string | null }) =>
+    fetchApi<AssessmentInstance>(`/api/v1/projects/${projectId}/assessments/${instanceId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
   deleteAssessmentInstance: (projectId: string, instanceId: string) =>
     fetchApi<void>(`/api/v1/projects/${projectId}/assessments/${instanceId}`, {
       method: 'DELETE',

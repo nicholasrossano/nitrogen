@@ -97,3 +97,30 @@ export function triggerBlobDownload(blob: Blob, filename: string) {
   window.URL.revokeObjectURL(url);
   document.body.removeChild(a);
 }
+
+/** Parse a download filename from a Content-Disposition header. */
+export function parseContentDispositionFilename(
+  disposition: string | null | undefined,
+  fallback: string,
+): string {
+  if (!disposition) return fallback;
+
+  const starMatch = disposition.match(/filename\*\s*=\s*(?:UTF-8''|utf-8'')([^;\n]+)/i);
+  if (starMatch?.[1]) {
+    try {
+      const decoded = decodeURIComponent(starMatch[1].trim().replace(/^["']|["']$/g, ''));
+      if (decoded) return decoded;
+    } catch {
+      // fall through to plain filename=
+    }
+  }
+
+  // Match filename= but not filename*=
+  const plainMatch = disposition.match(/(?:^|;\s*)filename\s*=\s*(?:"([^"]+)"|([^;\n]+))/i);
+  if (plainMatch) {
+    const value = (plainMatch[1] || plainMatch[2] || '').trim();
+    if (value) return value;
+  }
+
+  return fallback;
+}
