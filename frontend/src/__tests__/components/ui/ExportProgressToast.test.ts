@@ -9,6 +9,11 @@ describe('ExportProgressToast helpers', () => {
   it('builds narrative steps for docx exports', () => {
     const steps = buildExportToastSteps('docx');
     expect(steps.map((step) => step.id)).toEqual(['enrich', 'writeup', 'download']);
+    expect(steps.map((step) => step.label)).toEqual([
+      'Filling remaining research',
+      'Drafting the report',
+      'Opening',
+    ]);
     expect(steps[0].status).toBe('active');
     expect(steps[1].status).toBe('pending');
   });
