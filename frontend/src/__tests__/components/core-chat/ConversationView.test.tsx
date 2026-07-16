@@ -62,4 +62,43 @@ describe('ConversationView', () => {
       expect.stringContaining('capacity_factor'),
     );
   });
+
+  it('ignores drafts already claimed for investigate auto-send', () => {
+    const onSendMessage = jest.fn();
+
+    render(
+      <ConversationView
+        messages={[]}
+        sending={false}
+        thinkingLines={[]}
+        researchSteps={[]}
+        streamingContent=""
+        error={null}
+        onSendMessage={onSendMessage}
+        onEditMessage={jest.fn()}
+        onRetryMessage={jest.fn()}
+        messageFeedback={{}}
+        onSetFeedback={jest.fn()}
+        retryingMessageId={null}
+        projectId="initiative-1"
+      />,
+    );
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('nitrogen:draft', {
+        detail: {
+          text: 'Investigate capacity factor',
+          label: 'Capacity factor',
+          _investigateAutoSend: true,
+          fieldContext: {
+            field_name: 'capacity_factor',
+            label: 'Capacity factor',
+            model_type: 'lcoe',
+          },
+        },
+      }));
+    });
+
+    expect(screen.getByPlaceholderText('Ask anything')).toHaveValue('');
+  });
 });

@@ -7,7 +7,7 @@
  * Uses the shared PlanWorkspaceView and inspector behavior.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutGrid } from 'lucide-react';
 import {
   PlanWorkspaceView,
@@ -193,6 +193,8 @@ export function ImplementationPlanWidget({
   const [deepDiveCache, setDeepDiveCache] = useState<Record<string, CachedDeepDiveState>>({});
   const [inspectorLoading, setInspectorLoading] = useState(false);
   const [inspectorError, setInspectorError] = useState<string | null>(null);
+  const inspectorCloseRef = useRef<() => void>(() => {});
+  const inspectorRetryRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     setWidgetData(mapData);
@@ -241,6 +243,8 @@ export function ImplementationPlanWidget({
       result: toInspectorResult(selection.item, selection.group, cached?.result ?? null),
       loading: inspectorLoading,
       error: inspectorError,
+      onClose: () => inspectorCloseRef.current(),
+      onRetry: () => inspectorRetryRef.current(),
     };
   }, [deepDiveCache, inspectorError, inspectorLoading, selection]);
 
@@ -354,6 +358,12 @@ export function ImplementationPlanWidget({
       setInspectorLoading(false);
     });
   }, [instanceId, selection, widgetData?.assessment_id, workflowVersion]);
+
+  inspectorCloseRef.current = () => {
+    setLocalInspectorOpen(false);
+    setSelection(null);
+  };
+  inspectorRetryRef.current = retryInspector;
 
   if (!groups.length) {
     return (

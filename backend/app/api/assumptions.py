@@ -68,7 +68,7 @@ async def get_assumptions(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """List project assumptions with optional filters."""
+    """List project variables (API resource: assumptions) with optional filters."""
     initiative = await require_project_viewer(db, project_id, user)
     return await list_assumptions(
         db,
@@ -91,7 +91,7 @@ async def resolve_assumption(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Resolve the project assumption currently backing one assessment variable."""
+    """Resolve the project variable currently backing one assessment field."""
     initiative = await require_project_viewer(db, project_id, user)
     assumption = await resolve_assumption_for_assessment_field(
         db,
@@ -130,7 +130,7 @@ async def create_assumption_from_chat(
         actor=_actor_from_user(user),
     )
     if assumption is None:
-        raise HTTPException(status_code=400, detail="Could not promote chat value to assumption")
+        raise HTTPException(status_code=400, detail="Could not promote chat value to variable")
     initiative.touch()
     await db.commit()
     await db.refresh(assumption)
@@ -148,7 +148,7 @@ async def create_assumption(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Create or replace a project assumption."""
+    """Create or replace a project variable."""
     initiative = await require_project_editor(db, project_id, user)
     assumption, _created = await upsert_assumption(
         db,
@@ -181,11 +181,11 @@ async def refresh_assumptions(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Legacy bulk extraction — disabled; new assumptions come from finding promotion."""
+    """Legacy bulk extraction — disabled; new variables come from finding promotion."""
     await require_project_editor(db, project_id, user)
     raise HTTPException(
         status_code=status.HTTP_410_GONE,
-        detail="Assumption refresh is retired. Promote chat messages to project findings to extract new assumptions.",
+        detail="Variable refresh is retired. Promote chat messages to project findings to extract new variables.",
     )
 
 
@@ -198,7 +198,7 @@ async def get_assumption_detail(
     """Return a single assumption after checking project access."""
     assumption = await get_assumption(db, assumption_id)
     if assumption is None:
-        raise HTTPException(status_code=404, detail="Assumption not found")
+        raise HTTPException(status_code=404, detail="Variable not found")
     await require_project_viewer(db, assumption.project_id, user)
     return assumption
 
@@ -210,10 +210,10 @@ async def patch_assumption(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Edit, confirm, or reject a project assumption."""
+    """Edit, confirm, or reject a project variable."""
     assumption = await get_assumption(db, assumption_id)
     if assumption is None:
-        raise HTTPException(status_code=404, detail="Assumption not found")
+        raise HTTPException(status_code=404, detail="Variable not found")
     initiative = await require_project_editor(db, assumption.project_id, user)
     updates = data.model_dump(exclude_unset=True)
     updated = await update_assumption(db, assumption, updates, actor=_actor_from_user(user))
@@ -229,10 +229,10 @@ async def remove_assumption(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Delete one project assumption and its assumption-scoped chats."""
+    """Delete one project variable and its variable-scoped chats."""
     assumption = await get_assumption(db, assumption_id)
     if assumption is None:
-        raise HTTPException(status_code=404, detail="Assumption not found")
+        raise HTTPException(status_code=404, detail="Variable not found")
     initiative = await require_project_editor(db, assumption.project_id, user)
     chats_result = await db.execute(
         select(CoreChat).where(
@@ -257,10 +257,10 @@ async def get_assumption_comments(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """List comments for one project assumption."""
+    """List comments for one project variable."""
     assumption = await get_assumption(db, assumption_id)
     if assumption is None:
-        raise HTTPException(status_code=404, detail="Assumption not found")
+        raise HTTPException(status_code=404, detail="Variable not found")
     await require_project_viewer(db, assumption.project_id, user)
     return await list_assumption_comments(db, assumption.id)
 
@@ -276,10 +276,10 @@ async def post_assumption_comment(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Add a comment to one project assumption."""
+    """Add a comment to one project variable."""
     assumption = await get_assumption(db, assumption_id)
     if assumption is None:
-        raise HTTPException(status_code=404, detail="Assumption not found")
+        raise HTTPException(status_code=404, detail="Variable not found")
     if not data.body.strip():
         raise HTTPException(status_code=400, detail="Comment body is required")
     initiative = await require_project_editor(db, assumption.project_id, user)

@@ -25,8 +25,24 @@ import {
   type WorkspaceWidgetFooterState,
 } from '@/lib/widgetRegistry';
 import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
-import { ConfirmButton, ExportButton, WorkspaceTabLoader } from '@/components/ui';
+import { PlanInspectorPanel } from '@/components/plan-workspace';
+import {
+  ConfirmButton,
+  ExportButton,
+  ExportProgressToast,
+  CompanionSidePanel,
+  COMPANION_SIDE_PANEL_WIDTH,
+  WorkspaceTabLoader,
+  advanceExportToastSteps,
+  buildExportToastSteps,
+  markExportToastComplete,
+  markExportToastFailed,
+  type ExportToastPhase,
+  type ExportToastStep,
+} from '@/components/ui';
+import { AssessmentActivityLogTab } from '@/components/core-chat/AssessmentActivityLogTab';
 import { AssessmentWorkspacePanelChrome } from './AssessmentWorkspacePanelChrome';
+import { assessmentHeaderTitle } from '@/lib/assessmentDisplay';
 
 function stableStringify(value: unknown): string {
   if (value === null || value === undefined) return 'null';
@@ -289,6 +305,10 @@ interface AssessmentWorkspaceProps {
   onUserEngaged?: () => void;
   /** Lift title/actions into FloatLayer header when embedded as a float companion */
   usePanelHeader?: boolean;
+  /** Called after the assessment instance title is saved. */
+  onTitleChange?: (title: string) => void;
+  /** Notify the float host when a companion column (activity log / deep dive) is open. */
+  onCompanionSidePanelOpenChange?: (open: boolean) => void;
 }
 
 export function AssessmentWorkspace({
@@ -298,7 +318,7 @@ export function AssessmentWorkspace({
   isActive = true,
   projectId,
   onAddToChat,
-  onOpenActivityLog,
+  onOpenActivityLog: _onOpenActivityLog,
   onOpenDecisionLog,
   onExportDecisionLog,
   onInspectorStateChange,
@@ -306,14 +326,26 @@ export function AssessmentWorkspace({
   deferAgentStart = false,
   onUserEngaged,
   usePanelHeader = false,
+  onTitleChange,
+  onCompanionSidePanelOpenChange,
 }: AssessmentWorkspaceProps) {
   const [state, setState] = useState<StagedAssessmentWorkflowState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [displayTitle, setDisplayTitle] = useState(() =>
+    assessmentHeaderTitle(assessmentTitle, assessmentId.replace(/_/g, ' ')),
+  );
+  const [isSavingTitle, setIsSavingTitle] = useState(false);
   const [activeStageId, setActiveStageId] = useState<string | null>(null);
   const [isPopulating, setIsPopulating] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isApprovingFinal, setIsApprovingFinal] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportToastOpen, setExportToastOpen] = useState(false);
+  const [exportToastPhase, setExportToastPhase] = useState<ExportToastPhase>('running');
+  const [exportToastSteps, setExportToastSteps] = useState<ExportToastStep[]>([]);
+  const [exportToastError, setExportToastError] = useState<string | null>(null);
+  const exportPhaseTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isRunningAssessment, setIsRunningAssessment] = useState(false);
   const [agentStatus, setAgentStatus] = useState<AssessmentAgentStatus | null>(null);
   const [decisionMenuOpen, setDecisionMenuOpen] = useState(false);
@@ -321,6 +353,30 @@ export function AssessmentWorkspace({
   const [editBaselineByStageId, setEditBaselineByStageId] = useState<Record<string, string>>({});
   const decisionMenuRef = useRef<HTMLDivElement>(null);
   const hasNotifiedEngagementRef = useRef(false);
+  const hostInspectorPanelRef = useRef(false);
+  const [hostedInspectorState, setHostedInspectorState] = useState<PlanWorkspaceInspectorState | null>(null);
+  const [activityLogOpen, setActivityLogOpen] = useState(false);
+
+  const handleInspectorStateChange = useCallback((next: PlanWorkspaceInspectorState | null) => {
+    if (next) {
+      setActivityLogOpen(false);
+    }
+    if (hostInspectorPanelRef.current) {
+      setHostedInspectorState(next);
+    }
+    onInspectorStateChange?.(next);
+  }, [onInspectorStateChange]);
+
+  useEffect(() => {
+    setHostedInspectorState(null);
+    setActivityLogOpen(false);
+  }, [activeStageId, instanceId]);
+
+  useEffect(() => {
+    const open = activityLogOpen || hostedInspectorState != null;
+    onCompanionSidePanelOpenChange?.(open);
+    return () => onCompanionSidePanelOpenChange?.(false);
+  }, [activityLogOpen, hostedInspectorState, onCompanionSidePanelOpenChange]);
 
   const notifyUserEngaged = useCallback(() => {
     if (hasNotifiedEngagementRef.current) return;
@@ -331,6 +387,28 @@ export function AssessmentWorkspace({
   useEffect(() => {
     hasNotifiedEngagementRef.current = false;
   }, [instanceId]);
+
+  useEffect(() => {
+    const fallback = state?.assessment_definition?.name || assessmentId.replace(/_/g, ' ');
+    setDisplayTitle(assessmentHeaderTitle(assessmentTitle, fallback));
+  }, [instanceId, assessmentTitle, assessmentId, state?.assessment_definition?.name]);
+
+  const handleSaveTitle = useCallback(async (nextTitle: string) => {
+    if (!projectId) return;
+    const trimmed = nextTitle.trim();
+    if (!trimmed) return;
+    setIsSavingTitle(true);
+    try {
+      // Persist the user-facing name only — never display_name (that includes · @creator).
+      await api.updateAssessmentInstance(projectId, instanceId, { title: trimmed });
+      setDisplayTitle(trimmed);
+      onTitleChange?.(trimmed);
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to rename assessment');
+    } finally {
+      setIsSavingTitle(false);
+    }
+  }, [projectId, instanceId, onTitleChange]);
 
   useEffect(() => {
     if (state?.workflow_state?.user_engaged) {
@@ -374,6 +452,11 @@ export function AssessmentWorkspace({
     }
   }, [fetchAgentStatus, fetchState, instanceId]);
 
+  const fetchAgentStatusRef = useRef(fetchAgentStatus);
+  const runAssessmentAgentRef = useRef(runAssessmentAgent);
+  fetchAgentStatusRef.current = fetchAgentStatus;
+  runAssessmentAgentRef.current = runAssessmentAgent;
+
   useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent).detail as { instanceId?: string } | undefined;
@@ -386,9 +469,8 @@ export function AssessmentWorkspace({
     return () => window.removeEventListener('nitrogen:assessment-workflow-updated', handler);
   }, [fetchAgentStatus, fetchState, instanceId]);
 
-  // One-time init: fetch state and kick/resume assessment run.
-  // Uses a cancelled flag so React Strict Mode double-invoke doesn't cause
-  // stale responses to overwrite current state.
+  // One-time init per instance (and deferAgentStart flip). Keep callbacks out of
+  // deps so identity churn cannot flash loading / re-kick the agent.
   useEffect(() => {
     let cancelled = false;
 
@@ -408,10 +490,10 @@ export function AssessmentWorkspace({
           data.workflow_state.current_stage_id
         ));
         setLoading(false);
-        const status = await fetchAgentStatus();
+        const status = await fetchAgentStatusRef.current();
         if (cancelled) return;
         if (!deferAgentStart && status?.run_state !== 'approved') {
-          await runAssessmentAgent();
+          await runAssessmentAgentRef.current();
         }
       } catch (e: any) {
         if (!cancelled) {
@@ -423,7 +505,7 @@ export function AssessmentWorkspace({
 
     initialize();
     return () => { cancelled = true; };
-  }, [instanceId, fetchAgentStatus, runAssessmentAgent, deferAgentStart]);
+  }, [instanceId, deferAgentStart]);
 
   useEffect(() => {
     if (!state) return;
@@ -518,12 +600,12 @@ export function AssessmentWorkspace({
             isActive={isActive}
             outputFooterAction={outputFooterAction}
             outputFooterState={outputFooterState}
-            onInspectorStateChange={onInspectorStateChange}
+            onInspectorStateChange={handleInspectorStateChange}
           />
         </Suspense>
       );
     },
-    [fetchState, projectId, instanceId, isActive, onInspectorStateChange, state?.workflow_version]
+    [fetchState, projectId, instanceId, isActive, handleInspectorStateChange, state?.workflow_version]
   );
 
   const handlePopulate = useCallback(async (stageId: string) => {
@@ -603,9 +685,40 @@ export function AssessmentWorkspace({
     }
   }, [instanceId, state?.workflow_version, fetchState, onApprovalChange]);
 
+  const clearExportPhaseTimer = useCallback(() => {
+    if (exportPhaseTimerRef.current) {
+      clearInterval(exportPhaseTimerRef.current);
+      exportPhaseTimerRef.current = null;
+    }
+  }, []);
+
+  const dismissExportToast = useCallback(() => {
+    clearExportPhaseTimer();
+    setExportToastOpen(false);
+    setExportToastError(null);
+  }, [clearExportPhaseTimer]);
+
   const handleExport = useCallback(async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    setError(null);
+
+    const steps = buildExportToastSteps(state?.assessment_definition?.export_format);
+    setExportToastSteps(steps);
+    setExportToastPhase('running');
+    setExportToastError(null);
+    setExportToastOpen(true);
+    clearExportPhaseTimer();
+    exportPhaseTimerRef.current = setInterval(() => {
+      setExportToastSteps((prev) => advanceExportToastSteps(prev));
+    }, 4500);
+
     try {
       const { blob, filename } = await api.exportStagedAssessment(instanceId);
+      clearExportPhaseTimer();
+      setExportToastSteps((prev) => markExportToastComplete(prev));
+      setExportToastPhase('success');
+
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -613,9 +726,18 @@ export function AssessmentWorkspace({
       a.click();
       URL.revokeObjectURL(url);
     } catch (e: any) {
-      setError(e.message ?? 'Export failed');
+      clearExportPhaseTimer();
+      const message = e.message ?? 'Export failed';
+      setExportToastSteps((prev) => markExportToastFailed(prev));
+      setExportToastPhase('error');
+      setExportToastError(message);
+      setError(message);
+    } finally {
+      setIsExporting(false);
     }
-  }, [instanceId]);
+  }, [instanceId, isExporting, state?.assessment_definition?.export_format, clearExportPhaseTimer]);
+
+  useEffect(() => () => clearExportPhaseTimer(), [clearExportPhaseTimer]);
 
   if (loading) {
     return <WorkspaceTabLoader />;
@@ -702,7 +824,9 @@ export function AssessmentWorkspace({
     && stageDefs.length > 0
     && stagesBeforeTerminalConfirmed;
   const showExportAction = canExportAssessment && currentStageDef.id === terminalStageId;
-  const assessmentDisplayTitle = assessmentTitle || mod.name || assessmentId.replace(/_/g, ' ');
+  const assessmentFallback = mod.name || assessmentId.replace(/_/g, ' ');
+  const assessmentDisplayTitle = displayTitle || assessmentHeaderTitle(assessmentTitle, assessmentFallback);
+  const canEditTitle = !!projectId;
   const decisionLogContext = {
     instanceId,
     assessmentId,
@@ -814,6 +938,10 @@ export function AssessmentWorkspace({
       || currentStageDef.widget === 'implementation_plan'
       || currentStageDef.widget === 'risk_register_results'
     );
+  hostInspectorPanelRef.current = isAssessmentMapWidget;
+  const companionSidePanelOpen = activityLogOpen
+    || (isAssessmentMapWidget && hostedInspectorState != null);
+
   const isCalculationComputedWidget = isComputedStage && [
     'lcoe_results',
     'carbon_results',
@@ -872,10 +1000,14 @@ export function AssessmentWorkspace({
     : null;
 
   return (
+    <>
     <div className="relative flex flex-col h-full">
       {usePanelHeader ? (
         <AssessmentWorkspacePanelChrome
           title={assessmentDisplayTitle}
+          titleEditable={canEditTitle}
+          onSaveTitle={handleSaveTitle}
+          titleSaving={isSavingTitle}
           exportFormat={mod.export_format}
           projectId={projectId}
           decisionMenuRef={decisionMenuRef}
@@ -885,6 +1017,7 @@ export function AssessmentWorkspace({
           onDecisionLogExport={handleDecisionLogExport}
           showExportAction={showExportAction}
           onExport={handleExport}
+          isExporting={isExporting}
           canApproveFinal={canApproveFinal}
           onApproveFinal={handleApproveFinal}
           finalApproved={finalApproved}
@@ -892,21 +1025,23 @@ export function AssessmentWorkspace({
           isApprovingFinal={isApprovingFinal}
         />
       ) : null}
-      <div className={isAssessmentMapWidget ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 overflow-y-auto'}>
-        <div className={isAssessmentMapWidget
-          ? 'h-full w-full p-3 flex flex-col'
+      <div className={(isAssessmentMapWidget || companionSidePanelOpen) ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 overflow-y-auto'}>
+        <div className={(isAssessmentMapWidget || companionSidePanelOpen)
+          ? 'h-full w-full flex min-h-0 min-w-0'
           : 'w-full p-3 flex flex-col'}
         >
+          <div className={(isAssessmentMapWidget || companionSidePanelOpen)
+            ? 'flex-1 min-w-0 min-h-0 flex flex-col p-3'
+            : 'flex flex-col w-full'}
+          >
           <AgentStatusHeader
             status={agentStatus}
             loading={isRunningAssessment}
             approvedMeta={finalApproved ? badgeApprovedMeta : null}
             onOpen={() => {
-              if (onOpenActivityLog) {
-                onOpenActivityLog(decisionLogContext);
-                return;
-              }
-              onOpenDecisionLog?.(decisionLogContext);
+              // Prefer the shared companion side panel (same column as deep dive).
+              setHostedInspectorState(null);
+              setActivityLogOpen((prev) => !prev);
             }}
           />
           {/* Workspace controls row (full panel width) */}
@@ -950,6 +1085,8 @@ export function AssessmentWorkspace({
               {showExportAction && (
                 <ExportButton
                   onClick={handleExport}
+                  loading={isExporting}
+                  disabled={isApprovingFinal}
                 />
               )}
               {canApproveFinal && (
@@ -980,7 +1117,7 @@ export function AssessmentWorkspace({
                       <RotateCcw className="absolute inset-0 h-3 w-3 text-white opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100" />
                     </span>
                   )}
-                  Confirmed
+                  <span className="leading-none">Confirmed</span>
                 </button>
               )}
             </div>
@@ -1103,8 +1240,50 @@ export function AssessmentWorkspace({
               </div>
             )}
           </div>
+          </div>
+          {activityLogOpen ? (
+            <div
+              className="flex-shrink-0 h-full min-h-0 overflow-hidden"
+              style={{ width: COMPANION_SIDE_PANEL_WIDTH }}
+            >
+              <CompanionSidePanel
+                title="Activity log"
+                eyebrow={assessmentDisplayTitle}
+                onClose={() => setActivityLogOpen(false)}
+                ariaLabel="Assessment activity log"
+              >
+                <AssessmentActivityLogTab
+                  instanceId={instanceId}
+                  assessmentId={assessmentId}
+                  assessmentTitle={assessmentDisplayTitle}
+                  embedded
+                />
+              </CompanionSidePanel>
+            </div>
+          ) : isAssessmentMapWidget && hostedInspectorState ? (
+            <div
+              className="flex-shrink-0 h-full min-h-0 overflow-hidden"
+              style={{ width: COMPANION_SIDE_PANEL_WIDTH }}
+            >
+              <PlanInspectorPanel
+                state={hostedInspectorState}
+                onClose={() => hostedInspectorState.onClose?.()}
+                onRetry={() => hostedInspectorState.onRetry?.()}
+              />
+            </div>
+          ) : null}
         </div>
       </div>
-  </div>
-);
+    </div>
+    {exportToastOpen && (
+      <ExportProgressToast
+        title="Working on your export"
+        steps={exportToastSteps}
+        phase={exportToastPhase}
+        errorMessage={exportToastError}
+        onDismiss={dismissExportToast}
+      />
+    )}
+    </>
+  );
 }

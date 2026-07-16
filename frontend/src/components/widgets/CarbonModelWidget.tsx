@@ -133,6 +133,7 @@ export function CarbonModelWidget({
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
+      if (detail?.already_persisted) return;
       if (detail?.model_type !== 'carbon') return;
       const fieldName = detail.field_name;
       const value = detail.value;

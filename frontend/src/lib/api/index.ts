@@ -4,6 +4,7 @@ export {
   fetchApi,
   fetchApiWithTimeout,
   getAuthToken,
+  parseContentDispositionFilename,
   triggerBlobDownload,
   workflowVersionHeaders,
 } from './client';

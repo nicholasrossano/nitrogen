@@ -130,7 +130,15 @@ export interface PlanWorkspaceInspectorState {
   result: PlanWorkspaceInspectorResult | null;
   loading: boolean;
   error: string | null;
+  /** When the inspector is hosted outside PlanWorkspaceView (e.g. assessment workspace). */
+  onClose?: () => void;
+  onRetry?: () => void;
 }
+
+export const PLAN_WORKSPACE_INSPECTOR_PANEL_WIDTH = 420 as const;
+// Prefer COMPANION_SIDE_PANEL_WIDTH / COMPANION_SIDE_PANEL_WIDTH_PX from @/components/ui
+// when hosting non-deep-dive content in the same companion column.
+
 
 export interface PlanWorkspaceStructureOption {
   id: string;
