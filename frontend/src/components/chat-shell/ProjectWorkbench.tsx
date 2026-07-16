@@ -29,6 +29,7 @@ import { activeEditorContextFromWidget } from '@/lib/activeEditorContext';
 import { api, type Assumption, type AssessmentInstance, type ProjectMaterial } from '@/lib/api';
 import { projectDisplayName } from '@/lib/projectDisplayName';
 import { discardEphemeralAssessmentInstance } from '@/lib/assessmentEngagement';
+import { getCached, swrFetch, swrKeys } from '@/lib/swrCache';
 import { useProjectStore } from '@/stores/projectStore';
 import {
   CHAT_CONTEXT_STACK_GUTTER,
@@ -101,13 +102,22 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    setFrameworkAssessmentsLoading(true);
-    void api.listAssessmentInstances(projectId)
-      .then((instances) => {
-        if (!cancelled) setFrameworkAssessmentInstances(instances);
+    const key = swrKeys.instances(projectId);
+    const cached = getCached<AssessmentInstance[]>(key);
+    if (cached) {
+      setFrameworkAssessmentInstances(cached);
+      setFrameworkAssessmentsLoading(false);
+    } else {
+      setFrameworkAssessmentsLoading(true);
+    }
+    void swrFetch(key, () => api.listAssessmentInstances(projectId), {
+      force: contextRefreshKey > 0,
+    })
+      .then(({ data }) => {
+        if (!cancelled) setFrameworkAssessmentInstances(data);
       })
       .catch(() => {
-        if (!cancelled) setFrameworkAssessmentInstances([]);
+        if (!cancelled && !cached) setFrameworkAssessmentInstances([]);
       })
       .finally(() => {
         if (!cancelled) setFrameworkAssessmentsLoading(false);
@@ -174,7 +184,10 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   const project = useProjectStore((s) => s.project);
   const projectPlan = useProjectStore((s) => s.projectPlan);
 
-  const selectedProject = project?.id === projectId ? project : null;
+  const cachedProject = useProjectStore((s) => s.projectsById[projectId] ?? null);
+
+  // Prefer live store slot, then by-id cache — never paint "Untitled" for a known id.
+  const selectedProject = project?.id === projectId ? project : cachedProject;
 
   const frameworkPlannedAssessmentIds = useMemo(() => {
     const fromProject = selectedProject?.selected_tools ?? project?.selected_tools ?? [];
@@ -595,7 +608,11 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
             allowInitialProjectOnboarding={isOnboarding}
             restoreLatestChatOnMount={isOnboarding}
             landingLayoutMode="default"
-            landingComposerTitle={isOnboarding ? undefined : projectDisplayName(selectedProject)}
+            landingComposerTitle={
+              isOnboarding || !selectedProject
+                ? undefined
+                : projectDisplayName(selectedProject)
+            }
             landingHeaderContent={<></>}
             onLandingStateChange={(onLanding) => {
               if (panelParam && !activeChatId) {

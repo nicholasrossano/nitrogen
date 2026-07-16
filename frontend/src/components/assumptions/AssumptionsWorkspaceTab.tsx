@@ -14,6 +14,7 @@ import {
   type AssumptionStatus,
   type ProjectMaterial,
 } from '@/lib/api';
+import { getCached, invalidatePrefix, setCached, swrFetch, swrKeys } from '@/lib/swrCache';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import { AssumptionCommentsThread } from './AssumptionCommentsThread';
 
@@ -284,22 +285,37 @@ export function AssumptionsWorkspaceTab({
   onOpenDocument,
   onOpenFile,
 }: AssumptionsWorkspaceTabProps) {
-  const [rows, setRows] = useState<Assumption[]>([]);
-  const [selected, setSelected] = useState<Assumption | null>(null);
   const [status, setStatus] = useState<'' | AssumptionStatus>('');
-  const [loading, setLoading] = useState(true);
+  const [rows, setRows] = useState<Assumption[]>(
+    () => getCached<Assumption[]>(swrKeys.assumptions(projectId)) ?? [],
+  );
+  const [selected, setSelected] = useState<Assumption | null>(null);
+  const [loading, setLoading] = useState(
+    () => getCached<Assumption[]>(swrKeys.assumptions(projectId)) === undefined,
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draftValue, setDraftValue] = useState('');
   const [draftUnit, setDraftUnit] = useState('');
 
   const loadRows = useCallback(async () => {
-    setLoading(true);
+    const key = status
+      ? `${swrKeys.assumptions(projectId)}:${status}`
+      : swrKeys.assumptions(projectId);
+    const cached = getCached<Assumption[]>(key);
+    if (cached) {
+      setRows(cached);
+      setSelected((current) => cached.find((row) => row.id === current?.id) ?? null);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
-      const next = await api.listAssumptions(projectId, {
-        status,
-      });
+      const { data: next } = await swrFetch(key, () =>
+        api.listAssumptions(projectId, { status }),
+      );
+      if (!status) setCached(swrKeys.assumptions(projectId), next);
       setRows(next);
       setSelected((current) => next.find((row) => row.id === current?.id) ?? null);
     } catch (e: any) {
@@ -342,6 +358,7 @@ export function AssumptionsWorkspaceTab({
       const updated = customEvent.detail;
       if (!updated || updated.project_id !== projectId) return;
 
+      invalidatePrefix(swrKeys.assumptions(projectId));
       const includeInTable = matchesActiveFilters(updated);
       setRows((prev) => {
         const existingIndex = prev.findIndex((row) => row.id === updated.id);
@@ -429,19 +446,7 @@ export function AssumptionsWorkspaceTab({
       key: 'status',
       header: 'Status',
       className: 'whitespace-nowrap min-w-[120px]',
-      render: (row) => (
-        <span
-          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-            STATUS_STYLES[row.status].bg
-          } ${STATUS_STYLES[row.status].text}`}
-        >
-          {row.status === 'validated' && <CheckCircle2 className="w-2.5 h-2.5" />}
-          {row.status === 'extracted' && <MessageSquare className="w-2.5 h-2.5" />}
-          {row.status === 'assumed' && <Sparkles className="w-2.5 h-2.5" />}
-          {row.status === 'missing' && <AlertCircle className="w-2.5 h-2.5" />}
-          {STATUS_STYLES[row.status].label}
-        </span>
-      ),
+      render: (row) => <AssumptionStatusCapsule status={row.status} />,
     },
     { key: 'source_type', header: 'Source', className: 'min-w-[180px] max-w-[240px]', render: (row) => (
       <SourceCell row={row} onOpenDocument={onOpenDocument} onOpenFile={onOpenFile} />
