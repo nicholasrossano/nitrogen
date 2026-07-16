@@ -246,6 +246,7 @@ export interface AssessmentActivityLogEntry {
   summary: string | null;
   occurred_at: string;
   is_decision_point: boolean;
+  kind?: string | null;
 }
 
 export interface AssessmentActivityLog {

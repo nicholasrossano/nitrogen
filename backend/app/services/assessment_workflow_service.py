@@ -421,11 +421,20 @@ async def populate_stage(
     inst: AssessmentInstance,
     assessment: BaseAssessment,
     stage_id: str,
+    *,
+    actor_user_id: str | None = None,
+    actor_email: str | None = None,
 ) -> dict[str, Any]:
     """Run the population pipeline for a stage and persist the result.
 
     Returns the updated workflow state.
     """
+    from app.services.activity_milestone_service import (
+        emit_activity_milestone,
+        facts_from_step_result,
+        should_emit_population_milestone,
+    )
+
     state = _hydrate_state(inst, assessment)
 
     if stage_id not in state["stages"]:
@@ -455,6 +464,15 @@ async def populate_stage(
 
     try:
         for step in stage_def.population:
+            before = {
+                "items": list(accumulated_data.get("items") or []),
+                "records": (
+                    dict(accumulated_data["records"])
+                    if isinstance(accumulated_data.get("records"), dict)
+                    else accumulated_data.get("records")
+                ),
+                "widget_data": accumulated_data.get("widget_data"),
+            }
             accumulated_data = await _execute_population_step(
                 step_type=step.type,
                 config=step.config,
@@ -465,6 +483,25 @@ async def populate_stage(
                 context=context,
                 db=db,
             )
+            if should_emit_population_milestone(step.type, accumulated_data):
+                facts = facts_from_step_result(
+                    step.type,
+                    stage_title=stage_def.title,
+                    config=step.config,
+                    before=before,
+                    after=accumulated_data,
+                )
+                facts["assessment_name"] = assessment.definition.name
+                await emit_activity_milestone(
+                    db,
+                    inst=inst,
+                    kind="population_step",
+                    stage_id=stage_id,
+                    facts=facts,
+                    actor_user_id=actor_user_id,
+                    actor_email=actor_email,
+                )
+                await db.flush()
             if step.type == "await_user_confirmation":
                 # Pipeline terminates here
                 break
