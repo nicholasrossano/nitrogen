@@ -110,7 +110,7 @@ class Settings(BaseSettings):
     single_org_mode: bool = False
 
     # Individual list price (source of truth for UI catalog + ops).
-    subscription_price_usd: float = 30.0
+    subscription_price_usd: float = 20.0
     # Reserve margin vs OpenRouter invoice: estimates + last-call overshoot.
     usage_budget_buffer_pct: float = 0.05
     # Included AI budget ($/period). None → derived as price × (1 − buffer).
