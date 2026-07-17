@@ -136,7 +136,13 @@ export function MemoViewerWidget({ data, projectId, isActive = true }: MemoViewe
           return (
             <button
               key={i}
-              onClick={() => setSelectedCitation(citation)}
+              contentEditable={false}
+              onClick={() => {
+                setSelectedCitation(citation);
+                document
+                  .getElementById(`citation-ref-${citation.number}`)
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              }}
               className="citation"
               title={`${citation.source_title}`}
             >
@@ -182,7 +188,7 @@ export function MemoViewerWidget({ data, projectId, isActive = true }: MemoViewe
                         onBlur={(e) => handleContentEdit(sectionId, e)}
                         className="editable-content"
                       >
-                        {editableContent[sectionId] || section.content}
+                        {renderWithCitations(editableContent[sectionId] || section.content)}
                       </p>
                     </section>
                   );
@@ -207,7 +213,7 @@ export function MemoViewerWidget({ data, projectId, isActive = true }: MemoViewe
                     onBlur={(e) => handleContentEdit('executive_summary', e)}
                     className="editable-content"
                   >
-                    {editableContent['executive_summary']}
+                    {renderWithCitations(editableContent['executive_summary'])}
                   </p>
                 </section>
 
@@ -227,7 +233,7 @@ export function MemoViewerWidget({ data, projectId, isActive = true }: MemoViewe
                     onBlur={(e) => handleContentEdit('recommendation_rationale', e)}
                     className="editable-content"
                   >
-                    {editableContent['recommendation_rationale']}
+                    {renderWithCitations(editableContent['recommendation_rationale'])}
                   </p>
                 </section>
 
@@ -247,7 +253,7 @@ export function MemoViewerWidget({ data, projectId, isActive = true }: MemoViewe
                     onBlur={(e) => handleContentEdit('evidence_summary', e)}
                     className="editable-content"
                   >
-                    {editableContent['evidence_summary']}
+                    {renderWithCitations(editableContent['evidence_summary'])}
                   </p>
                 </section>
 
@@ -267,7 +273,7 @@ export function MemoViewerWidget({ data, projectId, isActive = true }: MemoViewe
                     onBlur={(e) => handleContentEdit('risks_and_assumptions', e)}
                     className="editable-content"
                   >
-                    {editableContent['risks_and_assumptions']}
+                    {renderWithCitations(editableContent['risks_and_assumptions'])}
                   </p>
                 </section>
 
@@ -291,7 +297,7 @@ export function MemoViewerWidget({ data, projectId, isActive = true }: MemoViewe
                           onBlur={(e) => handleQuestionEdit(i, e)}
                           className="editable-content"
                         >
-                          {editableContent[`open_question-${i}`] || q}
+                          {renderWithCitations(editableContent[`open_question-${i}`] || q)}
                         </li>
                       ))}
                     </ul>
@@ -308,6 +314,7 @@ export function MemoViewerWidget({ data, projectId, isActive = true }: MemoViewe
                   {content.citations.map((citation) => (
                     <div 
                       key={citation.number}
+                      id={`citation-ref-${citation.number}`}
                       className={`
                         selectable-item p-4 rounded text-sm
                         ${citation.source_type === 'corpus' 
