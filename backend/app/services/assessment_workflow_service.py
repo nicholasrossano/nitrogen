@@ -506,7 +506,7 @@ async def populate_stage(
                 # Pipeline terminates here
                 break
 
-        state["stages"][stage_id]["data"] = accumulated_data
+        state["stages"][stage_id]["data"] = copy.deepcopy(accumulated_data)
 
         # If AI generation steps ran but produced no items, surface as error
         # so the frontend can offer a retry instead of a stuck disabled-Confirm state.
@@ -527,7 +527,10 @@ async def populate_stage(
 
         state["current_stage_id"] = stage_id
         clear_final_approval(state)
-        save_workflow_state(inst, state, increment_version=True)
+        # Persist a detached snapshot so later in-session mutations cannot dilute
+        # the committed stage payload, and flush so the agent commit is a no-op write.
+        save_workflow_state(inst, copy.deepcopy(state), increment_version=True)
+        await db.flush()
 
     except Exception as e:
         logger.error(
@@ -816,6 +819,44 @@ async def enrich_record_item(
 # Top-level state builders
 # ---------------------------------------------------------------------------
 
+def _normalize_workflow_state(
+    existing: dict[str, Any] | None,
+    assessment: BaseAssessment,
+) -> tuple[dict[str, Any], bool]:
+    """Return (canonical state, needs_persist).
+
+    ``needs_persist`` is True only when we created, migrated, or filled missing
+    keys. Read paths must not rewrite an unchanged snapshot — concurrent GETs
+    that always save+commit can clobber an in-flight agent populate (lost update).
+    """
+    if existing is None:
+        return _build_initial_workflow_state(assessment), True
+
+    if _is_legacy_state(existing):
+        return _migrate_legacy_state(existing, assessment), True
+
+    state = copy.deepcopy(existing)
+    needs_persist = False
+    stages = state.setdefault("stages", {})
+    if "stages" not in existing:
+        needs_persist = True
+
+    for stage_def in assessment.stage_defs:
+        if stage_def.id not in stages:
+            stages[stage_def.id] = _initial_stage_state()
+            needs_persist = True
+
+    if "final_approval" not in state:
+        state["final_approval"] = _initial_final_approval_state()
+        needs_persist = True
+
+    if not state.get("current_stage_id"):
+        state["current_stage_id"] = _infer_current_stage_id(assessment, stages)
+        needs_persist = True
+
+    return state, needs_persist
+
+
 async def build_workflow_state(
     db: AsyncSession,
     inst: AssessmentInstance,
@@ -823,24 +864,8 @@ async def build_workflow_state(
 ) -> dict[str, Any]:
     """Return the canonical workflow state, migrating legacy state if needed."""
     existing = copy.deepcopy(inst.workflow_state) if inst.workflow_state else None
-
-    if existing is None:
-        return _build_initial_workflow_state(assessment)
-
-    if _is_legacy_state(existing):
-        return _migrate_legacy_state(existing, assessment)
-
-    # Ensure all stage_defs are represented (new stages added since last save)
-    stages = existing.setdefault("stages", {})
-    for stage_def in assessment.stage_defs:
-        if stage_def.id not in stages:
-            stages[stage_def.id] = _initial_stage_state()
-
-    # Recompute current_stage_id if missing
-    if not existing.get("current_stage_id"):
-        existing["current_stage_id"] = _infer_current_stage_id(assessment, stages)
-
-    return existing
+    state, _ = _normalize_workflow_state(existing, assessment)
+    return state
 
 
 async def ensure_workflow_state(
@@ -848,9 +873,15 @@ async def ensure_workflow_state(
     inst: AssessmentInstance,
     assessment: BaseAssessment,
 ) -> dict[str, Any]:
-    """Ensure workflow_state exists and reflects the latest instance state."""
-    state = await build_workflow_state(db, inst, assessment)
-    save_workflow_state(inst, state)
+    """Ensure workflow_state exists and reflects the latest instance state.
+
+    Persists only when initialization/migration/schema fill is required so
+    polling GETs cannot overwrite a newer agent write with a stale snapshot.
+    """
+    existing = copy.deepcopy(inst.workflow_state) if inst.workflow_state else None
+    state, needs_persist = _normalize_workflow_state(existing, assessment)
+    if needs_persist:
+        save_workflow_state(inst, state)
     return state
 
 

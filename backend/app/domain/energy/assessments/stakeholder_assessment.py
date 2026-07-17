@@ -7,7 +7,7 @@ Stage workflow:
 
 Exports:
   - Write-up DOCX: LLM-generated, cached in workflow_state after first generation.
-  - Decision Log DOCX: deterministic extraction, no LLM, always fast.
+  - History DOCX: deterministic extraction, no LLM, always fast.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assessments.base import BaseAssessment, FieldDef, PopulationStep, StageDef, AssessmentDefinition, AssessmentManifest
 from app.assessments.retrieval import retrieve_evidence
-from app.assessments.utils import llm_json, infer_category_icon
+from app.assessments.utils import llm_json, propose_category_items
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -429,28 +429,14 @@ class StakeholderAssessment(BaseAssessment):
     # ------------------------------------------------------------------ #
 
     async def _generate_categories(self, context: dict) -> list[dict]:
-        data = await llm_json(
+        return await propose_category_items(
             system=(
                 "You are an expert stakeholder analyst. Generate 5–8 stakeholder categories "
                 "for the given project. Each category is a distinct group of stakeholders. "
                 "Return JSON with key 'categories', a list of objects with 'label' and optional 'description'."
             ),
-            user_msg=(
-                f"Project: {context.get('project_title', 'Unknown')}\n"
-                f"Geography: {context.get('geography', '')}\n"
-                f"Project type: {context.get('project_type', '')}\n"
-                f"Description: {context.get('project_description', '')}"
-            ),
             context=context,
         )
-        return [
-            {
-                "label": c.get("label", c.get("title", "")),
-                "description": c.get("description", ""),
-                "icon": infer_category_icon(c.get("label", c.get("title", ""))),
-            }
-            for c in data.get("categories", [])
-        ]
 
     async def _generate_stakeholders(self, context: dict, category_items: list[dict]) -> list[dict]:
         categories = [
