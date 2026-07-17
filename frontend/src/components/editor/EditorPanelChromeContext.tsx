@@ -44,6 +44,11 @@ export function EditorPanelChromeProvider({
   );
 }
 
+/** True when rendered under a float/panel host that can show chrome actions. */
+export function useHasEditorPanelChromeHost(): boolean {
+  return useContext(EditorPanelChromeContext) != null;
+}
+
 /** Register float-header chrome. Host must ignore no-op updates (see FloatLayer). */
 export function useRegisterEditorPanelChrome(chrome: EditorPanelChrome | null) {
   const context = useContext(EditorPanelChromeContext);
