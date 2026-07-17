@@ -133,11 +133,7 @@ export function VariableCommentsThread({ variableId }: VariableCommentsThreadPro
         )}
       </div>
 
-      {isViewer ? (
-        <p className="rounded-lg border border-stroke-subtle bg-white/60 px-3 py-2 text-xs text-text-tertiary">
-          Viewers can read comments but cannot add them.
-        </p>
-      ) : (
+      {!isViewer ? (
         <div className="space-y-2">
           <textarea
             className="min-h-[80px] w-full resize-none rounded-lg border border-stroke-subtle px-3 py-2 text-sm"
@@ -169,7 +165,7 @@ export function VariableCommentsThread({ variableId }: VariableCommentsThreadPro
             </button>
           </div>
         </div>
-      )}
+      ) : null}
     </section>
   );
 }

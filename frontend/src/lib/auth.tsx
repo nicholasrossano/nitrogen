@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useEffect, useState, useMemo, useCallback, ReactNode } from 'react';
 import type { User, Auth } from 'firebase/auth';
+import { isDemoActive } from '@/lib/demo/demoSession';
+import { leaveDemoSession } from '@/lib/demo/demoBoundary';
 
 interface AuthContextType {
   user: User | null;
@@ -48,6 +50,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuth(authInstance);
 
         unsubscribe = onAuthStateChanged(authInstance, (nextUser) => {
+          // Real auth always wins. Demo entry signs out first; if a Firebase
+          // user appears while the demo flag is still set, drop demo and wipe
+          // in-memory stores so fixtures never mix with account data.
+          if (nextUser && isDemoActive()) {
+            leaveDemoSession();
+          }
           setUser(nextUser);
           setLoading(false);
         });

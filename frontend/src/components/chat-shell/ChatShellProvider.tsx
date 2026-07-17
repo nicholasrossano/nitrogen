@@ -11,13 +11,17 @@ import {
 } from '@/components/chat-shell/chatContextStackMotion';
 import { api, type Project } from '@/lib/api';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { isDemoActive, DEMO_PROJECT_ID } from '@/lib/demo/demoSession';
 
 const LAST_PROJECT_KEY = 'nitrogen-last-project-id';
 
 export function readLastProjectId(): string | null {
   if (typeof window === 'undefined') return null;
   try {
-    return localStorage.getItem(LAST_PROJECT_KEY);
+    const id = localStorage.getItem(LAST_PROJECT_KEY);
+    // Stale demo ids must never drive post-login routing.
+    if (!id || id === DEMO_PROJECT_ID) return null;
+    return id;
   } catch {
     return null;
   }
@@ -25,6 +29,9 @@ export function readLastProjectId(): string | null {
 
 export function writeLastProjectId(projectId: string | null) {
   if (typeof window === 'undefined') return;
+  // Demo is a sessionStorage-scoped overlay — never let it write into the
+  // persistent, cross-session "last project" preference for the real account.
+  if (isDemoActive() || projectId === DEMO_PROJECT_ID) return;
   try {
     if (projectId) localStorage.setItem(LAST_PROJECT_KEY, projectId);
     else localStorage.removeItem(LAST_PROJECT_KEY);
@@ -40,13 +47,15 @@ export function resolveActiveProjectId(
 ): string | null {
   const initiativeMatch = /^\/projects\/([^/]+)/.exec(pathname);
   const fromRoute = initiativeMatch?.[1] ?? projectParam;
-  if (fromRoute && (projects.length === 0 || projects.some((project) => project.id === fromRoute))) {
+  if (fromRoute === DEMO_PROJECT_ID && !isDemoActive()) {
+    // Orphaned demo URL after leaving demo — fall through to a real project.
+  } else if (fromRoute && (projects.length === 0 || projects.some((project) => project.id === fromRoute))) {
     return fromRoute;
   }
   if (projects.length > 0) {
-    return resolveDefaultProjectId(projects, fromRoute, readLastProjectId());
+    return resolveDefaultProjectId(projects, fromRoute === DEMO_PROJECT_ID ? null : fromRoute, readLastProjectId());
   }
-  return fromRoute ?? readLastProjectId();
+  return fromRoute === DEMO_PROJECT_ID ? readLastProjectId() : (fromRoute ?? readLastProjectId());
 }
 
 /** @deprecated Prefer buildProjectWorkbenchPath — kept for Settings delete flows on /chat. */
@@ -149,6 +158,7 @@ export function ChatShellProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const handleNewProject = useCallback(async () => {
+    if (isDemoActive()) return;
     if (!activeWorkspace?.id) return;
 
     const project = await api.createProject('New Project', activeWorkspace.id);

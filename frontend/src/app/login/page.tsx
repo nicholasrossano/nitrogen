@@ -1,12 +1,20 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
+import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader2, Mail, Lock, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
+import { buildDemoProjectPath, DEMO_PROJECT_ID } from '@/lib/demo/demoSession';
+import { startDemoSession } from '@/lib/demo/demoBoundary';
+import nitrogenIcon from '@/app/icon.png';
 
 function getSafeReturnUrl(raw: string | null): string {
   if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return '/';
+  // Never bounce a signed-in user back onto the demo project route.
+  if (raw === `/projects/${DEMO_PROJECT_ID}` || raw.startsWith(`/projects/${DEMO_PROJECT_ID}?`)) {
+    return '/';
+  }
   return raw;
 }
 
@@ -16,9 +24,20 @@ function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnUrl = getSafeReturnUrl(searchParams.get('returnUrl'));
-  const { signInWithEmail, signUpWithEmail, signInWithGoogle, resetPassword, user, loading } = useAuth();
+  const {
+    signInWithEmail,
+    signUpWithEmail,
+    signInWithGoogle,
+    signOut,
+    resetPassword,
+    user,
+    loading,
+  } = useAuth();
   
-  const [mode, setMode] = useState<AuthMode>('signin');
+  const modeParam = searchParams.get('mode');
+  const initialMode: AuthMode =
+    modeParam === 'signin' || modeParam === 'reset' ? modeParam : 'signup';
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +108,21 @@ function LoginPageContent() {
     }
   };
 
+  const handleViewDemo = async () => {
+    setError(null);
+    setSubmitting(true);
+    try {
+      await startDemoSession({
+        hasUser: Boolean(user),
+        signOut,
+      });
+      router.push(buildDemoProjectPath());
+    } catch (err: any) {
+      setError(err?.message || 'Failed to open demo.');
+      setSubmitting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -100,14 +134,37 @@ function LoginPageContent() {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       {/* Header */}
-      <header className="h-[72px] px-6 flex items-center">
-        <h1 className="text-xl font-display font-semibold text-text-primary tracking-tight">
-          Nitrogen
-        </h1>
+      <header className="h-[72px] px-6 flex items-center justify-start">
+        <div className="flex items-center gap-2.5">
+          <Image
+            src={nitrogenIcon}
+            alt=""
+            width={28}
+            height={28}
+            className="rounded-md"
+            priority
+          />
+          <span className="text-lg font-display font-semibold text-text-primary tracking-tight">
+            Nitrogen AI
+          </span>
+        </div>
       </header>
       {/* Main content */}
       <main className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">
+          {mode !== 'reset' && (
+            <div className="mb-6 flex justify-center">
+              <button
+                type="button"
+                onClick={handleViewDemo}
+                disabled={submitting}
+                className="btn-primary h-11 w-1/2 !rounded-lg"
+              >
+                View Demo
+              </button>
+            </div>
+          )}
+
           {/* Card */}
           <div className="bg-surface rounded-lg shadow-workspace p-8">
             <div className="text-center mb-8">
@@ -150,7 +207,7 @@ function LoginPageContent() {
                 <button
                   onClick={handleGoogleSignIn}
                   disabled={submitting}
-                  className="w-full btn-secondary mb-4"
+                  className="w-full btn-secondary mb-3"
                 >
                   <svg className="w-5 h-5" viewBox="0 0 24 24">
                     <path

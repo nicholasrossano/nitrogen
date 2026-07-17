@@ -12,6 +12,8 @@ interface LandingInputProps {
   onSend: (content: string, toolHint?: string) => void;
   onUploadFile?: (file: File) => Promise<void>;
   disabled?: boolean;
+  /** Keep send disabled even when the field has text (e.g. demo mode) */
+  sendDisabled?: boolean;
   sessions?: ChatSession[];
   onLoadSession?: (session: ChatSession) => void;
   onDeleteSession?: (id: string) => void;
@@ -59,6 +61,7 @@ export function LandingInput({
   onSend,
   onUploadFile,
   disabled,
+  sendDisabled = false,
   sessions = [],
   onLoadSession,
   onDeleteSession,
@@ -116,7 +119,7 @@ export function LandingInput({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || disabled || uploading) return;
+    if (!input.trim() || disabled || sendDisabled || uploading) return;
 
     if (attachedFiles.length > 0 && onUploadFile) {
       setUploading(true);
@@ -248,7 +251,7 @@ export function LandingInput({
             )}
             <button
               type="submit"
-              disabled={disabled || uploading || !input.trim()}
+              disabled={disabled || sendDisabled || uploading || !input.trim()}
               className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent"
             >
               {uploading ? (
@@ -348,7 +351,7 @@ export function LandingInput({
                   <button
                     key={assessment.id}
                     type="button"
-                    disabled={disabled}
+                    disabled={disabled || sendDisabled}
                     onClick={() => onSend(`Generate ${assessment.name}`, assessment.id)}
                     className="relative flex items-center gap-3 border border-black/[0.04] px-4 py-3.5 card-interactive disabled:cursor-default disabled:opacity-40"
                   >
@@ -385,7 +388,7 @@ export function LandingInput({
               <button
                 key={assessment.id}
                 type="button"
-                disabled={disabled}
+                disabled={disabled || sendDisabled}
                 onClick={() => onSend(`Generate ${assessment.name}`, assessment.id)}
                 className="relative flex items-center gap-3 px-4 py-3.5 card-interactive border border-black/[0.04] disabled:opacity-40 disabled:cursor-default"
               >
