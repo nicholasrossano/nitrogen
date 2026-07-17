@@ -17,8 +17,9 @@ import {
   type ExpandedWidgetChangeOptions,
 } from '@/components/chat-shell/chatContextStackMotion';
 import { CHAT_CONTEXT_STACK_WIDTH } from '@/components/ui/chatSidebarLayout';
+import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import { projectDisplayName } from '@/lib/projectDisplayName';
-import { api, type AssessmentInstance, type Project, type ProjectMaterial, type WorkspaceKnowledgeBank } from '@/lib/api';
+import { api, type AssessmentInstance, type Project, type ProjectMaterial, type Variable, type WorkspaceKnowledgeBank } from '@/lib/api';
 import { useProjectStore } from '@/stores/projectStore';
 import { ProjectOverviewExpandedPanel } from '@/components/chat-shell/ProjectOverviewExpandedPanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
@@ -27,6 +28,11 @@ import { TourAnchor } from '@/components/tour/TourAnchor';
 import { FrameworkPlanView } from '@/components/framework/FrameworkPlanView';
 
 export type { ChatContextExpandedWidget, ExpandedWidgetChangeOptions };
+
+const VariablesWorkspaceTab = dynamic(
+  () => import('@/components/variables/VariablesWorkspaceTab').then((m) => m.VariablesWorkspaceTab),
+  { ssr: false },
+);
 
 const ProjectFilesView = dynamic(
   () => import('@/components/files').then((m) => m.ProjectFilesView),
@@ -43,8 +49,8 @@ export interface ChatContextStackProps {
     widget: ChatContextExpandedWidget | null,
     options?: ExpandedWidgetChangeOptions,
   ) => void;
-  /** Variables opens as a FloatLayer (not a floor). */
-  onOpenVariablesWorkspace?: (focusVariableId?: string | null) => void;
+  /** Open a selected variable as a float companion beside the Variables floor. */
+  onOpenVariableDetail?: (variable: Variable) => void;
   onOpenFile?: (file: ProjectMaterial) => void;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   onOpenWorkspaceAssessment?: (assessment: {
@@ -124,7 +130,7 @@ export function ChatContextStack({
   expandedWidget,
   expandMotionMode = 'stack',
   onExpandedWidgetChange,
-  onOpenVariablesWorkspace,
+  onOpenVariableDetail,
   onOpenFile,
   onOpenDocument,
   onOpenWorkspaceAssessment,
@@ -241,8 +247,8 @@ export function ChatContextStack({
   }, [openFromStack]);
 
   const handleExpandVariables = useCallback(() => {
-    onOpenVariablesWorkspace?.(null);
-  }, [onOpenVariablesWorkspace]);
+    openFromStack('variables');
+  }, [openFromStack]);
 
   const handleExpandFiles = useCallback(() => {
     openFromStack('files');
@@ -252,9 +258,9 @@ export function ChatContextStack({
     onExpandedWidgetChange(null);
   }, [onExpandedWidgetChange]);
 
-  const handleVariableSelect = useCallback((variable: { id: string }) => {
-    onOpenVariablesWorkspace?.(variable.id);
-  }, [onOpenVariablesWorkspace]);
+  const handleVariableSelect = useCallback((variable: Variable) => {
+    onOpenVariableDetail?.(variable);
+  }, [onOpenVariableDetail]);
 
   if (!projectId) return null;
 
@@ -354,6 +360,29 @@ export function ChatContextStack({
             onShareModalChange={setOverviewShareModalOpen}
             onOpenDocument={onOpenDocument}
             onOpenWorkspaceAssessment={onOpenWorkspaceAssessment}
+          />
+        </FloorLayer>
+      )}
+
+      {renderedWidget === 'variables' && (
+        <FloorLayer
+          widget="variables"
+          title={PROJECT_VARIABLES.title}
+          suffix={project ? projectDisplayName(project) : null}
+          visible={visible}
+          motionMode={shellMotion}
+          onClose={handleCloseExpanded}
+          flushOnExpand
+          rightInset={rightInset}
+          tourId="feature-variables"
+        >
+          <VariablesWorkspaceTab
+            projectId={projectId}
+            embedded
+            showDetailPanel={false}
+            onOpenDocument={onOpenDocument}
+            onOpenFile={onOpenFile}
+            onVariableSelectInChat={onOpenVariableDetail}
           />
         </FloorLayer>
       )}

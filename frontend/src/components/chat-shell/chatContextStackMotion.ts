@@ -1,5 +1,4 @@
-/** Overlay floors promoted from the mini stack. Chat is the default floor when this is null.
- *  `variables` remains in the union for URL/capsule state but opens as a FloatLayer. */
+/** Overlay floors promoted from the mini stack. Chat is the default floor when this is null. */
 export type ChatContextExpandedWidget = 'overview' | 'variables' | 'files' | 'assessments';
 
 export type ContextPanelExpandMotion = 'stack' | 'center';
@@ -11,7 +10,7 @@ export type ExpandedWidgetChangeOptions = {
 export const CONTEXT_PANEL_SEARCH_PARAM = 'panel';
 /** Open assessment float — instance id beside the active floor (or solo when no panel/chat). */
 export const ASSESSMENT_SEARCH_PARAM = 'assessment';
-/** Selected variable inside the Variables float — survives refresh with ?panel=variables. */
+/** Selected variable float beside the Variables floor — survives refresh with ?panel=variables. */
 export const VARIABLE_SEARCH_PARAM = 'variable';
 
 export function parseContextPanelParam(value: string | null): ChatContextExpandedWidget | null {
