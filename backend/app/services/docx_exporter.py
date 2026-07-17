@@ -1,7 +1,114 @@
 import io
+import re
 from pathlib import Path
 
 from app.schemas.memo import MemoContent
+
+# Matches inline citation markers like "[1]", "[12]" — kept in sync with the
+# citation format the assessment LLM prompts instruct the model to emit
+# (see MEMO_SYSTEM_RULES and friends in app/domain/energy/assessments/).
+_CITATION_MARKER_RE = re.compile(r"(\[\d+\])")
+
+
+def _add_bookmark(paragraph, name: str, bookmark_id: int) -> None:
+    """Mark a paragraph as a jump target so citation links can navigate to it.
+
+    Must be called before any paragraph formatting (e.g. left_indent) is set,
+    since w:pPr — if later added by python-docx — must remain the first child
+    of w:p per the OOXML schema, and bookmarkStart is inserted at index 0 here.
+    """
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    start = OxmlElement("w:bookmarkStart")
+    start.set(qn("w:id"), str(bookmark_id))
+    start.set(qn("w:name"), name)
+    paragraph._p.insert(0, start)
+
+    end = OxmlElement("w:bookmarkEnd")
+    end.set(qn("w:id"), str(bookmark_id))
+    paragraph._p.append(end)
+
+
+def _add_internal_hyperlink_run(paragraph, anchor: str, text: str) -> None:
+    """Add a run linking to an in-document bookmark (e.g. a References entry)."""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    hyperlink = OxmlElement("w:hyperlink")
+    hyperlink.set(qn("w:anchor"), anchor)
+
+    run = OxmlElement("w:r")
+    r_pr = OxmlElement("w:rPr")
+    color = OxmlElement("w:color")
+    color.set(qn("w:val"), "2E74B5")
+    r_pr.append(color)
+    underline = OxmlElement("w:u")
+    underline.set(qn("w:val"), "single")
+    r_pr.append(underline)
+    run.append(r_pr)
+
+    text_el = OxmlElement("w:t")
+    text_el.set(qn("xml:space"), "preserve")
+    text_el.text = text
+    run.append(text_el)
+
+    hyperlink.append(run)
+    paragraph._p.append(hyperlink)
+
+
+def _add_external_hyperlink_run(paragraph, url: str, text: str) -> None:
+    """Add a run linking to an external URL as a real (clickable) hyperlink."""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.opc.constants import RELATIONSHIP_TYPE
+
+    r_id = paragraph.part.relate_to(url, RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
+
+    hyperlink = OxmlElement("w:hyperlink")
+    hyperlink.set(qn("r:id"), r_id)
+
+    run = OxmlElement("w:r")
+    r_pr = OxmlElement("w:rPr")
+    color = OxmlElement("w:color")
+    color.set(qn("w:val"), "005E72")
+    r_pr.append(color)
+    underline = OxmlElement("w:u")
+    underline.set(qn("w:val"), "single")
+    r_pr.append(underline)
+    sz = OxmlElement("w:sz")
+    sz.set(qn("w:val"), "18")  # half-points; 18 == 9pt, matching prior plain-text styling
+    r_pr.append(sz)
+    run.append(r_pr)
+
+    text_el = OxmlElement("w:t")
+    text_el.set(qn("xml:space"), "preserve")
+    text_el.text = text
+    run.append(text_el)
+
+    hyperlink.append(run)
+    paragraph._p.append(hyperlink)
+
+
+def _add_text_with_citation_links(paragraph, text: str, citation_numbers: set) -> None:
+    """Append text to a paragraph, turning known "[N]" markers into links to References.
+
+    Falls back to a single plain run when there are no citations to link, so
+    behavior is unchanged for content without citations.
+    """
+    if not text:
+        return
+    if not citation_numbers:
+        paragraph.add_run(text)
+        return
+    for part in _CITATION_MARKER_RE.split(text):
+        if not part:
+            continue
+        match = re.fullmatch(r"\[(\d+)\]", part)
+        if match and int(match.group(1)) in citation_numbers:
+            _add_internal_hyperlink_run(paragraph, f"cite_{match.group(1)}", part)
+        else:
+            paragraph.add_run(part)
 
 
 class DocxExporterService:
@@ -67,6 +174,12 @@ class DocxExporterService:
             
             doc.add_paragraph()
             
+            # Citations — link "[N]" markers in the body to their References entry.
+            citations = memo_content.get("citations", [])
+            citation_numbers = {
+                c.get("number") for c in citations if isinstance(c, dict) and c.get("number") is not None
+            }
+
             # Dynamic sections
             sections = memo_content.get("sections", [])
             for section in sections:
@@ -74,21 +187,23 @@ class DocxExporterService:
                 section_content = section.get("content", "")
                 
                 doc.add_heading(section_title, level=1)
-                doc.add_paragraph(section_content)
+                body_para = doc.add_paragraph()
+                _add_text_with_citation_links(body_para, section_content, citation_numbers)
                 doc.add_paragraph()
             
-            # Citations
-            citations = memo_content.get("citations", [])
             if citations:
                 doc.add_heading("References", level=1)
-                for citation in citations:
+                for idx, citation in enumerate(citations):
                     number = citation.get("number", 0)
                     source_type = citation.get("source_type", "evidence")
                     source_title = citation.get("source_title", "Unknown")
                     excerpt = citation.get("excerpt", "")
                     
                     source_label = "[Case Study]" if source_type == "corpus" else "[Evidence]"
-                    doc.add_paragraph(f"[{number}] {source_label} {source_title}")
+                    ref_para = doc.add_paragraph()
+                    bookmark_id = number if isinstance(number, int) else 1000 + idx
+                    _add_bookmark(ref_para, f"cite_{number}", bookmark_id)
+                    ref_para.add_run(f"[{number}] {source_label} {source_title}")
                     
                     if excerpt:
                         excerpt_para = doc.add_paragraph(f'"{excerpt}"')
@@ -166,6 +281,13 @@ class DocxExporterService:
         try:
             doc = Document()
 
+            # Citations — collected up front so body paragraphs can turn known
+            # "[N]" markers into real hyperlinks that jump to their References entry.
+            citations = content.get("citations", [])
+            citation_numbers = {
+                c.get("number") for c in citations if isinstance(c, dict) and c.get("number") is not None
+            }
+
             # ── Title ──────────────────────────────────────────────────────
             title_heading = doc.add_heading(content.get("title") or initiative_title, 0)
             title_heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -175,7 +297,8 @@ class DocxExporterService:
             exec_sum = content.get("executive_summary", "")
             if exec_sum:
                 doc.add_heading("Executive Summary", level=1)
-                doc.add_paragraph(exec_sum)
+                exec_para = doc.add_paragraph()
+                _add_text_with_citation_links(exec_para, exec_sum, citation_numbers)
                 doc.add_paragraph()
 
             # ── Theme / Category sections ──────────────────────────────────
@@ -185,7 +308,8 @@ class DocxExporterService:
                 sec_body = sec.get("body") or sec.get("content") or ""
                 if sec_title or sec_body:
                     doc.add_heading(sec_title, level=2)
-                    doc.add_paragraph(sec_body)
+                    body_para = doc.add_paragraph()
+                    _add_text_with_citation_links(body_para, sec_body, citation_numbers)
                     doc.add_paragraph()
 
             # ── Trailing sections (any scalar extra keys) ──────────────────
@@ -202,31 +326,34 @@ class DocxExporterService:
                     doc.add_heading(label, level=1)
                     if isinstance(val, list):
                         for item in val:
-                            doc.add_paragraph(f"• {item}")
+                            item_para = doc.add_paragraph()
+                            item_para.add_run("• ")
+                            _add_text_with_citation_links(item_para, str(item), citation_numbers)
                     else:
-                        doc.add_paragraph(val)
+                        val_para = doc.add_paragraph()
+                        _add_text_with_citation_links(val_para, val, citation_numbers)
                     doc.add_paragraph()
 
             # ── References ─────────────────────────────────────────────────
-            citations = content.get("citations", [])
             if citations:
                 doc.add_heading("References", level=1)
-                for cit in citations:
+                for idx, cit in enumerate(citations):
                     num = cit.get("number", "")
                     source_title = cit.get("source_title", "Unknown source")
                     source_url = cit.get("source_url") or ""
                     publisher = cit.get("publisher") or ""
                     excerpt = cit.get("excerpt") or ""
 
+                    ref_para = doc.add_paragraph()
+                    bookmark_id = num if isinstance(num, int) else 1000 + idx
+                    _add_bookmark(ref_para, f"cite_{num}", bookmark_id)
                     line = f"[{num}] {source_title}"
                     if publisher:
                         line += f" — {publisher}"
-                    doc.add_paragraph(line)
+                    ref_para.add_run(line)
                     if source_url:
                         url_para = doc.add_paragraph()
-                        run = url_para.add_run(source_url)
-                        run.font.color.rgb = RGBColor(0, 94, 114)
-                        run.font.size = Pt(9)
+                        _add_external_hyperlink_run(url_para, source_url, source_url)
                         url_para.paragraph_format.left_indent = Inches(0.3)
                     if excerpt:
                         excerpt_para = doc.add_paragraph(f'"{excerpt[:250]}…"')
@@ -265,10 +392,13 @@ class DocxExporterService:
         date_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         
         doc.add_paragraph()
-        
+
+        citation_numbers = {c.number for c in memo_content.citations if c.number is not None}
+
         # Executive Summary
         doc.add_heading("Executive Summary", level=1)
-        doc.add_paragraph(memo_content.executive_summary)
+        exec_para = doc.add_paragraph()
+        _add_text_with_citation_links(exec_para, memo_content.executive_summary, citation_numbers)
         
         # Recommendation
         doc.add_heading("Recommendation", level=1)
@@ -277,30 +407,36 @@ class DocxExporterService:
         rec_run.bold = True
         rec_run.font.size = Pt(14)
         
-        doc.add_paragraph(memo_content.recommendation_rationale)
+        rationale_para = doc.add_paragraph()
+        _add_text_with_citation_links(rationale_para, memo_content.recommendation_rationale, citation_numbers)
         
         # Evidence Summary
         doc.add_heading("Evidence Summary", level=1)
-        doc.add_paragraph(memo_content.evidence_summary)
+        evidence_para = doc.add_paragraph()
+        _add_text_with_citation_links(evidence_para, memo_content.evidence_summary, citation_numbers)
         
         # Risks and Variables
         doc.add_heading("Risks and Variables", level=1)
-        doc.add_paragraph(memo_content.risks_and_assumptions)
+        risks_para = doc.add_paragraph()
+        _add_text_with_citation_links(risks_para, memo_content.risks_and_assumptions, citation_numbers)
         
         # Open Questions
         if memo_content.open_questions:
             doc.add_heading("Open Questions", level=1)
             for question in memo_content.open_questions:
-                doc.add_paragraph(f"• {question}")
+                q_para = doc.add_paragraph()
+                q_para.add_run("• ")
+                _add_text_with_citation_links(q_para, question, citation_numbers)
         
         # Citations
         if memo_content.citations:
             doc.add_heading("References", level=1)
-            for citation in memo_content.citations:
+            for idx, citation in enumerate(memo_content.citations):
                 source_label = "[Case Study]" if citation.source_type == "corpus" else "[Evidence]"
-                doc.add_paragraph(
-                    f"[{citation.number}] {source_label} {citation.source_title}"
-                )
+                ref_para = doc.add_paragraph()
+                bookmark_id = citation.number if isinstance(citation.number, int) else 1000 + idx
+                _add_bookmark(ref_para, f"cite_{citation.number}", bookmark_id)
+                ref_para.add_run(f"[{citation.number}] {source_label} {citation.source_title}")
                 excerpt_para = doc.add_paragraph(f'"{citation.excerpt}"')
                 excerpt_para.paragraph_format.left_indent = Inches(0.5)
         
