@@ -33,18 +33,18 @@ export const TOUR_STEPS: TourStep[] = [
     placement: 'right',
   },
   {
-    id: 'welcome-composer',
-    group: 'welcome',
-    title: 'Ask anything',
-    body: 'This is your main chat. Ask about your project, explore options, or start an analysis from here.',
-    placement: 'top',
-  },
-  {
     id: 'welcome-chats',
     group: 'welcome',
     title: 'Chats',
     body: 'Past conversations live here, organized by project. Start a new thread anytime from a project.',
     placement: 'right',
+  },
+  {
+    id: 'welcome-composer',
+    group: 'welcome',
+    title: 'Ask anything',
+    body: 'This is your main chat. Ask about your project, explore options, or start an analysis from here.',
+    placement: 'top',
   },
   {
     id: 'welcome-recommended',

@@ -2,10 +2,10 @@
 
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { buildDemoProjectPath } from '@/lib/demo/demoSession';
 import { startDemoSession } from '@/lib/demo/demoBoundary';
+import { UniversalLoadingIcon } from '@/components/ui/PageLoader';
 
 /**
  * Public entry for marketing / “try the demo” links.
@@ -32,7 +32,7 @@ export default function DemoEntryPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-3 text-text-secondary">
-        <Loader2 className="w-8 h-8 text-accent animate-spin" />
+        <UniversalLoadingIcon size={40} />
         <p className="text-sm">Opening demo…</p>
       </div>
     </div>
