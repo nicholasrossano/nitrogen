@@ -1,4 +1,6 @@
 import { isStoredFeatureFlagEnabled } from '@/lib/featureFlags';
+import { isDemoActive } from '@/lib/demo/demoSession';
+import { tryResolveDemoRequest } from '@/lib/demo/demoApi';
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -26,6 +28,11 @@ export async function fetchApi<T>(
   endpoint: string,
   options: RequestInit = {},
 ): Promise<T> {
+  if (isDemoActive()) {
+    // Always short-circuit in demo — never hit the real API without a token.
+    return tryResolveDemoRequest<T>(endpoint, options) as T;
+  }
+
   const url = `${API_URL}${endpoint}`;
 
   const token = await getAuthToken();

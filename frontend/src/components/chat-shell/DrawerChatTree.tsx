@@ -10,6 +10,7 @@ import { TourAnchor } from '@/components/tour/TourAnchor';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import { projectDisplayName } from '@/lib/projectDisplayName';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { useDemoMode } from '@/hooks/useDemoMode';
 
 export interface ChatListItem {
   id: string;
@@ -156,28 +157,28 @@ export function DrawerChatTree({
   const { ownProjects, sharedProjects } = useMemo(() => {
     const own: Project[] = [];
     const shared: Project[] = [];
+    // "Shared with you" is only for personal workspaces. Team-workspace projects
+    // (including viewer shares) belong in the main list.
+    const personal = activeWorkspace?.workspace_type === 'personal';
     for (const project of projects) {
-      if (project.shared_role) {
+      if (personal && project.shared_role) {
         shared.push(project);
       } else {
         own.push(project);
       }
     }
     return { ownProjects: own, sharedProjects: shared };
-  }, [projects]);
+  }, [activeWorkspace?.workspace_type, projects]);
 
   const sectionGroups = useMemo(() => {
     const groups: Array<{ label: string | null; projects: Project[] }> = [
       { label: null, projects: ownProjects },
     ];
-    if (
-      activeWorkspace?.workspace_type === 'personal' &&
-      sharedProjects.length > 0
-    ) {
+    if (sharedProjects.length > 0) {
       groups.push({ label: 'Shared with you', projects: sharedProjects });
     }
     return groups;
-  }, [activeWorkspace?.workspace_type, ownProjects, sharedProjects]);
+  }, [ownProjects, sharedProjects]);
 
   const toggleChatHistoryExpanded = useCallback((projectKey: string, isOpen: boolean) => {
     if (isOpen) {
@@ -202,11 +203,14 @@ export function DrawerChatTree({
     }
   }, [chatShell, creatingProject]);
 
+  const { isDemo } = useDemoMode();
+
   const renderNewProjectButton = () => (
     <button
       type="button"
       onClick={() => void handleNewProject()}
-      disabled={creatingProject || !activeWorkspace?.id}
+      disabled={isDemo || creatingProject || !activeWorkspace?.id}
+      title={isDemo ? 'Creating projects is disabled in the demo' : undefined}
       className="mx-0.5 mb-2 flex w-[calc(100%-0.25rem)] items-center gap-2 rounded-lg border border-dashed border-stroke-subtle px-2.5 py-2 text-xs font-medium text-text-secondary transition-colors hover:border-accent/40 hover:bg-accent/5 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
     >
       {creatingProject ? (

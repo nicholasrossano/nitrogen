@@ -23,6 +23,7 @@ import { openGooglePicker } from '@/lib/googlePicker';
 import { UploadActionButton, UploadDropzone } from '@/components/upload/UploadControls';
 import { TourAnchor } from '@/components/tour/TourAnchor';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
+import { useDemoMode } from '@/hooks/useDemoMode';
 import {
   CHAT_FLOATING_PANEL_CHROME,
   CHAT_SIDEBAR_COLLAPSED_WIDTH,
@@ -63,8 +64,10 @@ const NAV_LABEL_CLASS = 'whitespace-nowrap';
 
 function UsagePill() {
   const showBillingFeatures = useFeatureFlag('billing_features');
+  const { isDemo } = useDemoMode();
   const { tier, usagePercent, trialMessagesRemaining, loaded } = useBillingStore();
-  if (!showBillingFeatures || !loaded || tier === 'unlimited' || tier === 'byok' || tier === 'none' || !tier) return null;
+  // Demo has no real metering; usage belongs under Billing for signed-in accounts.
+  if (isDemo || !showBillingFeatures || !loaded || tier === 'unlimited' || tier === 'byok' || tier === 'none' || !tier) return null;
 
   const barColor = usagePercent >= 90 ? 'bg-red-500' : usagePercent >= 75 ? 'bg-amber-500' : 'bg-accent';
 

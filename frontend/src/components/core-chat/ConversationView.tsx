@@ -72,6 +72,8 @@ export interface ConversationViewProps {
   showAttachments?: boolean;
   /** Loading an existing chat history from the server */
   historyLoading?: boolean;
+  /** Keep send disabled even when the field has text (e.g. demo mode) */
+  sendDisabled?: boolean;
 }
 
 function preprocessMath(content: string): string {
@@ -121,9 +123,11 @@ export function ConversationView({
   onApplyProposedValue,
   showAttachments = true,
   historyLoading = false,
+  sendDisabled = false,
 }: ConversationViewProps) {
 
   const [input, setInput] = useState('');
+  const inputDisabled = sending;
   const [draftTag, setDraftTag] = useState<string | null>(null);
   const [draftFieldContext, setDraftFieldContext] = useState<FieldContext | null>(null);
   const [draftModelInputsContext, setDraftModelInputsContext] = useState<string | null>(null);
@@ -205,7 +209,7 @@ export function ConversationView({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || sending || uploading) return;
+    if (!input.trim() || sending || uploading || sendDisabled) return;
 
     if (attachedFiles.length > 0 && onUploadFile) {
       setUploading(true);
@@ -321,7 +325,7 @@ export function ConversationView({
         }}
         onKeyDown={handleKeyDown}
         placeholder="Ask anything"
-        disabled={sending}
+        disabled={inputDisabled}
         rows={1}
         className="no-global-focus-style w-full resize-none bg-transparent px-5 pt-3 pb-4 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', minHeight: '2.25rem' }}
@@ -345,7 +349,7 @@ export function ConversationView({
               />
               <button
                 type="button"
-                disabled={sending}
+                disabled={inputDisabled}
                 onClick={() => fileInputRef.current?.click()}
                 className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
                 aria-label="Attach files"
@@ -356,7 +360,7 @@ export function ConversationView({
           )}
           <button
             type="submit"
-            disabled={sending || uploading || !input.trim()}
+            disabled={inputDisabled || sendDisabled || uploading || !input.trim()}
             className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent"
           >
             {uploading ? (

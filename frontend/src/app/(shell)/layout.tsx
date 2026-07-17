@@ -13,6 +13,7 @@ import {
   readChatSidebarCollapsed,
   writeChatSidebarCollapsed,
 } from '@/components/ui/chatSidebarLayout';
+import { DemoBanner } from '@/components/demo/DemoBanner';
 
 function ShellTourProvider({ children }: { children: React.ReactNode }) {
   return (
@@ -65,6 +66,7 @@ function ChatShellFrame({ children }: { children: React.ReactNode }) {
         <Suspense>
           <SideDrawer />
         </Suspense>
+        <DemoBanner />
       </div>
     </ShellNavContext.Provider>
   );

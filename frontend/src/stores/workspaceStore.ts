@@ -1,10 +1,17 @@
 import { create } from 'zustand';
 import { api, Workspace, WorkspaceDetail, WorkspaceMember } from '@/lib/api';
+import { isDemoActive } from '@/lib/demo/demoSession';
 
 const ACTIVE_WORKSPACE_KEY = 'nitrogen-active-workspace-id';
 const LAST_TOUCHED_WORKSPACE_KEY = 'nitrogen-last-touched-workspace-id';
 let loadWorkspacesRequestSeq = 0;
 let loadWorkspacesPromise: Promise<void> | null = null;
+
+/** Drop in-flight workspace loads when crossing the demo/real session boundary. */
+export function invalidateWorkspaceLoads(): void {
+  loadWorkspacesRequestSeq += 1;
+  loadWorkspacesPromise = null;
+}
 
 interface WorkspaceState {
   workspaces: Workspace[];
@@ -32,6 +39,9 @@ function readStoredWorkspaceId(): string | null {
 
 function writeStoredWorkspaceId(workspaceId: string): void {
   if (typeof window === 'undefined') return;
+  // Demo is a sessionStorage-scoped overlay — never let it write into the
+  // persistent, cross-session workspace preference for the real account.
+  if (isDemoActive()) return;
   try {
     localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspaceId);
     localStorage.setItem(LAST_TOUCHED_WORKSPACE_KEY, workspaceId);

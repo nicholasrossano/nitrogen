@@ -59,14 +59,10 @@ export function WidgetGeneratingProgress({
   const totalExpected = steps.reduce((s, step) => s + step.duration, 0);
   const progress = Math.min(94, (elapsed / totalExpected) * 94);
 
-  const StepIcon = steps[currentStep].icon;
-
   return (
     <div className="px-5 py-10 flex flex-col items-center gap-5">
-      <div className="relative flex items-center justify-center w-10 h-10">
-        <UniversalLoadingIcon size={40} />
-        <StepIcon className="absolute w-4.5 h-4.5 text-accent" />
-      </div>
+      {/* Sprout/tree only — avoid stacking a second icon over UniversalLoadingIcon. */}
+      <UniversalLoadingIcon size={40} />
 
       <div className="text-center">
         <p className="text-sm font-medium text-text-primary">
