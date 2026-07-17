@@ -93,6 +93,9 @@ export const evidenceApi = {
       method: 'DELETE',
       headers,
     });
+    if (response.status === 404) {
+      return { success: true, message: 'Evidence already deleted' };
+    }
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: 'Delete failed' }));
       throw new Error(error.detail);
@@ -134,6 +137,10 @@ export const evidenceApi = {
       method: 'DELETE',
       headers,
     });
+    // Already gone (stale list / double-click) — treat as success.
+    if (response.status === 404) {
+      return { success: true, message: 'Material already deleted' };
+    }
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: 'Delete failed' }));
       throw new Error(error.detail);

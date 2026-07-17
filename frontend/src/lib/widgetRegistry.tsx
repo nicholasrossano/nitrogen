@@ -38,6 +38,11 @@ export interface WorkspaceWidgetProps {
   outputFooterState?: WorkspaceWidgetFooterState;
   /** Called when diagram item inspector state changes — drives the chat-panel deep-dive widget */
   onInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
+  /**
+   * Host element for plan/map view toolbars (Collapse all, category filter).
+   * When provided, those controls render inline with the assessment stage stepper.
+   */
+  viewToolbarHost?: HTMLElement | null;
 }
 
 export type WidgetComponent = ComponentType<WorkspaceWidgetProps>;

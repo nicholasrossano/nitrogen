@@ -187,7 +187,7 @@ export function DeepDiveWidget({
                 </section>
               )}
 
-              {result.documentSources.length === 0 && result.linkSources.length === 0 && (
+              {citationSources.length === 0 && (
                 <p className="text-xs text-text-tertiary italic">
                   {result.emptySourcesMessage
                     ?? 'Derived from generally available information. Validate requirements against official sources.'}

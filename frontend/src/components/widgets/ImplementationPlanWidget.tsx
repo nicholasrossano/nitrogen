@@ -179,6 +179,7 @@ export function ImplementationPlanWidget({
   workflowVersion,
   onWorkflowUpdated,
   onInspectorStateChange,
+  viewToolbarHost,
 }: WorkspaceWidgetProps) {
   const mapData = data as ImplementationPlanData;
   const [widgetData, setWidgetData] = useState<ImplementationPlanData>(mapData);
@@ -398,6 +399,7 @@ export function ImplementationPlanWidget({
           showItemBranchDelete={false}
           showItemRightActions={false}
           enableItemSorting={false}
+          viewToolbarHost={viewToolbarHost}
         />
       </div>
     </div>

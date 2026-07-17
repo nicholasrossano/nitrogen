@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, ChevronsUpDown, Clock, LayoutGrid, MessageSquare, Plus } from 'lucide-react';
 
 import { UniversalLoadingIcon } from '@/components/ui/PageLoader';
@@ -59,6 +60,11 @@ interface PlanWorkspaceViewProps {
   enableItemSorting?: boolean;
   emptyState?: Partial<EmptyStateConfig>;
   colors?: string[];
+  /**
+   * When set, Collapse all / filter / view-mode controls portal into this host
+   * (e.g. assessment stage-stepper row) instead of rendering above the grid.
+   */
+  viewToolbarHost?: HTMLElement | null;
 }
 
 const DEFAULT_EMPTY_STATE: EmptyStateConfig = {
@@ -92,6 +98,7 @@ export function PlanWorkspaceView({
   enableItemSorting = false,
   emptyState,
   colors = DEFAULT_COLORS,
+  viewToolbarHost = null,
 }: PlanWorkspaceViewProps) {
   const labels = { ...DEFAULT_EMPTY_STATE, ...emptyState };
   const [selectedFilterId, setSelectedFilterId] = useState<string | null>(null);
@@ -238,6 +245,109 @@ export function PlanWorkspaceView({
   const allPhasesCollapsed = phases.length > 0 && collapsedPhases.size >= phases.length;
   const allGroupsExpanded = groups.length > 0 && expandedGroups.size >= groups.length;
 
+  const toolbarControls = (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          if (viewMode === 'group') {
+            setExpandedGroups(allGroupsExpanded ? new Set() : new Set(groups.map((group) => group.id)));
+          } else {
+            setCollapsedPhases(allPhasesCollapsed ? new Set() : new Set(phases.map((phase) => phase.id)));
+          }
+        }}
+        className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium text-text-primary bg-surface ring-1 ring-inset ring-stroke-subtle hover:bg-surface-subtle transition-colors whitespace-nowrap"
+      >
+        {(viewMode === 'group' ? allGroupsExpanded : !allPhasesCollapsed) ? 'Collapse all' : 'Expand all'}
+        <ChevronsUpDown className="w-3 h-3" />
+      </button>
+
+      {filterConfig && filterConfig.options.length > 0 && (
+        <div ref={filterDropdownRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setFilterDropdownOpen((value) => !value)}
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ring-1 ring-inset hover:bg-surface-subtle ${
+              selectedFilterId
+                ? 'bg-surface-subtle text-text-primary ring-stroke-subtle'
+                : 'bg-surface text-text-primary ring-stroke-subtle'
+            }`}
+          >
+            {selectedFilterId
+              ? filterConfig.options.find((option) => option.id === selectedFilterId)?.label ?? filterConfig.label
+              : filterConfig.allLabel}
+            <ChevronDown className={`w-2.5 h-2.5 transition-transform duration-150 ${filterDropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {filterDropdownOpen && (
+            <div className="absolute right-0 top-full mt-1 z-50 bg-white rounded-lg border border-stroke-subtle shadow-md py-1 min-w-[160px]">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedFilterId(null);
+                  setFilterDropdownOpen(false);
+                }}
+                className={`w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                  !selectedFilterId
+                    ? 'text-accent bg-accent/5'
+                    : 'text-text-secondary hover:bg-surface-subtle hover:text-text-primary'
+                }`}
+              >
+                {filterConfig.allLabel}
+              </button>
+              {filterConfig.options.map((option) => (
+                <button
+                  type="button"
+                  key={option.id}
+                  onClick={() => {
+                    setSelectedFilterId(option.id);
+                    setFilterDropdownOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 ${
+                    selectedFilterId === option.id
+                      ? 'text-accent bg-accent/5'
+                      : 'text-text-secondary hover:bg-surface-subtle hover:text-text-primary'
+                  }`}
+                >
+                  {option.color && (
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: option.color }} />
+                  )}
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {visibleDisplayModes.length > 1 && (
+        <div className="flex items-center bg-surface-subtle rounded-full p-0.5 w-fit ring-1 ring-inset ring-black/[0.08]">
+          {visibleDisplayModes.map((mode) => {
+            const Icon = mode.icon;
+            return (
+              <button
+                type="button"
+                key={mode.id}
+                onClick={() => {
+                  setViewMode(mode.id);
+                  onViewModeChange?.(mode.id);
+                  if (mode.id === 'group') setSelectedFilterId(null);
+                }}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all duration-150 ${
+                  viewMode === mode.id
+                    ? 'bg-white text-text-primary shadow-sm'
+                    : 'text-text-tertiary hover:text-text-secondary'
+                }`}
+              >
+                <Icon className="w-3 h-3" />
+                {mode.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+
   if (groups.length === 0) {
     return (
       <div className="h-full flex flex-col bg-surface overflow-hidden">
@@ -277,101 +387,13 @@ export function PlanWorkspaceView({
 
         <div ref={outerContainerRef} className="flex-1 flex min-h-0 min-w-0 overflow-hidden">
           <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
-            <div className="flex-shrink-0 px-4 pt-4 pb-2 flex items-center justify-end gap-2">
-              <button
-                onClick={() => {
-                  if (viewMode === 'group') {
-                    setExpandedGroups(allGroupsExpanded ? new Set() : new Set(groups.map((group) => group.id)));
-                  } else {
-                    setCollapsedPhases(allPhasesCollapsed ? new Set() : new Set(phases.map((phase) => phase.id)));
-                  }
-                }}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium text-text-primary bg-surface ring-1 ring-inset ring-stroke-subtle hover:bg-surface-subtle transition-colors whitespace-nowrap"
-              >
-                {(viewMode === 'group' ? allGroupsExpanded : !allPhasesCollapsed) ? 'Collapse all' : 'Expand all'}
-                <ChevronsUpDown className="w-3 h-3" />
-              </button>
-
-              {filterConfig && filterConfig.options.length > 0 && (
-                <div ref={filterDropdownRef} className="relative">
-                  <button
-                    onClick={() => setFilterDropdownOpen((value) => !value)}
-                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ring-1 ring-inset hover:bg-surface-subtle ${
-                      selectedFilterId
-                        ? 'bg-surface-subtle text-text-primary ring-stroke-subtle'
-                        : 'bg-surface text-text-primary ring-stroke-subtle'
-                    }`}
-                  >
-                    {selectedFilterId
-                      ? filterConfig.options.find((option) => option.id === selectedFilterId)?.label ?? filterConfig.label
-                      : filterConfig.allLabel}
-                    <ChevronDown className={`w-2.5 h-2.5 transition-transform duration-150 ${filterDropdownOpen ? 'rotate-180' : ''}`} />
-                  </button>
-                  {filterDropdownOpen && (
-                    <div className="absolute right-0 top-full mt-1 z-50 bg-white rounded-lg border border-stroke-subtle shadow-md py-1 min-w-[160px]">
-                      <button
-                        onClick={() => {
-                          setSelectedFilterId(null);
-                          setFilterDropdownOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors ${
-                          !selectedFilterId
-                            ? 'text-accent bg-accent/5'
-                            : 'text-text-secondary hover:bg-surface-subtle hover:text-text-primary'
-                        }`}
-                      >
-                        {filterConfig.allLabel}
-                      </button>
-                      {filterConfig.options.map((option) => (
-                        <button
-                          key={option.id}
-                          onClick={() => {
-                            setSelectedFilterId(option.id);
-                            setFilterDropdownOpen(false);
-                          }}
-                          className={`w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 ${
-                            selectedFilterId === option.id
-                              ? 'text-accent bg-accent/5'
-                              : 'text-text-secondary hover:bg-surface-subtle hover:text-text-primary'
-                          }`}
-                        >
-                          {option.color && (
-                            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: option.color }} />
-                          )}
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+            {viewToolbarHost
+              ? createPortal(toolbarControls, viewToolbarHost)
+              : (
+                <div className="flex-shrink-0 px-4 pt-4 pb-2 flex items-center justify-end gap-2">
+                  {toolbarControls}
                 </div>
               )}
-
-              {visibleDisplayModes.length > 1 && (
-                <div className="flex items-center bg-surface-subtle rounded-full p-0.5 w-fit ring-1 ring-inset ring-black/[0.08]">
-                  {visibleDisplayModes.map((mode) => {
-                    const Icon = mode.icon;
-                    return (
-                      <button
-                        key={mode.id}
-                        onClick={() => {
-                          setViewMode(mode.id);
-                          onViewModeChange?.(mode.id);
-                          if (mode.id === 'group') setSelectedFilterId(null);
-                        }}
-                        className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all duration-150 ${
-                          viewMode === mode.id
-                            ? 'bg-white text-text-primary shadow-sm'
-                            : 'text-text-tertiary hover:text-text-secondary'
-                        }`}
-                      >
-                        <Icon className="w-3 h-3" />
-                        {mode.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
 
             {viewMode === 'group' ? (
               <div className="flex-1 overflow-y-auto overflow-x-hidden min-w-0 p-4 pt-2">
