@@ -723,16 +723,6 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     ]);
   }, [replaceFloatContent]);
 
-  const handleExportDecisionLog = useCallback(async (context: AssessmentLogContext) => {
-    const { blob, filename } = await api.exportAssessmentDecisionLogXlsx(context.instanceId);
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }, []);
-
   const handleOpenAssessmentReport = useCallback((payload: {
     instanceId: string;
     assessmentId: string;
@@ -964,9 +954,11 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     const bumpRefresh = () => setContextRefreshKey((k) => k + 1);
     window.addEventListener('nitrogen:variable-updated', bumpRefresh);
     window.addEventListener('nitrogen:variable-deleted', bumpRefresh);
+    window.addEventListener('nitrogen:project-signals-updated', bumpRefresh);
     return () => {
       window.removeEventListener('nitrogen:variable-updated', bumpRefresh);
       window.removeEventListener('nitrogen:variable-deleted', bumpRefresh);
+      window.removeEventListener('nitrogen:project-signals-updated', bumpRefresh);
     };
   }, []);
 
@@ -1199,7 +1191,6 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
             onAssessmentEngaged={handleAssessmentEngaged}
             onOpenDecisionLog={handleOpenDecisionLog}
             onOpenActivityLog={handleOpenActivityLog}
-            onExportDecisionLog={handleExportDecisionLog}
             onOpenAssessmentReport={handleOpenAssessmentReport}
             onOpenAssessment={handleReopenAssessmentFromLog}
             onAssessmentTitleChange={handleAssessmentTitleChange}

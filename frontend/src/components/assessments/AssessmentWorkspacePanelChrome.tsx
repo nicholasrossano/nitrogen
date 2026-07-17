@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, type RefObject } from 'react';
+import { useMemo, useRef } from 'react';
 import {
   CheckCircle2, Download, FileText, History, Loader2, RotateCcw,
 } from 'lucide-react';
@@ -14,11 +14,7 @@ interface AssessmentWorkspacePanelChromeProps {
   titleSaving?: boolean;
   exportFormat?: string | null;
   projectId?: string;
-  decisionMenuRef: RefObject<HTMLDivElement>;
-  decisionMenuOpen: boolean;
-  onDecisionMenuToggle: () => void;
   onDecisionLogOpen: () => void;
-  onDecisionLogExport: () => void;
   showExportAction: boolean;
   /** Document-generating assessments use Report → open in viewer; calculators use Export → download. */
   exportActionKind?: 'export' | 'report';
@@ -38,11 +34,7 @@ export function AssessmentWorkspacePanelChrome({
   titleSaving = false,
   exportFormat,
   projectId,
-  decisionMenuRef,
-  decisionMenuOpen,
-  onDecisionMenuToggle,
   onDecisionLogOpen,
-  onDecisionLogExport,
   showExportAction,
   exportActionKind = 'export',
   onExport,
@@ -55,16 +47,12 @@ export function AssessmentWorkspacePanelChrome({
 }: AssessmentWorkspacePanelChromeProps) {
   // Keep handlers fresh without putting their identities in memo/chrome deps
   // (unstable parent callbacks previously caused an infinite chrome update loop).
-  const onDecisionMenuToggleRef = useRef(onDecisionMenuToggle);
   const onDecisionLogOpenRef = useRef(onDecisionLogOpen);
-  const onDecisionLogExportRef = useRef(onDecisionLogExport);
   const onExportRef = useRef(onExport);
   const onApproveFinalRef = useRef(onApproveFinal);
   const onRevokeApprovalRef = useRef(onRevokeApproval);
   const onSaveTitleRef = useRef(onSaveTitle);
-  onDecisionMenuToggleRef.current = onDecisionMenuToggle;
   onDecisionLogOpenRef.current = onDecisionLogOpen;
-  onDecisionLogExportRef.current = onDecisionLogExport;
   onExportRef.current = onExport;
   onApproveFinalRef.current = onApproveFinal;
   onRevokeApprovalRef.current = onRevokeApproval;
@@ -75,36 +63,16 @@ export function AssessmentWorkspacePanelChrome({
 
     return (
       <>
-        <div ref={decisionMenuRef} className="relative">
-          <button
-            type="button"
-            onClick={() => onDecisionMenuToggleRef.current()}
-            aria-label="History"
-            title="History"
-            className="flex h-8 items-center gap-1.5 rounded-md border border-stroke-subtle bg-white px-2.5 text-[11px] font-medium leading-none text-text-secondary transition-colors hover:bg-black/[0.04] hover:text-text-primary"
-          >
-            <History className="h-3.5 w-3.5" />
-            History
-          </button>
-          {decisionMenuOpen && (
-            <div className="absolute right-0 top-full z-30 mt-1 min-w-[132px] rounded-lg border border-divider bg-white py-1 shadow-lg">
-              <button
-                type="button"
-                onClick={() => onDecisionLogOpenRef.current()}
-                className="flex w-full items-center px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-black/[0.04] hover:text-text-primary"
-              >
-                Open
-              </button>
-              <button
-                type="button"
-                onClick={() => onDecisionLogExportRef.current()}
-                className="flex w-full items-center px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-black/[0.04] hover:text-text-primary"
-              >
-                Export
-              </button>
-            </div>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={() => onDecisionLogOpenRef.current()}
+          aria-label="History"
+          title="History"
+          className="flex h-8 items-center gap-1.5 rounded-md border border-stroke-subtle bg-white px-2.5 text-[11px] font-medium leading-none text-text-secondary transition-colors hover:bg-black/[0.04] hover:text-text-primary"
+        >
+          <History className="h-3.5 w-3.5" />
+          History
+        </button>
         {showExportAction && exportActionKind === 'report' && (
           <button
             type="button"
@@ -170,8 +138,6 @@ export function AssessmentWorkspacePanelChrome({
     );
   }, [
     projectId,
-    decisionMenuRef,
-    decisionMenuOpen,
     showExportAction,
     exportActionKind,
     isExporting,

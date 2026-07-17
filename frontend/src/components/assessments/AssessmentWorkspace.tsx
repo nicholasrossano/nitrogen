@@ -4,7 +4,7 @@ import {
   useState, useEffect, useCallback, useRef, Suspense, lazy, type ComponentType,
 } from 'react';
 import {
-  Loader2, AlertCircle, CheckCircle2, Pencil, ChevronDown, History, RotateCcw,
+  Loader2, AlertCircle, CheckCircle2, Pencil, History, RotateCcw,
 } from 'lucide-react';
 import type {
   AssessmentAgentStatus,
@@ -298,7 +298,6 @@ interface AssessmentWorkspaceProps {
   onAddToChat?: (text: string) => void;
   onOpenActivityLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
   onOpenDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
-  onExportDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void | Promise<void>;
   onOpenAssessmentReport?: (payload: {
     instanceId: string;
     assessmentId: string;
@@ -331,7 +330,6 @@ export function AssessmentWorkspace({
   onAddToChat,
   onOpenActivityLog: _onOpenActivityLog,
   onOpenDecisionLog,
-  onExportDecisionLog,
   onOpenAssessmentReport,
   onInspectorStateChange,
   onApprovalChange,
@@ -360,10 +358,8 @@ export function AssessmentWorkspace({
   const exportPhaseTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isRunningAssessment, setIsRunningAssessment] = useState(false);
   const [agentStatus, setAgentStatus] = useState<AssessmentAgentStatus | null>(null);
-  const [decisionMenuOpen, setDecisionMenuOpen] = useState(false);
   const [editingConfirmedStageIds, setEditingConfirmedStageIds] = useState<Record<string, boolean>>({});
   const [editBaselineByStageId, setEditBaselineByStageId] = useState<Record<string, string>>({});
-  const decisionMenuRef = useRef<HTMLDivElement>(null);
   const hasNotifiedEngagementRef = useRef(false);
   const hostInspectorPanelRef = useRef(false);
   const [hostedInspectorState, setHostedInspectorState] = useState<PlanWorkspaceInspectorState | null>(null);
@@ -553,17 +549,6 @@ export function AssessmentWorkspace({
   }, [state, activeStageId, agentStatus?.run_state]);
 
   useEffect(() => {
-    if (!decisionMenuOpen) return;
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!decisionMenuRef.current?.contains(event.target as Node)) {
-        setDecisionMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [decisionMenuOpen]);
-
-  useEffect(() => {
     if (agentStatus?.run_state !== 'running') return undefined;
     const intervalId = window.setInterval(() => {
       void fetchAgentStatus();
@@ -675,6 +660,13 @@ export function AssessmentWorkspace({
         workflow_version: result.workflow_version,
       } : prev);
       onApprovalChange?.();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('nitrogen:project-signals-updated', {
+            detail: { instanceId },
+          }),
+        );
+      }
     } catch (e: any) {
       setError(e.message ?? 'Failed to approve assessment');
       fetchState();
@@ -693,6 +685,13 @@ export function AssessmentWorkspace({
         workflow_version: result.workflow_version,
       } : prev);
       onApprovalChange?.();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('nitrogen:project-signals-updated', {
+            detail: { instanceId },
+          }),
+        );
+      }
     } catch (e: any) {
       setError(e.message ?? 'Failed to revoke approval');
       fetchState();
@@ -889,28 +888,8 @@ export function AssessmentWorkspace({
     title: assessmentDisplayTitle,
   };
 
-  const handleDecisionLogOpen = async () => {
-    setDecisionMenuOpen(false);
+  const handleDecisionLogOpen = () => {
     onOpenDecisionLog?.(decisionLogContext);
-  };
-
-  const handleDecisionLogExport = async () => {
-    setDecisionMenuOpen(false);
-    try {
-      if (onExportDecisionLog) {
-        await onExportDecisionLog(decisionLogContext);
-        return;
-      }
-      const { blob, filename } = await api.exportAssessmentDecisionLogXlsx(instanceId);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e: any) {
-      setError(e.message ?? 'History export failed');
-    }
   };
 
   const renderStageContent = () => {
@@ -1069,11 +1048,7 @@ export function AssessmentWorkspace({
           titleSaving={isSavingTitle}
           exportFormat={mod.export_format}
           projectId={projectId}
-          decisionMenuRef={decisionMenuRef}
-          decisionMenuOpen={decisionMenuOpen}
-          onDecisionMenuToggle={() => setDecisionMenuOpen((prev) => !prev)}
           onDecisionLogOpen={handleDecisionLogOpen}
-          onDecisionLogExport={handleDecisionLogExport}
           showExportAction={showExportAction}
           exportActionKind={exportActionKind}
           onExport={handleExport}
@@ -1117,32 +1092,14 @@ export function AssessmentWorkspace({
               {!usePanelHeader ? (
               <>
               {projectId && (
-                <div ref={decisionMenuRef} className="relative">
-                  <button
-                    onClick={() => setDecisionMenuOpen((prev) => !prev)}
-                    className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 flex items-center shrink-0"
-                  >
-                    <History className="w-3 h-3" />
-                    History
-                    <ChevronDown className="w-3 h-3 opacity-60" />
-                  </button>
-                  {decisionMenuOpen && (
-                    <div className="absolute right-0 top-full mt-1 z-20 min-w-[132px] rounded-lg border border-divider bg-white py-1 shadow-lg">
-                      <button
-                        onClick={handleDecisionLogOpen}
-                        className="flex w-full items-center px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-black/[0.04] hover:text-text-primary"
-                      >
-                        Open
-                      </button>
-                      <button
-                        onClick={handleDecisionLogExport}
-                        className="flex w-full items-center px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-black/[0.04] hover:text-text-primary"
-                      >
-                        Export
-                      </button>
-                    </div>
-                  )}
-                </div>
+                <button
+                  type="button"
+                  onClick={handleDecisionLogOpen}
+                  className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 flex items-center shrink-0"
+                >
+                  <History className="w-3 h-3" />
+                  History
+                </button>
               )}
               {showExportAction && (
                 exportActionKind === 'report' ? (

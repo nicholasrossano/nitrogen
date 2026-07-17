@@ -336,7 +336,7 @@ export function FrameworkPlanView({
                       </span>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,17.5rem),21rem))] gap-4">
                     {phase.assessments.map((assessmentId) => {
                       const assessmentMeta = assessmentMetaById.get(assessmentId);
                       const assessmentName = assessmentMeta?.name || assessmentId.replace(/_/g, ' ');
@@ -412,7 +412,7 @@ export function FrameworkPlanView({
                             </span>
                           </button>
                           {(assessmentInstancesForType.length > 0 || !readOnly) && (
-                            <div className="px-4 pb-3 flex justify-end gap-2">
+                            <div className="flex flex-wrap items-center justify-end gap-2 px-4 pb-3">
                               {assessmentInstancesForType.length > 0 && (
                                 <AssessmentInstanceOpenDropdown
                                   instances={assessmentInstancesForType}
@@ -422,6 +422,7 @@ export function FrameworkPlanView({
                                     || assessmentInstance.title
                                     || assessmentName
                                   )}
+                                  className="shrink-0"
                                 />
                               )}
                               {!readOnly && (
@@ -432,7 +433,7 @@ export function FrameworkPlanView({
                                     event.stopPropagation();
                                     void handleCreateAssessmentInAssessmentsView(assessmentId, assessmentName);
                                   }}
-                                  className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors enabled:hover:bg-accent-hover enabled:hover:border-accent-hover disabled:opacity-60 disabled:cursor-not-allowed"
+                                  className="inline-flex h-7 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-accent bg-accent px-2.5 text-xs font-medium text-white transition-colors enabled:hover:border-accent-hover enabled:hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   {isCreatingWorkspace ? (
                                     <>
