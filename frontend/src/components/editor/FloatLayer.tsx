@@ -3,7 +3,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { TourAnchor } from '@/components/tour/TourAnchor';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import type { Variable, ProjectMaterial } from '@/lib/api';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
@@ -22,7 +21,6 @@ const DocumentViewerWidget = dynamic(() => import('@/components/widgets/Document
 const SolarEstimateWidget = dynamic(() => import('@/components/widgets/SolarEstimateWidget').then(m => ({ default: m.SolarEstimateWidget })), { ssr: false });
 const AssessmentWorkspace = dynamic(() => import('@/components/assessments/AssessmentWorkspace').then(m => ({ default: m.AssessmentWorkspace })), { ssr: false });
 const VariableDetailWidget = dynamic(() => import('@/components/widgets/VariableDetailWidget').then(m => ({ default: m.VariableDetailWidget })), { ssr: false });
-const VariablesWorkspaceTab = dynamic(() => import('@/components/variables/VariablesWorkspaceTab').then(m => ({ default: m.VariablesWorkspaceTab })), { ssr: false });
 const DecisionLogWorkspaceTab = dynamic(() => import('@/components/decision-log/DecisionLogWorkspaceTab').then(m => ({ default: m.DecisionLogWorkspaceTab })), { ssr: false });
 const AssessmentActivityLogTab = dynamic(() => import('@/components/core-chat/AssessmentActivityLogTab').then(m => ({ default: m.AssessmentActivityLogTab })), { ssr: false });
 
@@ -34,7 +32,6 @@ export const FLOAT_WIDGET_TYPES = [
   'checklist_viewer',
   'document_viewer',
   'assessment_workspace',
-  'variables_workspace',
   'variable_detail',
   'decision_log',
   'activity_log',
@@ -51,7 +48,6 @@ export const WIDGET_MODEL_GROUP: Record<string, string> = {
   checklist_viewer: 'checklist',
   document_viewer: 'document_viewer',
   assessment_workspace: 'assessment',
-  variables_workspace: 'variables',
   variable_detail: 'variable_detail',
   decision_log: 'decision_log',
   activity_log: 'activity_log',
@@ -88,8 +84,6 @@ interface FloatLayerProps {
   onCompanionSidePanelOpenChange?: (open: boolean) => void;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   onOpenFile?: (file: ProjectMaterial) => void;
-  /** Persist selected variable id for the Variables workspace float (URL sync). */
-  onVariablesSelectionChange?: (variableId: string | null) => void;
 }
 
 function getWidgetTitle(widget: FloatWidget): string {
@@ -147,7 +141,6 @@ const WIDGET_LABELS: Record<string, string> = {
   checklist_viewer: 'Due Diligence',
   document_viewer: 'Document',
   assessment_workspace: 'Assessment',
-  variables_workspace: PROJECT_VARIABLES.title,
   variable_detail: PROJECT_VARIABLES.titleSingular,
   decision_log: 'Decision Log',
   activity_log: 'Activity Log',
@@ -167,7 +160,6 @@ export function FloatLayer({
   onCompanionSidePanelOpenChange,
   onOpenDocument,
   onOpenFile,
-  onVariablesSelectionChange,
 }: FloatLayerProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [childChrome, setChildChrome] = useState<EditorPanelChrome | null>(null);
@@ -235,13 +227,7 @@ export function FloatLayer({
 
   return (
     <div className="flex h-full flex-col bg-white">
-      {widget.type === 'variables_workspace' ? (
-        <TourAnchor id="feature-variables" as="div" className="w-full shrink-0" surface="floor">
-          {header}
-        </TourAnchor>
-      ) : (
-        header
-      )}
+      {header}
 
       {widgets.length > 1 && (
         <div className="flex-shrink-0 flex border-b border-divider bg-white overflow-x-auto">
@@ -262,7 +248,7 @@ export function FloatLayer({
         </div>
       )}
 
-      <div className={`flex-1 min-h-0 ${widget.type === 'variables_workspace' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+      <div className="flex-1 min-h-0 overflow-y-auto">
         <ErrorBoundary>
           <EditorPanelChromeProvider onChromeChange={handleChromeChange}>
             <FloatWidgetRenderer
@@ -282,7 +268,6 @@ export function FloatLayer({
               onCompanionSidePanelOpenChange={onCompanionSidePanelOpenChange}
               onOpenDocument={onOpenDocument}
               onOpenFile={onOpenFile}
-              onVariablesSelectionChange={onVariablesSelectionChange}
             />
           </EditorPanelChromeProvider>
         </ErrorBoundary>
@@ -307,7 +292,6 @@ function FloatWidgetRenderer({
   onCompanionSidePanelOpenChange,
   onOpenDocument,
   onOpenFile,
-  onVariablesSelectionChange,
 }: {
   type: string;
   data: Record<string, any>;
@@ -324,7 +308,6 @@ function FloatWidgetRenderer({
   onCompanionSidePanelOpenChange?: (open: boolean) => void;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   onOpenFile?: (file: ProjectMaterial) => void;
-  onVariablesSelectionChange?: (variableId: string | null) => void;
 }) {
   switch (type) {
     case 'lcoe_inputs':
@@ -342,21 +325,6 @@ function FloatWidgetRenderer({
       return <ChecklistViewerWidget data={data} projectId={projectId} isActive />;
     case 'document_viewer':
       return <DocumentViewerWidget data={data} projectId={projectId} isActive />;
-    case 'variables_workspace':
-      return (
-        <VariablesWorkspaceTab
-          projectId={projectId}
-          embedded
-          showDetailPanel
-          focusVariableId={
-            typeof data.focus_variable_id === 'string' ? data.focus_variable_id : (typeof data.focus_assumption_id === 'string' ? data.focus_assumption_id : null)
-          }
-          onSelectedVariableIdChange={onVariablesSelectionChange}
-          onOpenDocument={onOpenDocument}
-          onOpenFile={onOpenFile}
-          onCompanionSidePanelOpenChange={onCompanionSidePanelOpenChange}
-        />
-      );
     case 'variable_detail':
       return <VariableDetailWidget data={data as { variable?: Variable; assumption?: Variable }} onClose={onClose} />;
     case 'decision_log':

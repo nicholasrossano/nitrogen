@@ -1,7 +1,6 @@
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import type { FloatWidget } from '@/components/editor/FloatLayer';
 import type { Variable, ProjectMaterial } from '@/lib/api';
-import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 
 export function floatWidgetForCitation(citation: ResearchPanelCitation): FloatWidget {
   return {
@@ -70,20 +69,6 @@ export function floatWidgetForVariable(variable: Variable): FloatWidget {
       title: variable.label,
     },
     messageId: `variable-${variable.id}`,
-  };
-}
-
-export function floatWidgetForVariablesWorkspace(
-  projectId: string,
-  focusVariableId?: string | null,
-): FloatWidget {
-  return {
-    type: 'variables_workspace',
-    data: {
-      title: PROJECT_VARIABLES.title,
-      focus_variable_id: focusVariableId ?? null,
-    },
-    messageId: `variables-${projectId}`,
   };
 }
 
