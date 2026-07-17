@@ -28,9 +28,8 @@ def test_adapter_registry_contains_required_baseline_adapters() -> None:
         "retrieval",
         "openalex",
         "rag",
-        "memo_generation",
     }.issubset(ids)
-    assert len(ids) >= 7
+    assert len(ids) >= 6
 
 
 def test_adapter_definitions_have_required_metadata() -> None:

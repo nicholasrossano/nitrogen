@@ -19,10 +19,8 @@ from app.core.permissions import (
     require_project_editor,
     require_owner,
 )
-from app.core.storage import get_storage
 from app.models.project import Project
 from app.models.assessment_instance import AssessmentInstance
-from app.models.memo import MemoVersion
 from app.models.evidence import EvidenceDoc
 from app.models.google_drive import DriveLinkedFile
 from app.models.project_share import ProjectShare
@@ -684,16 +682,6 @@ async def permanently_delete_project(
     """Permanently delete an initiative and all related data - owner only"""
     initiative = await require_owner(db, project_id, user)
 
-    # Collect export file paths before CASCADE deletes the rows
-    memo_result = await db.execute(
-        select(MemoVersion.export_path)
-        .where(
-            MemoVersion.project_id == initiative.id,
-            MemoVersion.export_path.isnot(None),
-        )
-    )
-    export_paths = [p for p in memo_result.scalars().all() if p]
-
     await db.delete(initiative)
     await db.commit()
 
@@ -705,12 +693,5 @@ async def permanently_delete_project(
             shutil.rmtree(uploads_dir, ignore_errors=True)
     except Exception:
         logger.warning("Failed to clean up uploads for initiative %s", project_id, exc_info=True)
-
-    try:
-        exports_storage = get_storage()
-        for path in export_paths:
-            await exports_storage.delete(path)
-    except Exception:
-        logger.warning("Failed to clean up exports for initiative %s", project_id, exc_info=True)
 
     return None

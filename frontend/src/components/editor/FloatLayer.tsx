@@ -15,7 +15,6 @@ import { assessmentHeaderTitle } from '@/lib/assessmentDisplay';
 
 const LCOEModelWidget = dynamic(() => import('@/components/widgets/LCOEModelWidget').then(m => ({ default: m.LCOEModelWidget })), { ssr: false });
 const CarbonModelWidget = dynamic(() => import('@/components/widgets/CarbonModelWidget').then(m => ({ default: m.CarbonModelWidget })), { ssr: false });
-const MemoViewerWidget = dynamic(() => import('@/components/widgets/MemoViewerWidget').then(m => ({ default: m.MemoViewerWidget })), { ssr: false });
 const ChecklistViewerWidget = dynamic(() => import('@/components/widgets/ChecklistViewerWidget').then(m => ({ default: m.ChecklistViewerWidget })), { ssr: false });
 const DocumentViewerWidget = dynamic(() => import('@/components/widgets/DocumentViewerWidget').then(m => ({ default: m.DocumentViewerWidget })), { ssr: false });
 const SolarEstimateWidget = dynamic(() => import('@/components/widgets/SolarEstimateWidget').then(m => ({ default: m.SolarEstimateWidget })), { ssr: false });
@@ -28,7 +27,6 @@ export const FLOAT_WIDGET_TYPES = [
   'lcoe_inputs', 'lcoe_output',
   'carbon_inputs', 'carbon_output',
   'solar_inputs', 'solar_output',
-  'memo_viewer',
   'checklist_viewer',
   'document_viewer',
   'assessment_workspace',
@@ -44,7 +42,6 @@ export const WIDGET_MODEL_GROUP: Record<string, string> = {
   carbon_output: 'carbon',
   solar_inputs: 'solar',
   solar_output: 'solar',
-  memo_viewer: 'memo',
   checklist_viewer: 'checklist',
   document_viewer: 'document_viewer',
   assessment_workspace: 'assessment',
@@ -136,7 +133,6 @@ const WIDGET_LABELS: Record<string, string> = {
   carbon_output: 'Carbon Calculator',
   solar_inputs: 'Solar Estimate',
   solar_output: 'Solar Estimate',
-  memo_viewer: 'Investment Memo',
   checklist_viewer: 'Due Diligence',
   document_viewer: 'Document',
   assessment_workspace: 'Assessment',
@@ -320,8 +316,6 @@ function FloatWidgetRenderer({
     case 'solar_inputs':
     case 'solar_output':
       return <SolarEstimateWidget data={data} projectId={projectId} messageId={messageId} isActive />;
-    case 'memo_viewer':
-      return <MemoViewerWidget data={data} projectId={projectId} isActive />;
     case 'checklist_viewer':
       return <ChecklistViewerWidget data={data} projectId={projectId} isActive />;
     case 'document_viewer':

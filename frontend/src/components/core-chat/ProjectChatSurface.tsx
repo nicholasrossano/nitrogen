@@ -25,7 +25,7 @@ import { debugChatFlow } from '@/lib/chatDebug';
 import type { AssessmentProgressData } from '@/components/ui/ReadinessProgressBar';
 import { useDemoMode } from '@/hooks/useDemoMode';
 
-const DELIVERABLE_WIDGET_TYPES = ['memo_viewer', 'checklist_viewer'];
+const DELIVERABLE_WIDGET_TYPES = ['checklist_viewer'];
 const CHAT_MODULE_WIDGET_TYPES = new Set([
   'assessment_workspace',
   'lcoe_inputs',

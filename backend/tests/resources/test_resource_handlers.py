@@ -48,11 +48,6 @@ def _ctx() -> ExecutionContext:
             "ProjectMaterial not found.",
         ),
         (
-            "_read_memo_version",
-            f"nitrogen://projects/{uuid4()}/memos/{uuid4()}",
-            "MemoVersion not found.",
-        ),
-        (
             "_read_assessment_instance",
             f"nitrogen://projects/{uuid4()}/assessments/{uuid4()}",
             "AssessmentInstance not found.",

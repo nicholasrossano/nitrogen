@@ -14,7 +14,6 @@ from app.core.permissions import get_project_with_role
 from app.mcp.exposure_policy import resource_visibility
 from app.models.evidence import EvidenceChunk, EvidenceDoc
 from app.models.project import Project
-from app.models.memo import MemoVersion
 from app.models.assessment_instance import AssessmentInstance
 from app.models.project_material import ProjectMaterial
 from app.resources.registry import ResourceDefinition, ResourceRegistry, get_resource_registry
@@ -136,33 +135,6 @@ async def _read_project_material(uri: str, db: AsyncSession, ctx: ExecutionConte
     }
 
 
-async def _read_memo_version(uri: str, db: AsyncSession, ctx: ExecutionContext) -> dict:
-    project_id = _project_id_from_uri(uri)
-    version_id = UUID(uri.rsplit("/", 1)[-1])
-    await _ensure_project_access(db, ctx, project_id)
-    memo = (
-        await db.execute(
-            select(MemoVersion).where(
-                MemoVersion.id == version_id,
-                MemoVersion.project_id == project_id,
-            )
-        )
-    ).scalar_one_or_none()
-    if memo is None:
-        raise ValueError("MemoVersion not found.")
-    return {
-        "uri": uri,
-        "resource_type": "memo_version",
-        "data": {
-            "id": str(memo.id),
-            "project_id": str(memo.project_id),
-            "content": memo.content,
-            "export_path": memo.export_path,
-            "created_at": memo.created_at.isoformat() if memo.created_at else None,
-        },
-    }
-
-
 async def _read_assessment_instance(uri: str, db: AsyncSession, ctx: ExecutionContext) -> dict:
     project_id = _project_id_from_uri(uri)
     instance_id = UUID(uri.rsplit("/", 1)[-1])
@@ -257,18 +229,6 @@ def register_all(registry: ResourceRegistry) -> None:
             project_scoped=True,
             read_handler=_read_project_material,
             visibility=resource_visibility("project_material"),
-        )
-    )
-    registry.register(
-        ResourceDefinition(
-            uri_pattern="nitrogen://projects/{id}/memos/{version_id}",
-            resource_type="memo_version",
-            name="Memo Version",
-            description="Generated memo version and export metadata.",
-            mime_type="application/json",
-            project_scoped=True,
-            read_handler=_read_memo_version,
-            visibility=resource_visibility("memo_version"),
         )
     )
     registry.register(

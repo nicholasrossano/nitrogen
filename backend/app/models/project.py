@@ -12,7 +12,6 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.assessment_instance import AssessmentInstance
     from app.models.evidence import EvidenceDoc
-    from app.models.memo import MemoVersion
     from app.models.project_material import ProjectMaterial
     from app.models.workspace import Workspace
 
@@ -86,10 +85,6 @@ class Project(Base):
 
     workspace: Mapped["Workspace"] = relationship(back_populates="projects")
     evidence_docs: Mapped[list["EvidenceDoc"]] = relationship(
-        back_populates="project",
-        cascade="all, delete-orphan",
-    )
-    memo_versions: Mapped[list["MemoVersion"]] = relationship(
         back_populates="project",
         cascade="all, delete-orphan",
     )

@@ -95,37 +95,6 @@ export const projectsApi = {
       { method: 'POST' }
     ),
 
-  // Export,
-  exportMemo: (projectId: string, memoVersionId?: string) =>
-    fetchApi<{ success: boolean; export_id: string; download_url: string; filename: string }>(
-      `/api/v1/projects/${projectId}/export`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ memo_version_id: memoVersionId }),
-      }
-    ),
-  downloadExport: async (memoId: string, filename = 'investment_memo.docx') => {
-    const token = await getAuthToken();
-    const headers: Record<string, string> = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    const response = await fetch(`${API_URL}/api/v1/exports/${memoId}`, { headers });
-    
-    if (!response.ok) {
-      throw new Error('Failed to download export');
-    }
-    
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-  },
   getRecommendedTools: (projectId: string) =>
     fetchApi<{
       recommendations: { tool: AssessmentDefinition; confidence: number; recommended: boolean }[];

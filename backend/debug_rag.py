@@ -10,7 +10,6 @@ from sqlalchemy import select, func, text
 from app.core.database import AsyncSessionLocal
 from app.models.project import Project
 from app.models.evidence import EvidenceDoc, EvidenceChunk
-from app.models.memo import MemoVersion
 from app.services.rag import RAGService
 
 
@@ -89,30 +88,7 @@ async def diagnose_rag(project_id_str: str):
         
         print()
         
-        # 4. Check memo versions
-        memo_result = await db.execute(
-            select(MemoVersion)
-            .where(MemoVersion.project_id == project_id)
-            .order_by(MemoVersion.created_at.desc())
-        )
-        memos = memo_result.scalars().all()
-        
-        print(f"📝 Memo versions: {len(memos)}")
-        if memos:
-            latest = memos[0]
-            content = latest.content
-            citations = content.get("citations", [])
-            print("   Latest memo:")
-            print(f"   - Created: {latest.created_at}")
-            print(f"   - Citations: {len(citations)}")
-            if citations:
-                for citation in citations[:3]:  # Show first 3
-                    print(f"      [{citation['number']}] {citation['source_type']}: {citation['source_title']}")
-            else:
-                print("   ❌ No citations in latest memo")
-        print()
-        
-        # 5. Check embeddings are actually created
+        # 4. Check embeddings are actually created
         if docs:
             sample_chunk_result = await db.execute(
                 select(EvidenceChunk)
@@ -128,7 +104,7 @@ async def diagnose_rag(project_id_str: str):
                     print("❌ Sample chunk has NULL embedding!")
             print()
         
-        # 6. Test vector search directly
+        # 5. Test vector search directly
         if docs:
             print("🧪 Testing raw vector search...")
             # Get a sample query embedding

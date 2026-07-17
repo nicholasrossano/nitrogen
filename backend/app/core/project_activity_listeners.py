@@ -26,7 +26,6 @@ def _register_child_listeners() -> None:
     from app.models.chat import CoreChat, CoreChatMessage
     from app.models.evidence import EvidenceDoc, EvidenceChunk
     from app.models.project_material import ProjectMaterial
-    from app.models.memo import MemoVersion
 
     def bump_from_assessment(mapper, connection, target):
         _bump_project_ts(connection, target.project_id)
@@ -56,12 +55,6 @@ def _register_child_listeners() -> None:
 
     event.listen(ProjectMaterial, "after_insert", bump_from_material, propagate=True)
     event.listen(ProjectMaterial, "after_update", bump_from_material, propagate=True)
-
-    def bump_from_memo(mapper, connection, target):
-        _bump_project_ts(connection, target.project_id)
-
-    event.listen(MemoVersion, "after_insert", bump_from_memo, propagate=True)
-    event.listen(MemoVersion, "after_update", bump_from_memo, propagate=True)
 
     def bump_from_core_message(mapper, connection, target: CoreChatMessage) -> None:
         row = connection.execute(
