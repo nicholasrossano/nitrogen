@@ -59,7 +59,6 @@ interface ProjectWorkspaceEditorPanelProps {
   onOpenAssessmentActivityLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
   onOpenChatSession?: (chat: { chatId: string; title?: string | null }) => void;
   onOpenDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
-  onExportDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void | Promise<void>;
   onAssessmentInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
   onAssessmentApprovalChange?: () => void;
   onAssessmentEngaged?: (instanceId: string) => void;
@@ -85,7 +84,6 @@ export function ProjectWorkspaceEditorPanel({
   onOpenAssessmentActivityLog,
   onOpenChatSession,
   onOpenDecisionLog,
-  onExportDecisionLog,
   onAssessmentInspectorStateChange,
   onAssessmentApprovalChange,
   onAssessmentEngaged,
@@ -142,7 +140,6 @@ export function ProjectWorkspaceEditorPanel({
           widgets={chatWidgets}
           projectId={projectId}
           onOpenDecisionLog={onOpenDecisionLog}
-          onExportDecisionLog={onExportDecisionLog}
         />
       );
     }
@@ -160,7 +157,6 @@ export function ProjectWorkspaceEditorPanel({
           onAddToChat={(text) => onSendToChat?.(text, tab.assessmentId)}
           onOpenActivityLog={onOpenAssessmentActivityLog}
           onOpenDecisionLog={onOpenDecisionLog}
-          onExportDecisionLog={onExportDecisionLog}
           onInspectorStateChange={isActive ? onAssessmentInspectorStateChange : undefined}
           onApprovalChange={onAssessmentApprovalChange}
         />

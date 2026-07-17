@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Download, Loader2 } from 'lucide-react';
 
 import type {
   DecisionLogHistoryRow,
@@ -9,9 +10,15 @@ import type {
 import { api } from '@/lib/api';
 import { ReadOnlyDataTable, type ReadOnlyDataTableColumn } from '@/components/ui/ReadOnlyDataTable';
 import { ExportButton, WorkspaceTabLoader } from '@/components/ui';
+import { EditorPanelHeaderIconButton } from '@/components/editor/EditorPanelHeader';
+import {
+  useHasEditorPanelChromeHost,
+  useRegisterEditorPanelChrome,
+} from '@/components/editor/EditorPanelChromeContext';
 
 interface DecisionLogWorkspaceTabProps {
   assessmentInstanceId: string;
+  title?: string;
 }
 
 const historyColumns: ReadOnlyDataTableColumn<DecisionLogHistoryRow>[] = [
@@ -26,6 +33,7 @@ const historyColumns: ReadOnlyDataTableColumn<DecisionLogHistoryRow>[] = [
 
 export function DecisionLogWorkspaceTab({
   assessmentInstanceId,
+  title = 'History',
 }: DecisionLogWorkspaceTabProps) {
   const [report, setReport] = useState<AssessmentDecisionLogReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,9 +57,6 @@ export function DecisionLogWorkspaceTab({
     loadReport();
   }, [loadReport]);
 
-  const historyRows = report?.history_rows ?? [];
-  const subtitle = 'Value-level history for this assessment, including provenance and confirmation metadata.';
-
   const handleExport = useCallback(async () => {
     setExporting(true);
     try {
@@ -69,6 +74,34 @@ export function DecisionLogWorkspaceTab({
     }
   }, [assessmentInstanceId]);
 
+  const handleExportRef = useRef(handleExport);
+  handleExportRef.current = handleExport;
+
+  const hasPanelChromeHost = useHasEditorPanelChromeHost();
+
+  const headerActions = useMemo(
+    () => (
+      <EditorPanelHeaderIconButton
+        label="Export"
+        onClick={() => handleExportRef.current()}
+        disabled={exporting}
+      >
+        {exporting
+          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          : <Download className="h-3.5 w-3.5" />}
+      </EditorPanelHeaderIconButton>
+    ),
+    [exporting],
+  );
+
+  useRegisterEditorPanelChrome({
+    title,
+    actions: headerActions,
+  });
+
+  const historyRows = report?.history_rows ?? [];
+  const subtitle = 'Value-level history for this assessment, including provenance and confirmation metadata.';
+
   if (loading) {
     return <WorkspaceTabLoader />;
   }
@@ -85,10 +118,12 @@ export function DecisionLogWorkspaceTab({
             <h1 className="text-lg font-semibold text-text-primary">History</h1>
             <p className="mt-1 text-sm text-text-tertiary">{subtitle}</p>
           </div>
-          <ExportButton
-            onClick={handleExport}
-            loading={exporting}
-          />
+          {!hasPanelChromeHost ? (
+            <ExportButton
+              onClick={handleExport}
+              loading={exporting}
+            />
+          ) : null}
         </div>
 
         <ReadOnlyDataTable
