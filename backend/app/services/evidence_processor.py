@@ -259,6 +259,14 @@ async def process_evidence_doc(
                 except Exception:
                     logger.warning("Could not refresh variables after evidence processing", exc_info=True)
             await db.commit()
+            if initiative is not None:
+                from app.services.project_status import schedule_project_status_refresh
+
+                schedule_project_status_refresh(
+                    initiative.id,
+                    source="evidence_indexed",
+                    user_id=user_id,
+                )
         except Exception as exc:  # noqa: BLE001
             logger.error(
                 "Embedding/index failed for evidence doc %s: %s",
