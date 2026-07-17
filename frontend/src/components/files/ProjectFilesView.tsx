@@ -221,8 +221,6 @@ export function ProjectFilesView({
         const ext = file.export_format ?? 'docx';
         const filename = safeFilename(file.title, ext);
         await api.downloadDeliverable(projectId, file.id, filename);
-        // If this was an unexported memo, refresh so the row shows "Exported"
-        if (file.output_type === 'memo' && !file.exported) loadFiles();
       }
     } catch (err) {
       console.error('Download failed:', err);

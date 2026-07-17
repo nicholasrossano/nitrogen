@@ -12,7 +12,6 @@ def build_export_handlers(handlers: dict[str, Any]) -> dict[str, Any]:
     broad move; this file owns the first-party output-type catalog.
     """
     return {
-        "memo": handlers["memo"],
         "lcoe": handlers["lcoe"],
         "carbon": handlers["carbon"],
         "solar": handlers["solar"],

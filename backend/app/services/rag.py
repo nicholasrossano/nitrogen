@@ -192,37 +192,3 @@ class RAGService:
             for row in rows
         ]
     
-    async def retrieve_for_memo_sections(
-        self,
-        project_id: UUID,
-    ) -> dict[str, list[RetrievedChunk]]:
-        """
-        Retrieve chunks for each memo section.
-        
-        Returns a dict mapping section names to relevant chunks.
-        """
-        sources = ["evidence"]
-        
-        # Different queries for different sections
-        section_queries = {
-            "executive_summary": "What is the main goal and approach of this initiative? What are the key outcomes expected?",
-            "recommendation": "What evidence supports or challenges this initiative? What are the success factors?",
-            "evidence_summary": "What evidence exists about similar interventions? What were the outcomes and lessons learned?",
-            "risks_and_assumptions": "What are the risks, challenges, and assumptions? What could go wrong?",
-        }
-        
-        import asyncio
-
-        async def _fetch_section(section: str, query: str) -> tuple[str, list[RetrievedChunk]]:
-            chunks = await self.retrieve(
-                query=query,
-                project_id=project_id,
-                sources=sources,
-                evidence_top_k=3,
-            )
-            return section, chunks
-
-        pairs = await asyncio.gather(
-            *[_fetch_section(s, q) for s, q in section_queries.items()]
-        )
-        return dict(pairs)

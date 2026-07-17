@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.execution_context import ExecutionContext
 from app.models.evidence import EvidenceChunk, EvidenceDoc
-from app.models.memo import MemoVersion
 from app.models.assessment_instance import AssessmentInstance
 from app.models.project_material import ProjectMaterial
 
@@ -84,14 +83,6 @@ class ResourceRegistry:
         uris.extend(
             f"nitrogen://projects/{project_id}/materials/{material_id}"
             for material_id in materials
-        )
-
-        memos = (
-            await db.execute(select(MemoVersion.id).where(MemoVersion.project_id == project_id))
-        ).scalars().all()
-        uris.extend(
-            f"nitrogen://projects/{project_id}/memos/{version_id}"
-            for version_id in memos
         )
 
         instances = (

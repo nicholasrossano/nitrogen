@@ -9,194 +9,11 @@ import re
 from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_project_viewer
-from app.core.storage import get_storage
 from app.core.filename_utils import safe_content_disposition
 from app.models.chat import CoreChat, CoreChatMessage
-from app.models.memo import MemoVersion
-from app.schemas.memo import ExportRequest, ExportResponse, MemoContent
-from app.services.docx_exporter import DocxExporterService
 from app.domain.registry import build_export_handlers
 
 router = APIRouter()
-
-
-@router.post("/projects/{project_id}/export", response_model=ExportResponse)
-async def export_memo(
-    project_id: str,
-    data: ExportRequest,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
-):
-    """Export memo to DOCX"""
-    import logging
-    logger = logging.getLogger(__name__)
-    
-    try:
-        logger.info(f"Export request for initiative {project_id} by user {user.uid}")
-        
-        initiative = await require_project_viewer(db, project_id, user)
-        
-        # Get memo version
-        if data.memo_version_id:
-            memo_result = await db.execute(
-                select(MemoVersion).where(
-                    MemoVersion.id == data.memo_version_id,
-                    MemoVersion.project_id == initiative.id,
-                )
-            )
-        else:
-            memo_result = await db.execute(
-                select(MemoVersion)
-                .where(MemoVersion.project_id == initiative.id)
-                .order_by(MemoVersion.created_at.desc())
-                .limit(1)
-            )
-        
-        memo = memo_result.scalar_one_or_none()
-        
-        if not memo:
-            logger.warning(f"No memo found for initiative {project_id}")
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="No memo found to export",
-            )
-        
-        logger.info(f"Found memo {memo.id} with keys: {list(memo.content.keys())}")
-        
-        # Generate DOCX - Handle both old flat structure and new sections structure
-        exporter = DocxExporterService()
-        
-        # Check if memo uses new sections format
-        if "sections" in memo.content:
-            logger.info("Memo uses new sections format, generating with sections")
-            docx_bytes = exporter.generate_from_sections(
-                memo_content=memo.content,
-                initiative_title=initiative.title or "Untitled Project",
-            )
-        else:
-            logger.info("Memo uses legacy format, generating with MemoContent schema")
-            memo_content = MemoContent(**memo.content)
-            docx_bytes = exporter.generate(
-                memo_content=memo_content,
-                initiative_title=initiative.title or "Untitled Project",
-            )
-        
-        logger.info(f"DOCX generated ({len(docx_bytes)} bytes), saving to storage...")
-        
-        # Save to storage
-        storage = get_storage()
-        filename = f"memo_{initiative.title or 'untitled'}_{memo.id}.docx".replace(" ", "_")
-        export_path = await storage.save(docx_bytes, filename, folder="exports")
-        
-        logger.info(f"Saved to {export_path}, updating memo record...")
-        
-        # Update memo with export path
-        memo.export_path = export_path
-        await db.commit()
-        
-        logger.info(f"Export complete for memo {memo.id}")
-        
-        return ExportResponse(
-            success=True,
-            export_id=memo.id,
-            download_url=f"/api/v1/exports/{memo.id}",
-            filename=filename,
-        )
-    
-    except HTTPException:
-        # Re-raise HTTP exceptions as-is
-        raise
-    except Exception as e:
-        # Log and wrap unexpected errors
-        logger.error(f"Export failed for initiative {project_id}: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Export failed. Please try again.",
-        )
-
-
-@router.get("/exports/{memo_id}")
-async def download_export(
-    memo_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
-):
-    """Download an exported DOCX file"""
-    # Get memo and verify access
-    memo_result = await db.execute(
-        select(MemoVersion).where(MemoVersion.id == memo_id)
-    )
-    memo = memo_result.scalar_one_or_none()
-    
-    if not memo:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Export not found",
-        )
-    
-    initiative = await require_project_viewer(db, memo.project_id, user)
-    
-    if not memo.export_path:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Export file not found. Generate export first.",
-        )
-    
-    # Get file from storage
-    storage = get_storage()
-    file_bytes = await storage.load(memo.export_path)
-    
-    filename = f"memo_{initiative.title or 'untitled'}.docx".replace(" ", "_")
-    
-    # Return file
-    return Response(
-        content=file_bytes,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={
-            "Content-Disposition": safe_content_disposition(filename)
-        }
-    )
-
-
-
-
-async def _handle_memo_export(content, safe_title, initiative, project_id, db, user):
-    memo_res = await db.execute(
-        select(MemoVersion)
-        .where(MemoVersion.project_id == initiative.id)
-        .order_by(MemoVersion.created_at.desc())
-        .limit(1)
-    )
-    memo = memo_res.scalar_one_or_none()
-    if not memo:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No memo found")
-
-    storage = get_storage()
-    if memo.export_path:
-        file_bytes = await storage.load(memo.export_path)
-    else:
-        exporter = DocxExporterService()
-        if "sections" in (memo.content or {}):
-            file_bytes = exporter.generate_from_sections(
-                memo_content=memo.content,
-                initiative_title=initiative.title or "Untitled",
-            )
-        else:
-            memo_content_obj = MemoContent(**memo.content)
-            file_bytes = exporter.generate(
-                memo_content=memo_content_obj,
-                initiative_title=initiative.title or "Untitled",
-            )
-        export_path = await storage.save(file_bytes, f"{safe_title}_{memo.id}.docx", folder="exports")
-        memo.export_path = export_path
-        await db.commit()
-
-    return Response(
-        content=file_bytes,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.docx")},
-    )
-
 
 
 async def _handle_lcoe_export(content, safe_title, initiative, project_id, db, user):
@@ -274,7 +91,6 @@ async def _handle_template_export(content, safe_title, initiative, project_id, d
 
 
 _EXPORT_HANDLERS: dict[str, Any] = build_export_handlers({
-    "memo": _handle_memo_export,
     "lcoe": _handle_lcoe_export,
     "carbon": _handle_carbon_export,
     "solar": _handle_solar_export,
@@ -299,26 +115,8 @@ async def export_deliverable(
     deliverables: dict[str, Any] = initiative.get_deliverables_dict()
     data = deliverables.get(tool_id)
 
-    # Fallback: tool_id might be a MemoVersion UUID (legacy path)
     if data is None:
-        try:
-            memo_uuid = UUID(tool_id)
-            memo_res = await db.execute(
-                select(MemoVersion).where(
-                    MemoVersion.id == memo_uuid,
-                    MemoVersion.project_id == initiative.id,
-                )
-            )
-            memo = memo_res.scalar_one_or_none()
-            if not memo:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliverable not found")
-            data = {
-                "output_type": "memo",
-                "title": (memo.content or {}).get("title", "memo"),
-                "content": memo.content or {},
-            }
-        except ValueError:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliverable not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliverable not found")
 
     output_type: str = data.get("output_type", "document")
     content: dict = data.get("content") or {}

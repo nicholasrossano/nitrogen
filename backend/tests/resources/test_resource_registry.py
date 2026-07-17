@@ -14,11 +14,10 @@ def test_resource_registry_contains_required_baseline_resource_types() -> None:
         "evidence_doc",
         "evidence_chunk",
         "project_material",
-        "memo_version",
         "assessment_instance",
         "artifact",
     }.issubset(resource_types)
-    assert len(resource_types) >= 7
+    assert len(resource_types) >= 6
 
 
 @pytest.mark.parametrize(
@@ -28,7 +27,6 @@ def test_resource_registry_contains_required_baseline_resource_types() -> None:
         (f"nitrogen://projects/{uuid4()}/evidence/docs/{uuid4()}", "evidence_doc"),
         (f"nitrogen://projects/{uuid4()}/evidence/chunks/{uuid4()}", "evidence_chunk"),
         (f"nitrogen://projects/{uuid4()}/materials/{uuid4()}", "project_material"),
-        (f"nitrogen://projects/{uuid4()}/memos/{uuid4()}", "memo_version"),
         (f"nitrogen://projects/{uuid4()}/assessments/{uuid4()}", "assessment_instance"),
         (f"nitrogen://projects/{uuid4()}/artifacts/{uuid4()}", "artifact"),
     ],

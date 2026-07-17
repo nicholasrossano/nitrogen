@@ -17,7 +17,6 @@ from app.core.upload_types import (
 )
 from app.models.evidence import EvidenceDoc
 from app.models.google_drive import DriveLinkedFile
-from app.models.memo import MemoVersion
 from app.models.project_material import ProjectMaterial
 from app.schemas.project_material import (
     ProjectMaterialResponse,
@@ -375,14 +374,6 @@ async def list_project_files(
 
     deliverables = initiative.get_deliverables_dict()
 
-    memo_result = await db.execute(
-        select(MemoVersion)
-        .where(MemoVersion.project_id == initiative.id)
-        .order_by(MemoVersion.created_at.desc())
-        .limit(1)
-    )
-    latest_memo = memo_result.scalar_one_or_none()
-
     for tool_id, data in deliverables.items():
         if "error" in data and "title" not in data:
             continue
@@ -395,9 +386,6 @@ async def list_project_files(
 
         exported = False
         download_url = None
-        if output_type == "memo" and latest_memo and latest_memo.export_path:
-            exported = True
-            download_url = f"/api/v1/exports/{latest_memo.id}"
 
         if output_type == "template":
             material_id = content.get("material_id") if isinstance(content, dict) else None
@@ -447,32 +435,12 @@ async def delete_deliverable(
     initiative = await require_project_editor(db, project_id, user)
 
     removed = await assessment_service.remove_instance_by_tool(db, initiative.id, tool_id)
-    if removed:
-        await db.commit()
-    else:
-        # tool_id can be a MemoVersion UUID when not tied to an assessment instance
-        try:
-            from uuid import UUID as _UUID
-            memo_uuid = _UUID(tool_id)
-            memo_result = await db.execute(
-                select(MemoVersion).where(
-                    MemoVersion.id == memo_uuid,
-                    MemoVersion.project_id == initiative.id,
-                )
-            )
-            memo = memo_result.scalar_one_or_none()
-            if not memo:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Deliverable not found",
-                )
-            await db.delete(memo)
-            await db.commit()
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Deliverable not found",
-            )
+    if not removed:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Deliverable not found",
+        )
+    await db.commit()
 
     return {"success": True}
 

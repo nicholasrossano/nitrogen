@@ -185,7 +185,6 @@ _alias(
 )
 
 # Exports
-_alias("/initiatives/{project_id}/export", exports.export_memo, ["POST"])
 _alias(
     "/initiatives/{project_id}/deliverables/{tool_id}/export",
     exports.export_deliverable,

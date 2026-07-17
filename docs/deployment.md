@@ -111,19 +111,17 @@ NEXT_PUBLIC_FIREBASE_APP_ID=...
 
 ### Export Endpoint Failing
 
-**Symptom**: 500 error when exporting memos
+**Symptom**: 500 error when exporting an assessment report
 
 **Common causes**:
-1. Missing memo in database
-2. File system permissions (ensure `./exports` directory exists)
-3. Missing Python dependencies (`python-docx`, `docxtpl`, `openpyxl`)
-4. Invalid memo content structure
+1. File system permissions (ensure `./exports` directory exists)
+2. Missing Python dependencies (`python-docx`, `openpyxl`)
+3. Invalid assessment writeup content structure
 
 **Debug steps**:
 1. Check Railway logs for detailed error message
-2. Test memo exists: `GET /api/v1/projects/{id}/memo`
-3. Verify exports directory created in Dockerfile
-4. Test with a simple memo first
+2. Verify exports directory created in Dockerfile
+3. Test with a simple assessment export first
 
 ### Database Connection Issues
 

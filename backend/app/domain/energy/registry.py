@@ -15,7 +15,6 @@ def register_adapters(registry) -> None:
     """Register shipped adapters with the platform adapter registry."""
     from app.domain.energy.adapters.carbon_adapter import CarbonAdapter
     from app.domain.energy.adapters.lcoe_adapter import LCOEAdapter
-    from app.adapters.memo_generation_adapter import MemoGenerationAdapter
     from app.adapters.openalex_adapter import OpenAlexAdapter
     from app.domain.energy.adapters.pvwatts_adapter import PVWattsAdapter
     from app.adapters.rag_adapter import RAGAdapter
@@ -27,5 +26,4 @@ def register_adapters(registry) -> None:
     registry.register(RetrievalAdapter())
     registry.register(OpenAlexAdapter())
     registry.register(RAGAdapter())
-    registry.register(MemoGenerationAdapter())
 

@@ -1,6 +1,5 @@
 from app.models.project import Project, ProjectStage
 from app.models.evidence import EvidenceDoc, EvidenceChunk, EvidenceDocStatus
-from app.models.memo import MemoVersion, Citation
 from app.models.chat import CoreChat, CoreChatMessage
 from app.models.provenance import ProvenanceTrace
 from app.models.project_material import ProjectMaterial
@@ -31,8 +30,6 @@ __all__ = [
     "EvidenceDoc",
     "EvidenceChunk",
     "EvidenceDocStatus",
-    "MemoVersion",
-    "Citation",
     "CoreChat",
     "CoreChatMessage",
     "ProvenanceTrace",

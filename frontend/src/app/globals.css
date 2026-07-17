@@ -284,15 +284,6 @@ body {
   @apply font-semibold text-text-primary;
 }
 
-/* Citation styling - accent color */
-.citation {
-  @apply text-accent font-medium cursor-help;
-}
-
-.citation:hover {
-  @apply text-accent-anchor underline;
-}
-
 /* Card base — soft shadow instead of hard border */
 .card {
   @apply bg-surface rounded-lg shadow-card;

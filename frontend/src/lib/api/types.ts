@@ -594,26 +594,6 @@ export interface ChatResponse {
   trigger_tools_next?: boolean;
 }
 
-export interface MemoContent {
-  title: string;
-  date: string;
-  executive_summary: string;
-  recommendation: 'proceed' | 'hold' | 'reject';
-  recommendation_rationale: string;
-  evidence_summary: string;
-  risks_and_assumptions: string;
-  open_questions: string[];
-  citations: Citation[];
-}
-
-export interface Citation {
-  number: number;
-  source_type: 'evidence' | 'corpus';
-  source_title: string;
-  excerpt: string;
-  chunk_id: string;
-}
-
 export type EvidenceProcessingStatus =
   | 'uploaded'
   | 'processing'

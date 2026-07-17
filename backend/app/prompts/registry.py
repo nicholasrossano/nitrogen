@@ -1,9 +1,7 @@
 """Prompt registry — single place to enumerate all system prompts used by Nitrogen services."""
 
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Literal
-from app.domain.resolver import get_domain_prompt_path
 
 
 @dataclass
@@ -183,24 +181,6 @@ class PromptRegistry:
             template=DEEP_DIVE_SYSTEM_PROMPT,
             parameters=[],
             owning_service="deep_dive",
-            visibility="internal",
-        ))
-
-        # --- memo generation (file-loaded) ---
-        _memo_path = Path(__file__).resolve().parents[2] / get_domain_prompt_path("memo_generation.txt")
-        _memo_template = _memo_path.read_text(encoding="utf-8") if _memo_path.exists() else ""
-
-        self._register(PromptDefinition(
-            id="memo_generation",
-            name="Memo Generation System Prompt",
-            description=(
-                "System prompt for the memo generation step, loaded from "
-                "domain/energy/prompts/memo_generation.txt. Dynamic initiative summary "
-                "and context are injected via the user message, not format slots."
-            ),
-            template=_memo_template,
-            parameters=[],
-            owning_service="memo_generator",
             visibility="internal",
         ))
 

@@ -31,7 +31,7 @@ import { useDemoMode } from '@/hooks/useDemoMode';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { MOBILE_NAV_CHIP_HEADER_PADDING_LEFT } from '@/components/ui/chatSidebarLayout';
 
-const DELIVERABLE_WIDGET_TYPES = ['memo_viewer', 'checklist_viewer'];
+const DELIVERABLE_WIDGET_TYPES = ['checklist_viewer'];
 const CHAT_MODULE_WIDGET_TYPES = new Set([
   'assessment_workspace',
   'lcoe_inputs',

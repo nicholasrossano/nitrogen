@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import {
   api,
   Project,
-  MemoContent,
   EvidenceDoc,
   ProjectPlan,
   ProjectMaterial,
@@ -32,8 +31,6 @@ interface ProjectState {
    * error/escape hatch instead of spinning forever once an id lands here.
    */
   projectAccessErrors: Record<string, { status: number; message: string }>;
-  memo: MemoContent | null;
-  memoId: string | null;
   evidenceDocs: EvidenceDoc[];
   projectMaterials: ProjectMaterial[];
   /** Which projectId `projectMaterials` currently belongs to. */
@@ -61,7 +58,6 @@ interface ProjectState {
   uploadEvidence: (id: string, file: File) => Promise<void>;
   pasteEvidence: (id: string, content: string, title?: string) => Promise<void>;
   deleteEvidence: (evidenceId: string) => Promise<void>;
-  exportMemo: (id: string) => Promise<void>;
   selectTools: (id: string, toolIds: string[]) => Promise<void>;
   generateProjectOverview: (id: string) => Promise<Project>;
   updateTitle: (id: string, title: string) => Promise<void>;
@@ -171,8 +167,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   project: null,
   projectsById: {},
   projectAccessErrors: {},
-  memo: null,
-  memoId: null,
   evidenceDocs: [],
   projectMaterials: [],
   materialsProjectId: null,
@@ -465,21 +459,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  exportMemo: async (id: string) => {
-    const { memoId } = get();
-    set({ loading: true, error: null });
-    try {
-      const response = await api.exportMemo(id, memoId || undefined);
-      await api.downloadExport(response.export_id);
-      set({ loading: false });
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to export',
-        loading: false,
-      });
-    }
-  },
-
   selectTools: async (id: string, toolIds: string[]) => {
     set({ loading: true, error: null });
     try {
@@ -648,8 +627,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set({
       project: null,
       // Keep projectsById warm across soft resets so titles don't flash.
-      memo: null,
-      memoId: null,
       evidenceDocs: [],
       projectMaterials: [],
       materialsProjectId: null,
