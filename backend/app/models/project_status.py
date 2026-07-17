@@ -29,6 +29,8 @@ class ProjectStatusCategory(Base):
     label: Mapped[str] = mapped_column(String(255), nullable=False)
     definition_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
     criteria: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Null means the seeded system-default definition; set when a user authors/edits it.
+    defined_by_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

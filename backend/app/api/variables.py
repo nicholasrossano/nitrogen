@@ -134,6 +134,13 @@ async def create_variable_from_chat(
     initiative.touch()
     await db.commit()
     await db.refresh(variable)
+    from app.services.project_status import schedule_project_status_refresh
+
+    schedule_project_status_refresh(
+        initiative.id,
+        source="variable_promoted",
+        user_id=user.uid,
+    )
     return variable
 
 
@@ -169,6 +176,13 @@ async def create_variable(
     initiative.touch()
     await db.commit()
     await db.refresh(variable)
+    from app.services.project_status import schedule_project_status_refresh
+
+    schedule_project_status_refresh(
+        initiative.id,
+        source="variable_upsert",
+        user_id=user.uid,
+    )
     return variable
 
 
@@ -220,6 +234,13 @@ async def patch_variable(
     initiative.touch()
     await db.commit()
     await db.refresh(updated)
+    from app.services.project_status import schedule_project_status_refresh
+
+    schedule_project_status_refresh(
+        initiative.id,
+        source="variable_updated",
+        user_id=user.uid,
+    )
     return updated
 
 
@@ -242,9 +263,17 @@ async def remove_variable(
     )
     for chat in chats_result.scalars().all():
         await db.delete(chat)
+    project_id = variable.project_id
     await delete_variable(db, variable)
     initiative.touch()
     await db.commit()
+    from app.services.project_status import schedule_project_status_refresh
+
+    schedule_project_status_refresh(
+        project_id,
+        source="variable_deleted",
+        user_id=user.uid,
+    )
     return None
 
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, BookMarked, CheckCircle2, Database, FileText, HelpCircle, Pencil, Plus, RefreshCw, Trash2, Wrench, XCircle } from 'lucide-react';
+import { BookMarked, Database, FileText, Info, Pencil, Plus, RefreshCw, Trash2, Wrench } from 'lucide-react';
 import {
   api,
   type ProjectStatusAssessmentReference,
@@ -13,36 +13,35 @@ import {
 } from '@/lib/api';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import { StatusCategoryEditorModal } from '@/components/project-status/StatusCategoryEditorModal';
-import { getCached, setCached, swrFetch, swrKeys } from '@/lib/swrCache';
+import { ModalShell } from '@/components/ui/ModalShell';
+import { StatusCapsule } from '@/components/ui/StatusCapsule';
+import { Tooltip } from '@/components/ui/Tooltip';
+import { getCached, invalidate, setCached, swrFetch, swrKeys } from '@/lib/swrCache';
 
-const STATUS_META: Record<ProjectStatusLevel, { label: string; className: string; Icon: typeof CheckCircle2 }> = {
+const STATUS_META: Record<ProjectStatusLevel, { label: string; className: string }> = {
   green: {
     label: 'Green',
-    className: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-    Icon: CheckCircle2,
+    className: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   },
   yellow: {
     label: 'Yellow',
-    className: 'border-amber-200 bg-amber-50 text-amber-700',
-    Icon: AlertTriangle,
+    className: 'bg-amber-50 text-amber-700 border-amber-200',
   },
   red: {
     label: 'Red',
-    className: 'border-red-200 bg-red-50 text-red-700',
-    Icon: XCircle,
+    className: 'bg-red-50 text-red-700 border-red-200',
   },
   unknown: {
     label: 'Unknown',
-    className: 'border-slate-200 bg-slate-100 text-slate-600',
-    Icon: HelpCircle,
+    className: 'bg-surface-subtle text-text-secondary border-stroke-subtle',
   },
 };
 
 const CONFIDENCE_META = {
-  high: { bg: 'bg-green-50', text: 'text-green-700', icon: CheckCircle2 },
-  medium: { bg: 'bg-yellow-50', text: 'text-yellow-700', icon: AlertTriangle },
-  low: { bg: 'bg-red-50', text: 'text-red-700', icon: AlertTriangle },
-  unknown: { bg: 'bg-slate-100', text: 'text-slate-600', icon: HelpCircle },
+  high: { label: 'High confidence', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  medium: { label: 'Medium confidence', className: 'bg-amber-50 text-amber-700 border-amber-200' },
+  low: { label: 'Low confidence', className: 'bg-red-50 text-red-700 border-red-200' },
+  unknown: { label: 'Unknown confidence', className: 'bg-surface-subtle text-text-secondary border-stroke-subtle' },
 } as const;
 
 function sourceLabel(sourceType: string): string {
@@ -197,7 +196,10 @@ interface StatusOverviewTableProps {
   initiativeId: string;
   readOnly?: boolean;
   hideRefreshButton?: boolean;
+  /** Bumps to reload status after backend signal-driven recomputes. */
   refreshToken?: number;
+  /** When true, refreshToken triggers a full POST recompute instead of GET polling. */
+  recomputeOnToken?: boolean;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   onOpenWorkspaceAssessment?: (assessment: {
     instanceId: string;
@@ -211,6 +213,7 @@ export function StatusOverviewTable({
   readOnly = false,
   hideRefreshButton = false,
   refreshToken = 0,
+  recomputeOnToken = false,
   onOpenDocument,
   onOpenWorkspaceAssessment,
 }: StatusOverviewTableProps) {
@@ -230,33 +233,41 @@ export function StatusOverviewTable({
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<ProjectStatusCategoryConfig | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ProjectStatusCategoryRow | null>(null);
 
-  const loadStatus = useCallback(async () => {
+  const loadStatus = useCallback(async (options?: { force?: boolean; silent?: boolean }) => {
     setError(null);
     const key = swrKeys.status(initiativeId);
     const cached = getCached<{
       response: ProjectStatusResponse;
       configs: ProjectStatusCategoryConfig[];
     }>(key);
-    if (cached) {
+    if (cached && !options?.force) {
       setStatusData(cached.response);
       setCategoryConfigs(cached.configs);
       setIsLoading(false);
-    } else {
+    } else if (!cached && !options?.silent) {
+      // Only blank the table on a true cold load — not after mutations/polls.
       setIsLoading(true);
     }
     try {
-      const { data } = await swrFetch(key, async () => {
-        const [response, configs] = await Promise.all([
-          api.getProjectStatus(initiativeId),
-          api.listStatusCategories(initiativeId),
-        ]);
-        return { response, configs };
-      });
+      const { data } = await swrFetch(
+        key,
+        async () => {
+          const [response, configs] = await Promise.all([
+            api.getProjectStatus(initiativeId),
+            api.listStatusCategories(initiativeId),
+          ]);
+          return { response, configs };
+        },
+        { force: options?.force === true },
+      );
       setStatusData(data.response);
       setCategoryConfigs(data.configs);
+      return data.response;
     } catch {
       if (!cached) setError('Unable to load status overview right now.');
+      return null;
     } finally {
       setIsLoading(false);
     }
@@ -282,10 +293,44 @@ export function StatusOverviewTable({
     }
   }, [initiativeId]);
 
+  // Explicit overview refresh: full recompute. Signal bumps: poll GET for
+  // backend-scheduled results (files indexed, assessments approved, etc.).
   useEffect(() => {
     if (refreshToken <= 0) return;
-    void onRefresh();
-  }, [onRefresh, refreshToken]);
+    if (recomputeOnToken) {
+      void onRefresh();
+      return;
+    }
+
+    let cancelled = false;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const delaysMs = [0, 2500, 5500, 10000, 16000];
+
+    const stopPolling = () => {
+      cancelled = true;
+      timers.forEach((timer) => clearTimeout(timer));
+    };
+
+    for (const ms of delaysMs) {
+      timers.push(
+        setTimeout(() => {
+          if (cancelled) return;
+          void loadStatus({ force: true, silent: true }).then((response) => {
+            if (cancelled || !response) return;
+            const nextRows = response.categories ?? [];
+            const stillPending = nextRows.some(
+              (row) => row.update_source === 'not_generated' || row.is_stale,
+            );
+            if (!stillPending) stopPolling();
+          });
+        }, ms),
+      );
+    }
+
+    return () => {
+      stopPolling();
+    };
+  }, [loadStatus, onRefresh, recomputeOnToken, refreshToken]);
 
   const rows = useMemo(() => statusData?.categories ?? [], [statusData]);
 
@@ -315,11 +360,40 @@ export function StatusOverviewTable({
     if (readOnly) return;
     setDeletingKey(categoryKey);
     setError(null);
+
+    const previousStatus = statusData;
+    const previousConfigs = categoryConfigs;
+    const nextStatus = statusData
+      ? {
+          ...statusData,
+          categories: statusData.categories.filter((item) => item.category_key !== categoryKey),
+        }
+      : null;
+    const nextConfigs = categoryConfigs.filter((item) => item.category_key !== categoryKey);
+
+    // Optimistic remove so the row disappears without a loading flash.
+    setPendingDelete(null);
+    setStatusData(nextStatus);
+    setCategoryConfigs(nextConfigs);
+    if (nextStatus) {
+      setCached(swrKeys.status(initiativeId), { response: nextStatus, configs: nextConfigs });
+    } else {
+      invalidate(swrKeys.status(initiativeId));
+    }
+
     try {
       await api.deleteStatusCategory(initiativeId, categoryKey);
-      await loadStatus();
-    } catch {
-      setError('Unable to delete category.');
+      await loadStatus({ force: true, silent: true });
+    } catch (err) {
+      setStatusData(previousStatus);
+      setCategoryConfigs(previousConfigs);
+      if (previousStatus) {
+        setCached(swrKeys.status(initiativeId), {
+          response: previousStatus,
+          configs: previousConfigs,
+        });
+      }
+      setError(err instanceof Error && err.message ? err.message : 'Unable to delete category.');
     } finally {
       setDeletingKey(null);
     }
@@ -327,7 +401,7 @@ export function StatusOverviewTable({
 
   return (
     <>
-      <div className="mt-2 rounded-xl border border-black/[0.05] bg-surface-subtle/40">
+      <div className="mt-2 rounded-xl border border-divider bg-white">
         {error ? <p className="px-4 pt-3 text-sm text-red-500">{error}</p> : null}
 
         {isLoading ? (
@@ -336,65 +410,67 @@ export function StatusOverviewTable({
           <div className="divide-y divide-divider">
             {rows.map((row) => {
               const meta = STATUS_META[row.effective_status];
-              const StatusIcon = meta.Icon;
               const confidenceMeta = CONFIDENCE_META[row.confidence];
-              const ConfidenceIcon = confidenceMeta.icon;
               const sourceEntries = (row.retrieved_sources ?? [])
                 .filter((src): src is ProjectStatusSourceReference => Boolean(src?.source_title && src?.source_type))
                 .slice(0, 3);
               const assessmentEntries = (row.relevant_assessments ?? []).slice(0, 3);
+              const infoSummary = (row.criteria_summary || '').trim();
               return (
                 <div key={row.category_key} className="px-4 py-3">
-                  <div className="flex flex-col gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 pt-1">
-                          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">
-                            {row.label}
-                          </p>
-                          {row.criteria_summary ? (
-                            <p className="mt-1 text-xs text-text-tertiary line-clamp-2">{row.criteria_summary}</p>
+                  <div className="flex items-stretch gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1">
+                        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">
+                          {row.label}
+                        </p>
+                        <div className="flex items-center">
+                          {infoSummary ? (
+                            <Tooltip content={infoSummary} width={280}>
+                              <button
+                                type="button"
+                                className="rounded-lg p-1.5 text-text-tertiary hover:bg-surface-subtle hover:text-text-primary"
+                                aria-label={`About ${row.label}`}
+                              >
+                                <Info className="h-3.5 w-3.5" />
+                              </button>
+                            </Tooltip>
                           ) : null}
-                        </div>
-                        <div className="flex flex-wrap items-center justify-end gap-2">
                           {!readOnly ? (
-                            <div className="flex items-center gap-1">
+                            <>
                               <button
                                 type="button"
                                 onClick={() => void openEditEditor(row)}
-                                className="rounded-lg p-1.5 text-text-tertiary hover:bg-white hover:text-text-primary"
+                                className="rounded-lg p-1.5 text-text-tertiary hover:bg-surface-subtle hover:text-text-primary"
                                 aria-label={`Edit ${row.label}`}
                               >
                                 <Pencil className="h-3.5 w-3.5" />
                               </button>
                               <button
                                 type="button"
-                                onClick={() => void onDeleteCategory(row.category_key)}
+                                onClick={() => setPendingDelete(row)}
                                 disabled={deletingKey === row.category_key}
-                                className="rounded-lg p-1.5 text-text-tertiary hover:bg-white hover:text-red-600"
+                                className="rounded-lg p-1.5 text-text-tertiary hover:bg-surface-subtle hover:text-red-600"
                                 aria-label={`Delete ${row.label}`}
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
-                            </div>
+                            </>
                           ) : null}
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${meta.className}`}>
-                            <StatusIcon className="h-3 w-3" />
-                            <span className="text-[10px] font-medium uppercase tracking-wider">{meta.label}</span>
-                          </span>
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${confidenceMeta.bg}`}>
-                            <ConfidenceIcon className={`h-3 w-3 ${confidenceMeta.text}`} />
-                            <span className={`text-[10px] font-medium uppercase tracking-wider ${confidenceMeta.text}`}>
-                              {row.confidence} confidence
-                            </span>
-                          </span>
                         </div>
                       </div>
                       <p className="mt-1 text-sm leading-relaxed text-text-secondary">
                         {row.critical_insight || row.rationale}
                       </p>
+                    </div>
+
+                    <div className="flex shrink-0 flex-col items-end self-stretch">
+                      <div className="flex flex-col items-end gap-1.5 pt-0.5">
+                        <StatusCapsule size="md" className={meta.className}>{meta.label}</StatusCapsule>
+                        <StatusCapsule size="md" className={confidenceMeta.className}>{confidenceMeta.label}</StatusCapsule>
+                      </div>
                       {(sourceEntries.length > 0 || assessmentEntries.length > 0) ? (
-                        <div className="mt-2 flex justify-end">
+                        <div className="mt-auto pt-2">
                           <StatusSourcesMenu
                             sources={sourceEntries}
                             assessments={assessmentEntries}
@@ -440,8 +516,44 @@ export function StatusOverviewTable({
           initiativeId={initiativeId}
           category={editingCategory}
           onClose={() => setEditorOpen(false)}
-          onSaved={() => void loadStatus()}
+          onSaved={() => void loadStatus({ force: true, silent: true })}
         />
+      ) : null}
+
+      {pendingDelete ? (
+        <ModalShell onClose={() => setPendingDelete(null)} maxWidth="max-w-sm">
+          <div className="px-5 py-4 border-b border-divider">
+            <h2 className="text-base font-semibold text-text-primary">Delete category?</h2>
+          </div>
+          <div className="px-5 py-4 space-y-2">
+            <p className="text-sm text-text-secondary">
+              Remove <span className="font-medium text-text-primary">{pendingDelete.label}</span> from
+              this project&apos;s status overview? This deletes it for everyone with access to the
+              project.
+            </p>
+          </div>
+          <div className="flex justify-end gap-2 border-t border-divider px-5 py-4">
+            <button
+              type="button"
+              onClick={() => setPendingDelete(null)}
+              disabled={deletingKey === pendingDelete.category_key}
+              className="btn-secondary"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void onDeleteCategory(pendingDelete.category_key)}
+              disabled={deletingKey === pendingDelete.category_key}
+              className="btn-danger"
+            >
+              {deletingKey === pendingDelete.category_key ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : null}
+              Delete
+            </button>
+          </div>
+        </ModalShell>
       ) : null}
     </>
   );

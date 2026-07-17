@@ -40,6 +40,7 @@ class ProjectStatusCategoryConfig(BaseModel):
     label: str
     definition_text: str
     criteria: ProjectStatusCriteria | None = None
+    defined_by_email: str | None = None
     is_active: bool = True
     created_at: datetime
     updated_at: datetime
