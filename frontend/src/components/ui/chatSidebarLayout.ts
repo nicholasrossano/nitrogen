@@ -15,7 +15,7 @@ export const CHAT_EDITOR_PANEL_WIDTH_STORAGE_KEY = 'nitrogen-chat-editor-panel-w
 
 /**
  * Extra width reserved when AssessmentWorkspace hosts a companion column
- * (deep dive / activity log). Keep in sync with CompanionSidePanel.
+ * (deep dive / agent log). Keep in sync with CompanionSidePanel.
  */
 export const COMPANION_SIDE_PANEL_WIDTH_PX = 420;
 export const CHAT_EDITOR_PANEL_WITH_COMPANION_MIN_WIDTH_PX =

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any
 from urllib.parse import urlparse
 
@@ -19,6 +20,38 @@ from app.core.model_router import resolve
 logger = logging.getLogger(__name__)
 
 WEB_SEARCH_TIMEOUT_SECONDS = 90.0
+
+_MARKDOWN_LINK_RE = re.compile(r"\[([^\]]+)\]\((https?://[^)\s]+)\)")
+
+
+def _annotation_field(ann: Any, key: str, default: Any = None) -> Any:
+    """Read annotation fields from SDK objects or plain dicts."""
+    if isinstance(ann, dict):
+        return ann.get(key, default)
+    return getattr(ann, key, default)
+
+
+def _citations_from_markdown_links(text: str) -> list[dict[str, Any]]:
+    """Fallback citation extraction when providers embed `([label](url))` in prose.
+
+    Duplicate URLs are preserved across spans so each sentence can keep its cite.
+    """
+    citations: list[dict[str, Any]] = []
+    for match in _MARKDOWN_LINK_RE.finditer(text or ""):
+        url = (match.group(2) or "").strip()
+        if not url:
+            continue
+        label = (match.group(1) or "").strip()
+        citations.append(
+            {
+                "url": url,
+                "title": label or urlparse(url).netloc.lstrip("www.") or url,
+                "snippet": "",
+                "start_index": match.start(),
+                "end_index": match.end(),
+            }
+        )
+    return citations
 
 
 def _default_search_input(query: str) -> str:
@@ -103,7 +136,9 @@ async def _openrouter_online_search(
             user_id, target.billing_model, resp, db, is_byok=target.is_byok
         )
     text = resp.choices[0].message.content or ""
-    citations: list[dict[str, str]] = []
+    citations: list[dict[str, Any]] = _citations_from_markdown_links(text)
+    if citations:
+        return text, citations
     for token in text.split():
         if token.startswith("http"):
             url = token.rstrip(".,)")
@@ -122,27 +157,30 @@ def _parse_openai_responses_output(resp: Any) -> tuple[str, list[dict[str, Any]]
     # Running offset into the joined summary text ("\n".join(parts)).
     text_offset = 0
 
-    for item in resp.output:
-        if getattr(item, "type", None) != "message":
+    output_items = _annotation_field(resp, "output", None) or getattr(resp, "output", []) or []
+    for item in output_items:
+        if _annotation_field(item, "type") != "message":
             continue
-        for block in item.content:
-            text = getattr(block, "text", "") or ""
+        content_blocks = _annotation_field(item, "content", None) or []
+        for block in content_blocks:
+            text = _annotation_field(block, "text", "") or ""
             if text:
                 if summary_parts:
                     text_offset += 1  # account for the join newline
                 summary_parts.append(text)
-            for ann in getattr(block, "annotations", []) or []:
-                if getattr(ann, "type", None) != "url_citation":
+            for ann in _annotation_field(block, "annotations", None) or []:
+                if _annotation_field(ann, "type") != "url_citation":
                     continue
-                url = getattr(ann, "url", "") or ""
+                url = _annotation_field(ann, "url", "") or ""
                 if not url:
                     continue
-                start_index = getattr(ann, "start_index", None)
-                end_index = getattr(ann, "end_index", None)
+                start_index = _annotation_field(ann, "start_index")
+                end_index = _annotation_field(ann, "end_index")
+                title = _annotation_field(ann, "title", "") or urlparse(url).netloc
                 citations.append(
                     {
                         "url": url,
-                        "title": getattr(ann, "title", "") or urlparse(url).netloc,
+                        "title": title,
                         "snippet": text[:400] if text else "",
                         "start_index": (
                             start_index + text_offset if isinstance(start_index, int) else None
@@ -155,4 +193,7 @@ def _parse_openai_responses_output(resp: Any) -> tuple[str, list[dict[str, Any]]
             if text:
                 text_offset += len(text)
 
-    return "\n".join(summary_parts), citations
+    summary = "\n".join(summary_parts)
+    if not citations:
+        citations = _citations_from_markdown_links(summary)
+    return summary, citations

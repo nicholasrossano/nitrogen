@@ -438,8 +438,8 @@ export function ChatContextStack({
                 await uploadMaterial(projectId, file);
                 await loadProjectMaterials();
               }}
-              onDeleteMaterial={async (materialId) => {
-                await deleteMaterial(materialId);
+              onDeleteMaterial={async (materialId, source) => {
+                await deleteMaterial(materialId, source);
                 await loadProjectMaterials();
               }}
             />

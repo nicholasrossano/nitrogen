@@ -47,6 +47,53 @@ def build_decision_log(
     }
 
 
+def resolve_actor_display(
+    *,
+    email: str | None,
+    user_id: str | None,
+    email_by_uid: dict[str, str] | None = None,
+) -> str:
+    """Prefer email over Firebase UID for History / export actor columns."""
+    email_clean = (email or "").strip()
+    if email_clean:
+        return email_clean
+    uid = (user_id or "").strip()
+    if not uid:
+        return "—"
+    if uid.startswith("system:"):
+        return "System"
+    if "@" in uid:
+        return uid
+    mapped = (email_by_uid or {}).get(uid)
+    if mapped and str(mapped).strip():
+        return str(mapped).strip()
+    return uid
+
+
+def collect_actor_user_ids(workflow_state: dict[str, Any]) -> set[str]:
+    """UIDs that need email resolution when confirmed_by_email is missing."""
+    uids: set[str] = set()
+
+    def _maybe_add(email: Any, user_id: Any) -> None:
+        if email and str(email).strip():
+            return
+        uid = str(user_id or "").strip()
+        if not uid or uid.startswith("system:") or "@" in uid:
+            return
+        uids.add(uid)
+
+    for stage_state in (workflow_state.get("stages") or {}).values():
+        if not isinstance(stage_state, dict):
+            continue
+        _maybe_add(stage_state.get("confirmed_by_email"), stage_state.get("confirmed_by"))
+
+    final_approval = workflow_state.get("final_approval") or {}
+    if isinstance(final_approval, dict):
+        _maybe_add(final_approval.get("approved_by_email"), final_approval.get("approved_by"))
+
+    return uids
+
+
 def build_current_state_rows(
     *,
     workflow_state: dict[str, Any],
@@ -54,11 +101,22 @@ def build_current_state_rows(
     assessment_id: str,
     assessment_name: str,
     assessment_instance_id: str,
+    email_by_uid: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     stage_id_to_title = {s.id: s.title for s in stage_defs}
     rows_with_sort_key: list[tuple[str, dict[str, Any]]] = []
     final_approval = workflow_state.get("final_approval") or {}
+    if not isinstance(final_approval, dict):
+        final_approval = {}
     attribution = _decision_log_attribution_for_assessment(assessment_id)
+    resolved_final_approval = {
+        **final_approval,
+        "approved_by_email": resolve_actor_display(
+            email=final_approval.get("approved_by_email"),
+            user_id=final_approval.get("approved_by"),
+            email_by_uid=email_by_uid,
+        ),
+    }
 
     for stage_id, stage_state in workflow_state.get("stages", {}).items():
         if stage_state.get("status") not in ("confirmed", "draft"):
@@ -66,10 +124,10 @@ def build_current_state_rows(
 
         stage_title = stage_id_to_title.get(stage_id, stage_id)
         stage_data = stage_state.get("data") or {}
-        confirmed_by = (
-            stage_state.get("confirmed_by_email")
-            or stage_state.get("confirmed_by")
-            or "—"
+        confirmed_by = resolve_actor_display(
+            email=stage_state.get("confirmed_by_email"),
+            user_id=stage_state.get("confirmed_by"),
+            email_by_uid=email_by_uid,
         )
         confirmed_at = stage_state.get("confirmed_at") or ""
         status = stage_state.get("status") or "pending"
@@ -85,7 +143,7 @@ def build_current_state_rows(
                 status=status,
                 confirmed_by=confirmed_by,
                 confirmed_at=confirmed_at,
-                final_approval=final_approval,
+                final_approval=resolved_final_approval,
                 attribution=attribution,
             )
             rows_with_sort_key.extend((confirmed_at, row) for row in item_rows)
@@ -102,7 +160,7 @@ def build_current_state_rows(
                 status=status,
                 confirmed_by=confirmed_by,
                 confirmed_at=confirmed_at,
-                final_approval=final_approval,
+                final_approval=resolved_final_approval,
                 attribution=attribution,
             )
             rows_with_sort_key.extend((confirmed_at, row) for row in record_rows)
@@ -119,7 +177,7 @@ def build_current_state_rows(
                 status=status,
                 confirmed_by=confirmed_by,
                 confirmed_at=confirmed_at,
-                final_approval=final_approval,
+                final_approval=resolved_final_approval,
                 attribution=attribution,
             )
             rows_with_sort_key.extend((confirmed_at, row) for row in widget_rows)
@@ -136,6 +194,7 @@ def build_assessment_decision_history_report(
     assessment_id: str,
     assessment_name: str,
     assessment_instance_id: str,
+    email_by_uid: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Build a assessment-scoped, value-level decision history report.
 
@@ -148,6 +207,7 @@ def build_assessment_decision_history_report(
         assessment_id=assessment_id,
         assessment_name=assessment_name,
         assessment_instance_id=assessment_instance_id,
+        email_by_uid=email_by_uid,
     )
     return {
         "metadata": {
@@ -868,7 +928,7 @@ def _render_docx(log: dict[str, Any]) -> bytes:
     meta = log.get("metadata", {})
     title_para = doc.add_paragraph()
     title_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    title_run = title_para.add_run(f"Decision Log — {meta.get('project_title', 'Project')}")
+    title_run = title_para.add_run(f"History — {meta.get('project_title', 'Project')}")
     title_run.bold = True
     title_run.font.size = Pt(16)
 

@@ -14,6 +14,7 @@ import type {
   AssessmentAgentStatus,
   AssessmentActivityLog,
   AssessmentDecisionLogReport,
+  ProjectMaterial,
   VariableStatus,
   VariableSourceType,
   Variable,
@@ -214,6 +215,12 @@ export const assessmentsApi = {
     const blob = await res.blob();
     return { blob, filename };
   },
+  /** Narrative DOCX: generate/reuse writeup, upsert one Files material, return it for the viewer. */
+  publishAssessmentReport: (instanceId: string) =>
+    fetchApi<{ success: boolean; material: ProjectMaterial; message: string }>(
+      `/api/v1/assessment-workflow/${instanceId}/report`,
+      { method: 'POST' },
+    ),
   getAssessmentDecisionLog: (instanceId: string) => {
     return fetchApi<AssessmentDecisionLogReport>(`/api/v1/assessment-workflow/${instanceId}/decision-log`);
   },
@@ -282,10 +289,10 @@ export const assessmentsApi = {
       `${API_URL}/api/v1/assessment-workflow/${instanceId}/decision-log/export.xlsx`,
       { headers }
     );
-    if (!res.ok) throw new Error('Decision log export failed');
+    if (!res.ok) throw new Error('History export failed');
     const filename = parseContentDispositionFilename(
       res.headers.get('content-disposition'),
-      'decision-log.xlsx',
+      'history.xlsx',
     );
     const blob = await res.blob();
     return { blob, filename };

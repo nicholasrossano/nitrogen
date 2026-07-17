@@ -7,11 +7,13 @@ import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assessments.base import BaseAssessment
 from app.models.assessment_instance import AssessmentInstance
+from app.models.project_material import ProjectMaterial
 from app.services.assessment_workflow_service import save_workflow_state
 
 logger = logging.getLogger(__name__)
@@ -155,3 +157,79 @@ async def generate_assessment_export_bytes(
         )
 
     return await assessment.generate_export(confirmed_stages, context)
+
+
+REPORT_MATERIAL_ID_KEY = "report_material_id"
+
+
+async def upsert_assessment_report_material(
+    *,
+    db: AsyncSession,
+    inst: AssessmentInstance,
+    state: dict[str, Any],
+    content: bytes,
+    filename: str,
+    workspace_id: UUID,
+) -> tuple[ProjectMaterial, bool]:
+    """Create or replace the single project Files DOCX for this assessment instance.
+
+    Returns ``(material, created)``. The material id is stored on workflow state so
+    re-running Report updates the same Files row instead of creating duplicates.
+    """
+    from sqlalchemy import select
+
+    from app.core.filename_utils import deduplicate_filename
+    from app.core.storage import get_uploads_storage
+    from app.services.document_parser import DocumentParserService
+
+    material: ProjectMaterial | None = None
+    raw_id = state.get(REPORT_MATERIAL_ID_KEY)
+    if raw_id:
+        try:
+            material_id = UUID(str(raw_id))
+        except (TypeError, ValueError):
+            material_id = None
+        else:
+            result = await db.execute(
+                select(ProjectMaterial).where(ProjectMaterial.id == material_id)
+            )
+            candidate = result.scalar_one_or_none()
+            if candidate is not None and candidate.project_id == inst.project_id:
+                material = candidate
+
+    storage = get_uploads_storage()
+    folder = f"{inst.project_id}/materials"
+    storage_path = await storage.save(content, filename, folder=folder)
+
+    content_text = None
+    try:
+        content_text = DocumentParserService().parse_docx(content)
+    except Exception:
+        logger.warning("Could not extract text from assessment report %s", filename, exc_info=True)
+
+    if material is not None:
+        old_path = material.storage_path
+        material.storage_path = storage_path
+        material.file_size = len(content)
+        material.file_type = "docx"
+        material.content_text = content_text
+        if old_path and old_path != storage_path:
+            await storage.delete(old_path)
+        await db.flush()
+        return material, False
+
+    unique_filename = await deduplicate_filename(db, inst.project_id, filename)
+    material = ProjectMaterial(
+        project_id=inst.project_id,
+        workspace_id=workspace_id,
+        filename=unique_filename,
+        file_type="docx",
+        storage_path=storage_path,
+        file_size=len(content),
+        content_text=content_text,
+    )
+    db.add(material)
+    await db.flush()
+    state[REPORT_MATERIAL_ID_KEY] = str(material.id)
+    save_workflow_state(inst, state, increment_version=False, user_initiated=True)
+    return material, True

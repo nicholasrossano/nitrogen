@@ -42,6 +42,7 @@ def get_first_party_catalog() -> FirstPartyAssessmentCatalog:
 
     from app.domain.energy.assessments.carbon_assessment import CarbonTool
     from app.domain.energy.assessments.implementation_plan import ImplementationPlanAssessment
+    from app.domain.energy.assessments.memo import MemoAssessment
     from app.domain.energy.assessments.landscape_mapping import LandscapeMappingAssessment
     from app.domain.energy.assessments.lcoe_assessment import LCOETool
     from app.domain.energy.assessments.pvwatts_assessment import PVWattsTool
@@ -131,6 +132,20 @@ def get_first_party_catalog() -> FirstPartyAssessmentCatalog:
             ),
             domain_tags=("risk", "diligence", "compliance"),
         ),
+        "memo": AssessmentSelectionMetadata(
+            assessment_id="memo",
+            selection_description=(
+                "Drafts a cited memo from a confirmed outline and project synthesis."
+            ),
+            selection_triggers=(
+                "memo",
+                "IC memo",
+                "recommendation memo",
+                "funding recommendation",
+                "proceed hold reject",
+            ),
+            domain_tags=("documentation", "decision", "diligence"),
+        ),
     }
 
     return FirstPartyAssessmentCatalog(
@@ -142,6 +157,7 @@ def get_first_party_catalog() -> FirstPartyAssessmentCatalog:
             LandscapeMappingAssessment,
             RiskAssessment,
             ImplementationPlanAssessment,
+            MemoAssessment,
         ),
         recommendation_keywords={
             "risk": ("risk_assessment",),
@@ -152,6 +168,10 @@ def get_first_party_catalog() -> FirstPartyAssessmentCatalog:
             "residual risk": ("risk_assessment",),
             "project risk": ("risk_assessment",),
             "risk mitigation": ("risk_assessment",),
+            "memo": ("memo",),
+            "ic memo": ("memo",),
+            "funding recommendation": ("memo",),
+            "recommendation memo": ("memo",),
             "implementation plan": ("implementation_plan",),
             "implementation": ("implementation_plan",),
             "workplan": ("implementation_plan",),

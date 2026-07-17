@@ -39,7 +39,7 @@ export function DecisionLogWorkspaceTab({
       const next = await api.getAssessmentDecisionLog(assessmentInstanceId);
       setReport(next);
     } catch (e: any) {
-      setError(e.message ?? 'Failed to load decision log');
+      setError(e.message ?? 'Failed to load history');
     } finally {
       setLoading(false);
     }
@@ -63,7 +63,7 @@ export function DecisionLogWorkspaceTab({
       anchor.click();
       URL.revokeObjectURL(url);
     } catch (e: any) {
-      setError(e.message ?? 'Decision log export failed');
+      setError(e.message ?? 'History export failed');
     } finally {
       setExporting(false);
     }
@@ -82,7 +82,7 @@ export function DecisionLogWorkspaceTab({
       <div className="mx-auto max-w-6xl space-y-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-lg font-semibold text-text-primary">Decision Log</h1>
+            <h1 className="text-lg font-semibold text-text-primary">History</h1>
             <p className="mt-1 text-sm text-text-tertiary">{subtitle}</p>
           </div>
           <ExportButton

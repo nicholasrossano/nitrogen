@@ -13,6 +13,7 @@ jest.mock('@/lib/api', () => ({
     approveFinalAssessmentOutput: jest.fn(),
     revokeFinalAssessmentApproval: jest.fn(),
     exportStagedAssessment: jest.fn(),
+    publishAssessmentReport: jest.fn(),
     uploadProjectMaterial: jest.fn(),
   },
 }));
@@ -163,7 +164,38 @@ describe('AssessmentWorkspace', () => {
     } as any);
   });
 
-  it('opens the activity log in the companion side panel', async () => {
+  it('does not auto-run the agent when opening an existing assessment', async () => {
+    mockedApi.getStagedAssessmentWorkflowState.mockResolvedValue(buildWorkflowState() as any);
+
+    render(<AssessmentWorkspace instanceId="instance-1" assessmentId="implementation_plan" />);
+
+    await screen.findByText('Implementation plan widget');
+
+    await waitFor(() => {
+      expect(mockedApi.getAssessmentAgentStatus).toHaveBeenCalledWith('instance-1');
+    });
+    expect(mockedApi.runAssessment).not.toHaveBeenCalled();
+  });
+
+  it('bootstraps the agent when opening a newly created assessment', async () => {
+    mockedApi.getStagedAssessmentWorkflowState.mockResolvedValue(buildWorkflowState() as any);
+
+    render(
+      <AssessmentWorkspace
+        instanceId="instance-1"
+        assessmentId="implementation_plan"
+        bootstrapAgentOnOpen
+      />,
+    );
+
+    await screen.findByText('Implementation plan widget');
+
+    await waitFor(() => {
+      expect(mockedApi.runAssessment).toHaveBeenCalledWith('instance-1');
+    });
+  });
+
+  it('opens the agent log in the companion side panel', async () => {
     mockedApi.getStagedAssessmentWorkflowState.mockResolvedValue(buildWorkflowState() as any);
     const onOpenActivityLog = jest.fn();
 
@@ -176,9 +208,9 @@ describe('AssessmentWorkspace', () => {
     );
 
     await screen.findByText('Implementation plan widget');
-    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Agent log' }));
 
-    expect(await screen.findByLabelText('Assessment activity log')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Assessment agent log')).toBeInTheDocument();
     expect(await screen.findByText('Generated plan draft')).toBeInTheDocument();
     expect(onOpenActivityLog).not.toHaveBeenCalled();
   });
@@ -308,8 +340,8 @@ describe('AssessmentWorkspace', () => {
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
     const actionLabels = screen.getAllByRole('button')
       .map((button) => button.textContent?.trim())
-      .filter((label) => label === 'Log' || label === 'Export' || label === 'Confirm');
-    expect(actionLabels).toEqual(['Log', 'Export', 'Confirm']);
+      .filter((label) => label === 'Export' || label === 'Confirm');
+    expect(actionLabels).toEqual(['Export', 'Confirm']);
 
     fireEvent.click(screen.getByRole('button', { name: 'Categories' }));
 
@@ -340,13 +372,9 @@ describe('AssessmentWorkspace', () => {
     }) as any);
 
     const onOpenAssessmentReport = jest.fn();
-    mockedApi.exportStagedAssessment.mockResolvedValue({
-      blob: new Blob(['report-bytes']),
-      filename: 'stakeholder-report.docx',
-    });
-    mockedApi.uploadProjectMaterial.mockResolvedValue({
+    mockedApi.publishAssessmentReport.mockResolvedValue({
       success: true,
-      message: 'uploaded',
+      message: 'saved',
       material: {
         id: 'material-1',
         filename: 'stakeholder-report.docx',
@@ -375,7 +403,8 @@ describe('AssessmentWorkspace', () => {
     fireEvent.click(reportButton);
 
     await waitFor(() => {
-      expect(mockedApi.uploadProjectMaterial).toHaveBeenCalledTimes(1);
+      expect(mockedApi.publishAssessmentReport).toHaveBeenCalledTimes(1);
+      expect(mockedApi.publishAssessmentReport).toHaveBeenCalledWith('instance-1');
       expect(onOpenAssessmentReport).toHaveBeenCalledTimes(1);
     });
     const payload = onOpenAssessmentReport.mock.calls[0][0];

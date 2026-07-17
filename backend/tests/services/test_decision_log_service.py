@@ -7,7 +7,56 @@ from app.domain.energy.assessments.stakeholder_assessment import StakeholderAsse
 from app.services.decision_log_service import (
     build_current_state_rows,
     build_decision_log_xlsx,
+    resolve_actor_display,
 )
+
+
+def test_resolve_actor_display_prefers_email_and_looks_up_uid():
+    assert resolve_actor_display(email="a@example.com", user_id="uid-1") == "a@example.com"
+    assert resolve_actor_display(
+        email=None,
+        user_id="uid-1",
+        email_by_uid={"uid-1": "looked-up@example.com"},
+    ) == "looked-up@example.com"
+    assert resolve_actor_display(email=None, user_id="system:auto") == "System"
+    assert resolve_actor_display(email=None, user_id="uid-missing") == "uid-missing"
+
+
+def test_build_current_state_rows_resolves_confirmed_by_uid_to_email():
+    assessment = StakeholderAssessment()
+    workflow_state = {
+        "assessment_type": assessment.definition.id,
+        "current_stage_id": "categories",
+        "final_approval": {},
+        "stages": {
+            "categories": {
+                "status": "confirmed",
+                "confirmed_at": "2026-04-17T14:00:00+00:00",
+                "confirmed_by": "firebase-uid-1",
+                "confirmed_by_email": None,
+                "data": {
+                    "items": [
+                        {
+                            "id": "item-1",
+                            "content": {"name": "Permitting", "category": "Regulatory"},
+                            "origin": "inferred",
+                            "provenance": {"derivation": "inferred", "sources": []},
+                        }
+                    ]
+                },
+            }
+        },
+    }
+    rows = build_current_state_rows(
+        workflow_state=workflow_state,
+        stage_defs=assessment.stage_defs,
+        assessment_id=assessment.definition.id,
+        assessment_name=assessment.definition.name,
+        assessment_instance_id="instance-1",
+        email_by_uid={"firebase-uid-1": "reviewer@example.com"},
+    )
+    assert rows
+    assert all(row["confirmed_by"] == "reviewer@example.com" for row in rows)
 
 
 def test_build_current_state_rows_includes_provenance_and_final_approval():

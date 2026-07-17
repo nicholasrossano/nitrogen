@@ -72,7 +72,7 @@ export function AssessmentActivityLogTab({
       setWorkflow(nextWorkflow);
       setError(null);
     } catch (err: any) {
-      setError(err?.message ?? 'Failed to load activity log.');
+      setError(err?.message ?? 'Failed to load agent log.');
     } finally {
       setLoading(false);
     }
@@ -160,7 +160,7 @@ export function AssessmentActivityLogTab({
       {!embedded && (
         <div className="border-b border-divider px-4 py-3 flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold text-text-primary">Activity Log</h3>
+            <h3 className="text-sm font-semibold text-text-primary">Agent Log</h3>
             <p className="text-xs text-text-tertiary truncate">{assessmentTitle}</p>
           </div>
           <span className={`inline-flex items-center rounded-md px-2 py-1 text-[11px] font-medium ${runStateTone(log?.run_state ?? 'needs_review')}`}>

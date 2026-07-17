@@ -80,7 +80,7 @@ interface FloatLayerProps {
   onOpenAssessmentReport?: (payload: AssessmentReportPayload) => void | Promise<void>;
   onOpenAssessment?: (context: AssessmentLogContext) => void;
   onAssessmentTitleChange?: (instanceId: string, title: string) => void;
-  /** True while AssessmentWorkspace hosts a companion column (activity log / deep dive). */
+  /** True while AssessmentWorkspace hosts a companion column (agent log / deep dive). */
   onCompanionSidePanelOpenChange?: (open: boolean) => void;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   onOpenFile?: (file: ProjectMaterial) => void;
@@ -102,9 +102,9 @@ function getWidgetTitle(widget: FloatWidget): string {
   return WIDGET_LABELS[widget.type] ?? 'Output';
 }
 
-/** Strip a `[Log] ` display prefix so back restores the module title cleanly. */
+/** Strip a history display prefix so back restores the module title cleanly. */
 function stripLogTitlePrefix(title: string): string {
-  return title.replace(/^\[Log\]\s*/i, '').trim();
+  return title.replace(/^\[(Log|History|Version History)\]\s*/i, '').trim();
 }
 
 /** Nested log/report widgets can navigate back to their parent assessment module. */
@@ -142,8 +142,8 @@ const WIDGET_LABELS: Record<string, string> = {
   document_viewer: 'Document',
   assessment_workspace: 'Assessment',
   variable_detail: PROJECT_VARIABLES.titleSingular,
-  decision_log: 'Decision Log',
-  activity_log: 'Activity Log',
+  decision_log: 'History',
+  activity_log: 'Agent Log',
 };
 
 export function FloatLayer({
@@ -248,7 +248,13 @@ export function FloatLayer({
         </div>
       )}
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div
+        className={`flex-1 min-h-0 ${
+          widget.type === 'variables_workspace' || widget.type === 'assessment_workspace'
+            ? 'overflow-hidden'
+            : 'overflow-y-auto'
+        }`}
+      >
         <ErrorBoundary>
           <EditorPanelChromeProvider onChromeChange={handleChromeChange}>
             <FloatWidgetRenderer
@@ -346,7 +352,7 @@ function FloatWidgetRenderer({
           assessmentTitle={data.title}
           projectId={projectId}
           usePanelHeader
-          deferAgentStart={data.pending_engagement === true}
+          bootstrapAgentOnOpen={data.pending_engagement === true}
           onUserEngaged={() => onAssessmentEngaged?.(data.instance_id)}
           onOpenDecisionLog={onOpenDecisionLog}
           onOpenActivityLog={onOpenActivityLog}
