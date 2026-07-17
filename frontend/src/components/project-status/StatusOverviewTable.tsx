@@ -91,7 +91,6 @@ function StatusSourcesMenu({
   }, [open]);
 
   if (sources.length === 0 && assessments.length === 0) return null;
-  const showSectionDivider = sources.length > 0 && assessments.length > 0;
 
   return (
     <div ref={menuRef} className="relative">
@@ -153,38 +152,33 @@ function StatusSourcesMenu({
                 </div>
               );
             })}
-            {assessments.length > 0 ? (
-              <>
-                {showSectionDivider ? <div className="my-1 border-t border-divider" /> : null}
-                {assessments.map((assessment) => (
-                  <div key={`${assessment.assessment_id}-${assessment.instance_id ?? assessment.display_name}`} className="flex items-center gap-2 min-w-0 rounded-md px-1.5 py-1 hover:bg-surface-subtle transition-colors">
-                    <span className="text-text-tertiary shrink-0"><Wrench className="h-2.5 w-2.5 shrink-0" /></span>
-                    <span className="text-[10px] uppercase tracking-wide text-text-tertiary shrink-0 w-16">Assessment</span>
-                    {assessment.instance_id && onOpenAssessment ? (
-                      <button
-                        type="button"
-                        className="text-xs text-accent hover:underline truncate text-left"
-                        title={assessment.display_name}
-                        onClick={() => {
-                          onOpenAssessment({
-                            instanceId: assessment.instance_id!,
-                            assessmentId: assessment.assessment_id,
-                            title: assessment.display_name,
-                          });
-                          setOpen(false);
-                        }}
-                      >
-                        {assessment.display_name}
-                      </button>
-                    ) : (
-                      <span className="text-xs text-text-secondary truncate" title={assessment.display_name}>
-                        {assessment.display_name}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </>
-            ) : null}
+            {assessments.map((assessment) => (
+              <div key={`${assessment.assessment_id}-${assessment.instance_id ?? assessment.display_name}`} className="flex items-center gap-2 min-w-0 rounded-md px-1.5 py-1 hover:bg-surface-subtle transition-colors">
+                <span className="text-text-tertiary shrink-0"><Wrench className="h-2.5 w-2.5 shrink-0" /></span>
+                <span className="text-[10px] uppercase tracking-wide text-text-tertiary shrink-0 w-16">Assessment</span>
+                {assessment.instance_id && onOpenAssessment ? (
+                  <button
+                    type="button"
+                    className="text-xs text-accent hover:underline truncate text-left"
+                    title={assessment.display_name}
+                    onClick={() => {
+                      onOpenAssessment({
+                        instanceId: assessment.instance_id!,
+                        assessmentId: assessment.assessment_id,
+                        title: assessment.display_name,
+                      });
+                      setOpen(false);
+                    }}
+                  >
+                    {assessment.display_name}
+                  </button>
+                ) : (
+                  <span className="text-xs text-text-secondary truncate" title={assessment.display_name}>
+                    {assessment.display_name}
+                  </span>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       ) : null}
