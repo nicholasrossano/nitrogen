@@ -194,7 +194,20 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   }, [projectId]);
 
   useEffect(() => {
-    if (activeChatId) return;
+    // Selecting a chat from history clears ?panel= in the URL, but this effect used
+    // to early-return on activeChatId and leave expandedContextWidget set — Overview
+    // (etc.) stayed covering Chat. Dismiss the floor whenever a chat is active.
+    if (activeChatId) {
+      if (expandedContextWidget) {
+        setExpandedContextWidget(null);
+        setExpandMotionMode('stack');
+        chatShell?.setActiveContextWidget(null);
+      }
+      if (panelParam) {
+        dismissContextPanelParam();
+      }
+      return;
+    }
 
     if (!panelParam) {
       dismissingPanelRef.current = null;
@@ -244,6 +257,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     activeChatId,
     assessmentParam,
     chatShell,
+    dismissContextPanelParam,
     expandedContextWidget,
     panelParam,
   ]);
