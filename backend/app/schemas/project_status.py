@@ -59,6 +59,13 @@ class ProjectStatusCategoryUpdateRequest(BaseModel):
     is_active: bool | None = None
 
 
+class ProjectStatusDecisionSignal(BaseModel):
+    """One reasoning bullet behind a category's status, capped/ordered per row."""
+
+    text: str
+    sentiment: Literal["positive", "negative", "neutral"]
+
+
 class ProjectStatusCategoryRow(BaseModel):
     category_key: str
     label: str
@@ -69,6 +76,7 @@ class ProjectStatusCategoryRow(BaseModel):
     confidence: ProjectStatusConfidence
     rationale: str
     critical_insight: str
+    decision_signals: list[ProjectStatusDecisionSignal] = Field(default_factory=list)
     supporting_evidence: list[str] = Field(default_factory=list)
     suggested_improvement: str | None = None
     retrieved_sources: list[dict[str, Any]] = Field(default_factory=list)
