@@ -123,7 +123,7 @@ export function StatusCategoryEditorModal({
                 placeholder="Describe what maturity or readiness means for this category..."
               />
             </label>
-            <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-text-tertiary">
+            <p className="text-right text-[10px] font-medium uppercase tracking-[0.08em] text-text-tertiary">
               {definedByLabel}
             </p>
           </div>

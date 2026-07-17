@@ -1,12 +1,26 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BookMarked, Database, FileText, Info, Pencil, Plus, RefreshCw, Trash2, Wrench } from 'lucide-react';
+import {
+  AlertCircle,
+  BookMarked,
+  CheckCircle2,
+  Database,
+  FileText,
+  Info,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Wrench,
+  XCircle,
+} from 'lucide-react';
 import {
   api,
   type ProjectStatusAssessmentReference,
   type ProjectStatusCategoryConfig,
   type ProjectStatusCategoryRow,
+  type ProjectStatusDecisionSignal,
   type ProjectStatusLevel,
   type ProjectStatusResponse,
   type ProjectStatusSourceReference,
@@ -43,6 +57,35 @@ const CONFIDENCE_META = {
   low: { label: 'Low confidence', className: 'bg-red-50 text-red-700 border-red-200' },
   unknown: { label: 'Unknown confidence', className: 'bg-surface-subtle text-text-secondary border-stroke-subtle' },
 } as const;
+
+const SIGNAL_META = {
+  positive: { Icon: CheckCircle2, className: 'text-emerald-600' },
+  negative: { Icon: XCircle, className: 'text-red-600' },
+  neutral: { Icon: AlertCircle, className: 'text-amber-600' },
+} as const;
+
+function DecisionSignalList({
+  signals,
+  fallbackText,
+}: {
+  signals: ProjectStatusDecisionSignal[] | undefined;
+  fallbackText: string;
+}) {
+  const items = signals?.length ? signals : [{ text: fallbackText, sentiment: 'neutral' as const }];
+  return (
+    <ul className="mt-1.5 space-y-1">
+      {items.map((signal, index) => {
+        const { Icon, className } = SIGNAL_META[signal.sentiment];
+        return (
+          <li key={index} className="flex items-center gap-2 text-sm leading-relaxed text-text-secondary">
+            <Icon className={`h-3.5 w-3.5 shrink-0 ${className}`} />
+            <span>{signal.text}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 function sourceLabel(sourceType: string): string {
   const normalized = sourceType.toLowerCase();
@@ -453,9 +496,10 @@ export function StatusOverviewTable({
                           ) : null}
                         </div>
                       </div>
-                      <p className="mt-1 text-sm leading-relaxed text-text-secondary">
-                        {row.critical_insight || row.rationale}
-                      </p>
+                      <DecisionSignalList
+                        signals={row.decision_signals}
+                        fallbackText={row.critical_insight || row.rationale}
+                      />
                     </div>
 
                     <div className="flex shrink-0 flex-col items-end self-stretch">

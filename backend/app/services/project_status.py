@@ -39,7 +39,11 @@ VALID_STATUSES = {"green", "yellow", "red", "unknown"}
 VALID_CONFIDENCE = {"high", "medium", "low", "unknown"}
 STATUS_ORDER = {"unknown": 0, "red": 1, "yellow": 2, "green": 3}
 STALE_ANALYSIS_WINDOW = timedelta(days=21)
-MAX_RETRIEVED_CONTEXT_ITEMS = 6
+# Status assessment should see enough project material to credit what exists —
+# thin retrieval biases the LLM toward "not found" / absence findings.
+MAX_RETRIEVED_CONTEXT_ITEMS = 16
+# Cap inventory rows so a huge library stays prompt-safe while still listing every filename.
+MAX_FILE_INVENTORY_ITEMS = 120
 
 
 @dataclass(frozen=True)
@@ -184,18 +188,27 @@ async def _retrieve_category_context(
     retriever = TieredRetrievalService(db, user_id=user_id)
     queries = _retrieval_queries_for_category(category)
 
+    # Real embedding/vector search over indexed EvidenceDoc chunks — the same pipeline
+    # used for chat citations — is the primary source, since interactively uploaded files
+    # are indexed there, not in ProjectMaterial (which is mostly legacy/report-export text).
     facts: list[RetrievedFact] = []
     for query in queries[:2]:
-        facts.extend(await retriever.search_project_materials(query, project.id, max_results=2))
+        facts.extend(await retriever.search_evidence(query, project.id, evidence_top_k=5))
 
-    if len(facts) < 3 and project.workspace_id:
+    # Keyword fallback over ProjectMaterial content_text (legacy uploads, published
+    # assessment report exports) only when vector search comes up thin.
+    if len(facts) < 4:
+        for query in queries[:2]:
+            facts.extend(await retriever.search_project_materials(query, project.id, max_results=3))
+
+    if len(facts) < 4 and project.workspace_id:
         facts.extend(
             await retriever.search_workspace_context(
                 queries[0],
                 project.workspace_id,
                 user_id=user_id,
-                workspace_top_k=2,
-                knowledge_top_k=2,
+                workspace_top_k=3,
+                knowledge_top_k=3,
             )
         )
 
@@ -230,7 +243,8 @@ async def _retrieve_category_context(
         if len(material_facts) >= 2:
             break
 
-    combined_sources = material_facts + [_fact_to_status_source(fact) for fact in top_facts]
+    # Prefer relevance-ranked retrieval over unranked recent-material padding.
+    combined_sources = [_fact_to_status_source(fact) for fact in top_facts] + material_facts
     deduped_sources: list[dict[str, Any]] = []
     seen_source_keys: set[tuple[str, str, str]] = set()
     for source in combined_sources:
@@ -250,10 +264,38 @@ async def _retrieve_category_context(
 
 
 def _sanitize_rationale_text(value: str) -> str:
+    """Strip internal prompt/schema jargon from user-facing status prose."""
     if not value:
         return value
-    text = value.replace("guardrails", "project checks").replace("Guardrails", "Project checks")
-    return text.replace("capped at yellow", "currently held at yellow")
+    text = value
+    replacements = (
+        ("secondary_structured_state", "project signals"),
+        ("Secondary_structured_state", "Project signals"),
+        ("retrieved_project_context", "retrieved project materials"),
+        ("Retrieved_project_context", "Retrieved project materials"),
+        ("status_constraints", "project checks"),
+        ("Status_constraints", "Project checks"),
+        ("file_inventory", "project file list"),
+        ("File_inventory", "Project file list"),
+        ("inventory_truncated", "additional files"),
+        ("forced_status", "required status"),
+        ("max_status", "status ceiling"),
+        ("blocker_flags", "project checks"),
+        ("red_flags", "risk flags"),
+        ("guardrails", "project checks"),
+        ("Guardrails", "Project checks"),
+        ("capped at yellow", "currently held at yellow"),
+    )
+    for old, new in replacements:
+        text = text.replace(old, new)
+    return text
+
+
+def _sanitize_finding_list(values: Any, *, max_items: int = 6) -> list[str]:
+    return _truncate_list(
+        [_sanitize_rationale_text(item) for item in (values if isinstance(values, list) else [])],
+        max_items=max_items,
+    )
 
 
 def _extract_risk_counts(payload: Any) -> tuple[int, int]:
@@ -370,15 +412,39 @@ async def _collect_status_signal_context(db: AsyncSession, project: Project) -> 
     evidence_failed = int(evidence_counts[2] or 0)
 
     evidence_rows = await db.execute(
-        select(EvidenceDoc.filename, EvidenceDoc.processing_status, EvidenceDoc.preview_text)
+        select(
+            EvidenceDoc.filename,
+            EvidenceDoc.file_type,
+            EvidenceDoc.processing_status,
+            EvidenceDoc.preview_text,
+        )
         .where(EvidenceDoc.project_id == project.id)
-        .order_by(EvidenceDoc.created_at.desc())
-        .limit(8)
+        .order_by(EvidenceDoc.filename.asc())
+        .limit(MAX_FILE_INVENTORY_ITEMS)
     )
-    evidence_examples = [
-        {"filename": filename, "status": status, "preview": _clip_text(preview, max_chars=220)}
-        for filename, status, preview in evidence_rows.all()
-    ]
+    # Holistic awareness: full filename inventory (not just recent samples). Short previews
+    # only for the first few so the prompt stays lean; ranked RAG supplies depth.
+    file_inventory: list[dict[str, Any]] = []
+    evidence_examples: list[dict[str, Any]] = []
+    for index, (filename, file_type, status, preview) in enumerate(evidence_rows.all()):
+        title = str(filename or "").strip()
+        if not title:
+            continue
+        entry = {
+            "filename": title,
+            "file_type": file_type,
+            "status": status,
+            "source": "evidence",
+        }
+        file_inventory.append(entry)
+        if index < 8:
+            evidence_examples.append(
+                {
+                    "filename": title,
+                    "status": status,
+                    "preview": _clip_text(preview, max_chars=180),
+                }
+            )
 
     materials_result = await db.execute(
         select(func.count(ProjectMaterial.id)).where(ProjectMaterial.project_id == project.id)
@@ -388,17 +454,33 @@ async def _collect_status_signal_context(db: AsyncSession, project: Project) -> 
     material_rows = await db.execute(
         select(ProjectMaterial.filename, ProjectMaterial.file_type, ProjectMaterial.content_text)
         .where(ProjectMaterial.project_id == project.id)
-        .order_by(ProjectMaterial.created_at.desc())
-        .limit(6)
+        .order_by(ProjectMaterial.filename.asc())
+        .limit(MAX_FILE_INVENTORY_ITEMS)
     )
-    material_examples = [
-        {
-            "filename": filename,
-            "file_type": file_type,
-            "excerpt": _clip_text(content_text, max_chars=260),
-        }
-        for filename, file_type, content_text in material_rows.all()
-    ]
+    material_examples: list[dict[str, Any]] = []
+    existing_inventory_names = {item["filename"].lower() for item in file_inventory}
+    for index, (filename, file_type, content_text) in enumerate(material_rows.all()):
+        title = str(filename or "").strip()
+        if not title:
+            continue
+        if title.lower() not in existing_inventory_names:
+            file_inventory.append(
+                {
+                    "filename": title,
+                    "file_type": file_type,
+                    "status": "available",
+                    "source": "material",
+                }
+            )
+            existing_inventory_names.add(title.lower())
+        if index < 6:
+            material_examples.append(
+                {
+                    "filename": title,
+                    "file_type": file_type,
+                    "excerpt": _clip_text(content_text, max_chars=200),
+                }
+            )
 
     fields_present = {
         "title": bool(project.title),
@@ -461,6 +543,10 @@ async def _collect_status_signal_context(db: AsyncSession, project: Project) -> 
             "indexed": evidence_indexed,
             "failed": evidence_failed,
             "materials": materials_total,
+            # Full project file list (filenames) so the model knows what exists holistically.
+            "file_inventory": file_inventory,
+            "inventory_count": len(file_inventory),
+            "inventory_truncated": (evidence_total + materials_total) > len(file_inventory),
             "documents": evidence_examples,
             "materials_examples": material_examples,
         },
@@ -481,14 +567,14 @@ async def _collect_status_signal_context(db: AsyncSession, project: Project) -> 
 
 def _guardrails_for_category(context: dict[str, Any]) -> dict[str, Any]:
     assessment_ctx = context["assessment"]
-    variables = context["variables"]
     evidence = context["evidence"]
     risk = context["risk"]
 
+    # Keep guardrails narrow. Do NOT globally cap green for ordinary diligence gaps
+    # (e.g. a few missing variables) — that made every category "yellow / medium"
+    # even on well-documented projects.
     blocker_flags: list[str] = []
     red_flags: list[str] = []
-    if variables["missing"] > 0:
-        blocker_flags.append("required_variables_missing")
     if evidence["indexed"] == 0 and evidence["materials"] == 0 and evidence["total"] == 0:
         blocker_flags.append("core_claims_unsupported")
     if assessment_ctx["errors"] > 0:
@@ -501,7 +587,7 @@ def _guardrails_for_category(context: dict[str, Any]) -> dict[str, Any]:
     has_signal = any(
         [
             assessment_ctx["total"] > 0,
-            variables["total"] > 0,
+            context["variables"]["total"] > 0,
             evidence["total"] > 0,
             evidence["materials"] > 0,
         ]
@@ -544,14 +630,22 @@ def _fallback_category_result(
             f"The available project evidence appears coherent enough to support "
             f"{category.label.lower()} at this stage."
         )
+    flag_labels = {
+        "core_claims_unsupported": "Core claims are not yet backed by uploaded materials",
+        "failed_or_invalid_module_output": "One or more assessment modules failed and need re-running",
+        "severe_unresolved_risk": "High-severity risks remain unresolved",
+        "required_document_processing_failed": "Some uploaded documents failed processing and need re-upload",
+    }
+    blockers = [flag_labels.get(flag, flag) for flag in guardrails["red_flags"]]
+    missing_items = [flag_labels.get(flag, flag) for flag in guardrails["blocker_flags"]]
     return {
         "status": status,
         "confidence": "medium" if status != "unknown" else "unknown",
         "rationale": rationale,
         "positive_drivers": [],
         "negative_drivers": [],
-        "blockers": guardrails["red_flags"] + guardrails["blocker_flags"],
-        "missing_items": [],
+        "blockers": blockers,
+        "missing_items": missing_items,
         "relevant_modules": [],
         "improvement_actions": [],
         "uncertainties": [],
@@ -735,36 +829,78 @@ async def _llm_category_result(
                 "confidence": "high|medium|low|unknown",
                 "critical_insight": "one concise decision-relevant judgment sentence",
                 "rationale": "one concise sentence explaining why the judgment matters",
-                "supporting_evidence": ["strongest retrieved evidence or module outputs"],
+                "supporting_evidence": [
+                    "short prose finding that affirms this category, e.g. 'Quarterly progress reports document ongoing field operations'"
+                ],
                 "suggested_improvement": "best next improvement",
-                "positive_drivers": ["optional supporting drivers"],
-                "negative_drivers": ["optional weakening drivers"],
-                "blockers": ["string"],
-                "missing_items": ["string"],
+                "positive_drivers": [
+                    "short prose finding for what is going well, e.g. 'Budget and expense reports provide usable cost history'"
+                ],
+                "negative_drivers": [
+                    "short prose finding for a real weakness (not mere absence), e.g. 'Reported costs and offtake assumptions conflict'"
+                ],
+                "blockers": [
+                    "ONLY true material blockers that stop progress, e.g. 'Permit denial blocks construction start'"
+                ],
+                "missing_items": [
+                    "short prose finding for a diligence gap, e.g. 'Detailed stove-design specs are not yet in the materials'"
+                ],
                 "relevant_modules": ["string"],
                 "improvement_actions": ["string"],
-                "uncertainties": ["string"],
+                "uncertainties": [
+                    "short prose finding for an open question, e.g. 'Long-run unit economics are still incompletely modeled'"
+                ],
             },
         }
     )
     system = (
-        "You are assessing one project status category holistically using retrieved project context "
-        "and secondary structured signals. Return strict JSON only. "
+        "You are a constructive diligence reviewer assessing one project status category. "
+        "Return strict JSON only. Be lightly kind and balanced — credit what the materials "
+        "actually support before noting gaps. Do not hunt for the harshest reading. "
         "Use the criteria as a reasoning lens, NOT a strict checklist. "
         "Synthesize one section-level status — do not score criteria individually or roll up mechanically. "
-        "Missing evidence for a theme should lower confidence and pull toward yellow/unknown, "
-        "not auto-force red merely because a metric is absent from documents. "
-        "Do not assign green when status_constraints.max_status is yellow or forced_status is set. "
-        "Base judgment primarily on retrieved project content. "
+        "Retrieved context facts are a relevance-ranked SAMPLE for depth — not the full corpus. "
+        "The project file catalog (filenames/types/index status) is provided so you know what "
+        "materials EXIST. If a relevant file appears there, credit it as available support even "
+        "when the retrieved sample did not quote it, and put residual detail gaps in missing_items "
+        "or uncertainties — do NOT invent blockers from incomplete retrieval. "
+        "If the catalog notes truncation, even more files exist beyond the listed names. "
+        "Structured project signals (risk counts, variables, assessments) are supporting context — "
+        "paraphrase them in plain language (e.g. 'no unresolved high-severity risks are recorded'). "
+        "Always include positive_drivers when the inventory or retrieved sample contains anything "
+        "relevant to this category. "
+        "STATUS MUST DIFFERENTIATE — do not default everything to yellow. "
+        "Green is the correct call when materials substantially support this category for the "
+        "project's current stage, even if some nice-to-have details are still missing. "
+        "Residual diligence gaps alone do NOT force yellow if the core story for this category holds. "
+        "Yellow only when support is materially incomplete, weakly evidenced, or meaningfully uncertain "
+        "on a core theme for this category. "
+        "Prefer yellow over red when evidence is incomplete but directionally supportive. "
+        "Missing evidence for a theme should usually lower confidence and/or go into missing_items, "
+        "not auto-force yellow/red merely because a metric or plan document is absent from the sample. "
+        "Reserve blockers for severe, confirmed obstacles that halt progress; "
+        "do not put ordinary diligence gaps or 'not retrieved' items in blockers or negative_drivers. "
+        "Respect status_constraints when present, but never name them or any other internal schema "
+        "keys in user-facing text. "
+        "Base judgment primarily on retrieved project content and the file inventory. "
         "Green means available evidence affirmatively supports this category for the project's current stage. "
-        "Yellow means plausible but incomplete, weakly supported, or meaningfully uncertain. "
-        "Red means a material blocker, contradiction, severe unresolved issue, or insufficient basis. "
+        "Yellow means core support for this category is incomplete or meaningfully uncertain. "
+        "Red means a material blocker, contradiction, or severe unresolved issue — not 'documents are thin'. "
         "Unknown means the record is too thin to assess. "
         "Confidence is confidence in your assessment, not confidence the project will succeed. "
+        "Use high confidence when inventory + retrieved content give solid coverage for this category; "
+        "medium when coverage is mixed; low when coverage is thin. Do not default to medium. "
         "Do not project financial outcomes unless explicitly supported by retrieved documents. "
         "Frame output as an assessment/recommendation based on available materials — never 'this project is ready'. "
         "Keep critical_insight and rationale to one sentence each. "
-        "Do not mention status constraints or internal policy terms in rationale text. "
+        "Write positive_drivers, negative_drivers, blockers, missing_items, and uncertainties as short "
+        "prose findings (one clause or sentence each) that make the direction clear. "
+        "Do NOT return bare noun phrases or labels "
+        "(bad: 'Binding PPA'; good: 'No binding PPA has been signed yet'). "
+        "Avoid stacking every bullet as 'No X…' — mix credited evidence with remaining gaps. "
+        "NEVER mention internal field or schema names in any output text "
+        "(including secondary_structured_state, status_constraints, file_inventory, "
+        "retrieved_project_context, guardrails, max_status, forced_status, blocker_flags, red_flags). "
         "Do not overstate certainty."
     )
     llm_result = await llm_json(system=system, user_msg=user_msg)
@@ -791,9 +927,9 @@ async def _llm_category_result(
     critical_insight = _sanitize_rationale_text(str(llm_result.get("critical_insight") or "").strip())
     llm_rationale = _sanitize_rationale_text(str(llm_result.get("rationale") or "").strip())
     suggested_improvement = _sanitize_rationale_text(str(llm_result.get("suggested_improvement") or "").strip())
-    supporting_evidence = _truncate_list(llm_result.get("supporting_evidence"), max_items=4)
-    missing_items = _truncate_list(llm_result.get("missing_items"))
-    improvement_actions = _truncate_list(llm_result.get("improvement_actions"))
+    supporting_evidence = _sanitize_finding_list(llm_result.get("supporting_evidence"), max_items=4)
+    missing_items = _sanitize_finding_list(llm_result.get("missing_items"))
+    improvement_actions = _sanitize_finding_list(llm_result.get("improvement_actions"))
     if suggested_improvement and suggested_improvement not in improvement_actions:
         improvement_actions = [suggested_improvement, *improvement_actions][:6]
 
@@ -801,14 +937,14 @@ async def _llm_category_result(
         "status": status,
         "confidence": confidence,
         "rationale": llm_rationale or fallback["rationale"],
-        "positive_drivers": supporting_evidence or _truncate_list(llm_result.get("positive_drivers")),
-        "negative_drivers": _truncate_list(llm_result.get("negative_drivers")),
-        "blockers": _truncate_list(llm_result.get("blockers"))
-        or (guardrails["red_flags"] + guardrails["blocker_flags"]),
+        "positive_drivers": supporting_evidence or _sanitize_finding_list(llm_result.get("positive_drivers")),
+        "negative_drivers": _sanitize_finding_list(llm_result.get("negative_drivers")),
+        # Do not fall back to internal guardrail flag slugs — those are not user-facing findings.
+        "blockers": _sanitize_finding_list(llm_result.get("blockers")),
         "missing_items": missing_items,
         "relevant_modules": _truncate_list(llm_result.get("relevant_modules")),
         "improvement_actions": improvement_actions,
-        "uncertainties": _truncate_list(llm_result.get("uncertainties")),
+        "uncertainties": _sanitize_finding_list(llm_result.get("uncertainties")),
         "supporting_signals": {
             "structured_state": context,
             "retrieved_context": retrieved_context,

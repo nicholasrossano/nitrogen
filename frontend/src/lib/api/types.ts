@@ -423,6 +423,11 @@ export interface ProjectStatusCategoryConfig {
   updated_at: string;
 }
 
+export interface ProjectStatusDecisionSignal {
+  text: string;
+  sentiment: 'positive' | 'negative' | 'neutral';
+}
+
 export interface ProjectStatusCategoryRow {
   category_key: string;
   label: string;
@@ -433,6 +438,8 @@ export interface ProjectStatusCategoryRow {
   confidence: ProjectStatusConfidence;
   rationale: string;
   critical_insight: string;
+  /** Ordered, deduped, capped-at-5 reasoning bullets behind the status (optional for older cached data). */
+  decision_signals?: ProjectStatusDecisionSignal[];
   supporting_evidence: string[];
   suggested_improvement: string | null;
   retrieved_sources: ProjectStatusSourceReference[];
