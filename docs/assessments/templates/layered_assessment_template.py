@@ -21,7 +21,7 @@ from app.assessments.base import (
     AssessmentDefinition,
     AssessmentManifest,
 )
-from app.assessments.utils import llm_json
+from app.assessments.utils import llm_json, propose_category_items
 
 
 class ExampleLayeredAssessment(BaseAssessment):
@@ -105,18 +105,14 @@ class ExampleLayeredAssessment(BaseAssessment):
         Return a list of content dicts (one per item); the executor wraps them.
         """
         if stage_id == "categories":
-            data = await llm_json(
+            # Shared parsing/normalization; keep the system prompt assessment-specific.
+            return await propose_category_items(
                 system=(
                     "Generate 5–6 relevant categories for the given project. "
                     "Return JSON with key 'categories', a list of objects with 'label' and 'description'."
                 ),
-                user_msg=f"Project: {context.get('project_title', '')}\n{context.get('project_description', '')}",
                 context=context,
             )
-            return [
-                {"label": c.get("label", ""), "description": c.get("description", "")}
-                for c in data.get("categories", [])
-            ]
 
         elif stage_id == "items":
             prior_cats = (prior_data.get("categories") or {}).get("data", {}).get("items", [])
