@@ -37,7 +37,7 @@ interface ProjectState {
   loadEvidence: (id: string) => Promise<void>;
   loadMaterials: (id: string) => Promise<void>;
   uploadMaterial: (id: string, file: File) => Promise<void>;
-  deleteMaterial: (materialId: string) => Promise<void>;
+  deleteMaterial: (materialId: string, source?: string | null) => Promise<void>;
   loadDriveLinkedFiles: (id: string) => Promise<void>;
   importFromDrive: (id: string, fileIds: string[]) => Promise<DriveImportResult>;
   syncDriveFiles: (id: string) => Promise<DriveSyncResult>;
@@ -267,11 +267,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  deleteMaterial: async (materialId: string) => {
+  deleteMaterial: async (materialId: string, source?: string | null) => {
     const prev = get().projectMaterials;
     const materialsProjectId = get().materialsProjectId;
     const mat = prev.find((m) => m.id === materialId);
-    const isEvidence = mat?.source === 'evidence';
+    const isEvidence = source === 'evidence' || mat?.source === 'evidence';
 
     set((state) => {
       const projectMaterials = state.projectMaterials.filter((m) => m.id !== materialId);

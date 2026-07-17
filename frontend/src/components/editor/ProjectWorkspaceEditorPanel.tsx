@@ -155,7 +155,7 @@ export function ProjectWorkspaceEditorPanel({
           assessmentTitle={tab.title}
           isActive={isActive}
           projectId={projectId}
-          deferAgentStart={tab.pendingEngagement === true}
+          bootstrapAgentOnOpen={tab.pendingEngagement === true}
           onUserEngaged={() => onAssessmentEngaged?.(tab.instanceId)}
           onAddToChat={(text) => onSendToChat?.(text, tab.assessmentId)}
           onOpenActivityLog={onOpenAssessmentActivityLog}

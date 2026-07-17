@@ -51,6 +51,7 @@ export function DocumentViewerWidget({ data, isActive: _isActive, onClose }: Doc
   const projectMaterialId = data.project_material_id as string | undefined;
   const declaredFileType = data.file_type as string | undefined;
   const chunkId = data.chunk_id as string | null | undefined;
+  const reloadToken = data.reload_token as string | number | undefined;
   const downloadFilename =
     (typeof data.filename === 'string' && data.filename.trim())
       ? data.filename.trim()
@@ -160,7 +161,7 @@ export function DocumentViewerWidget({ data, isActive: _isActive, onClose }: Doc
     })();
 
     return () => { cancelled = true; };
-  }, [evidenceDocId, projectMaterialId, declaredFileType, chunkId]);
+  }, [evidenceDocId, projectMaterialId, declaredFileType, chunkId, reloadToken]);
 
   const handleExport = useCallback(() => {
     if (!fileData) return;

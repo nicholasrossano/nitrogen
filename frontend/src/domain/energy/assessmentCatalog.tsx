@@ -1,4 +1,4 @@
-import { Calculator, Leaf, Map, Network, ShieldAlert, Sun, Users } from 'lucide-react';
+import { Calculator, FileText, Leaf, Map, Network, ShieldAlert, Sun, Users } from 'lucide-react';
 
 export interface AssessmentOption {
   id: string;
@@ -53,6 +53,12 @@ export const ALL_MODULES: AssessmentOption[] = [
     icon: <ShieldAlert className="w-3.5 h-3.5" />,
     beta: true,
   },
+  {
+    id: 'investment_memo',
+    name: 'Investment Memo',
+    description: 'Confirm an outline, then draft a cited investment recommendation memo',
+    icon: <FileText className="w-3.5 h-3.5" />,
+  },
 ];
 
 export const ANALYSIS_MODULES = ALL_MODULES.filter(
@@ -96,6 +102,10 @@ export const MODULE_CATEGORIES: AssessmentCategory[] = [
   { id: 'definition', name: 'Project Definition', assessmentIds: ['stakeholder_assessment', 'implementation_plan'] },
   { id: 'feasibility', name: 'Feasibility & Option Analysis', assessmentIds: ['lcoe_model', 'solar_estimate'] },
   { id: 'impact', name: 'Impact Assessment', assessmentIds: ['carbon_model'] },
-  { id: 'compliance', name: 'Compliance & Delivery Readiness', assessmentIds: ['risk_assessment'] },
+  {
+    id: 'compliance',
+    name: 'Compliance & Delivery Readiness',
+    assessmentIds: ['risk_assessment', 'investment_memo'],
+  },
 ];
 

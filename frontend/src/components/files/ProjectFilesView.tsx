@@ -51,7 +51,7 @@ interface ProjectFilesViewProps {
   title?: string;
   description?: string;
   materials: ProjectMaterial[];
-  onDeleteMaterial?: (materialId: string) => Promise<void>;
+  onDeleteMaterial?: (materialId: string, source?: string) => Promise<void>;
   onUploadFile?: (file: File) => Promise<void>;
   onImportFromDrive?: () => Promise<void>;
   driveLinkedFiles?: DriveLinkedFile[];
@@ -210,6 +210,18 @@ export function ProjectFilesView({
       console.error('Download failed:', err);
     } finally {
       setDownloadingId(null);
+    }
+  };
+
+  const handleDeleteMaterial = async (mat: ProjectMaterial) => {
+    if (!onDeleteMaterial || deletingId === mat.id) return;
+    setDeletingId(mat.id);
+    try {
+      await onDeleteMaterial(mat.id, mat.source);
+    } catch (err) {
+      console.error('Failed to delete file:', err);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -745,11 +757,17 @@ export function ProjectFilesView({
                           </button>
                           {onDeleteMaterial ? (
                             <button
-                              onClick={() => onDeleteMaterial(mat.id)}
-                              className="p-1 rounded text-text-tertiary hover:text-red-400 hover:bg-red-50 transition-colors"
+                              type="button"
+                              onClick={() => void handleDeleteMaterial(mat)}
+                              disabled={deletingId === mat.id}
+                              className="p-1 rounded text-text-tertiary hover:text-red-400 hover:bg-red-50 transition-colors disabled:opacity-50"
                               title="Delete"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              {deletingId === mat.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5" />
+                              )}
                             </button>
                           ) : (
                             <div className="p-1 w-[22px]" />

@@ -4,7 +4,7 @@ import {
   useState, useEffect, useCallback, useRef, Suspense, lazy, type ComponentType,
 } from 'react';
 import {
-  Loader2, AlertCircle, CheckCircle2, Pencil, ChevronDown, FileSpreadsheet, RotateCcw,
+  Loader2, AlertCircle, CheckCircle2, Pencil, ChevronDown, History, RotateCcw,
 } from 'lucide-react';
 import type {
   AssessmentAgentStatus,
@@ -30,6 +30,7 @@ import { PlanInspectorPanel } from '@/components/plan-workspace';
 import {
   ConfirmButton,
   ExportButton,
+  ReportButton,
   ExportProgressToast,
   CompanionSidePanel,
   COMPANION_SIDE_PANEL_WIDTH,
@@ -306,15 +307,18 @@ interface AssessmentWorkspaceProps {
   }) => void | Promise<void>;
   onInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
   onApprovalChange?: () => void;
-  /** When true, do not auto-run the assessment agent until the user engages. */
-  deferAgentStart?: boolean;
+  /**
+   * Newly created assessments may bootstrap the agent on open. Existing opens
+   * must stay idle — Confirm / Populate drive the next stage.
+   */
+  bootstrapAgentOnOpen?: boolean;
   /** Called once the assessment is saved as an intentional draft. */
   onUserEngaged?: () => void;
   /** Lift title/actions into FloatLayer header when embedded as a float companion */
   usePanelHeader?: boolean;
   /** Called after the assessment instance title is saved. */
   onTitleChange?: (title: string) => void;
-  /** Notify the float host when a companion column (activity log / deep dive) is open. */
+  /** Notify the float host when a companion column (agent log / deep dive) is open. */
   onCompanionSidePanelOpenChange?: (open: boolean) => void;
 }
 
@@ -331,7 +335,7 @@ export function AssessmentWorkspace({
   onOpenAssessmentReport,
   onInspectorStateChange,
   onApprovalChange,
-  deferAgentStart = false,
+  bootstrapAgentOnOpen = false,
   onUserEngaged,
   usePanelHeader = false,
   onTitleChange,
@@ -364,6 +368,7 @@ export function AssessmentWorkspace({
   const hostInspectorPanelRef = useRef(false);
   const [hostedInspectorState, setHostedInspectorState] = useState<PlanWorkspaceInspectorState | null>(null);
   const [activityLogOpen, setActivityLogOpen] = useState(false);
+  const [viewToolbarHost, setViewToolbarHost] = useState<HTMLDivElement | null>(null);
 
   const handleInspectorStateChange = useCallback((next: PlanWorkspaceInspectorState | null) => {
     if (next) {
@@ -477,7 +482,7 @@ export function AssessmentWorkspace({
     return () => window.removeEventListener('nitrogen:assessment-workflow-updated', handler);
   }, [fetchAgentStatus, fetchState, instanceId]);
 
-  // One-time init per instance (and deferAgentStart flip). Keep callbacks out of
+  // One-time init per instance (and bootstrapAgentOnOpen flip). Keep callbacks out of
   // deps so identity churn cannot flash loading / re-kick the agent.
   useEffect(() => {
     let cancelled = false;
@@ -500,7 +505,9 @@ export function AssessmentWorkspace({
         setLoading(false);
         const status = await fetchAgentStatusRef.current();
         if (cancelled) return;
-        if (!deferAgentStart && status?.run_state !== 'approved') {
+        // Only bootstrap brand-new assessments. Reopening an in-progress instance
+        // must not call /run — that resumes/advances work; Confirm already does that.
+        if (bootstrapAgentOnOpen && status?.run_state !== 'approved') {
           await runAssessmentAgentRef.current();
         }
       } catch (e: any) {
@@ -513,7 +520,7 @@ export function AssessmentWorkspace({
 
     initialize();
     return () => { cancelled = true; };
-  }, [instanceId, deferAgentStart]);
+  }, [instanceId, bootstrapAgentOnOpen]);
 
   useEffect(() => {
     if (!state) return;
@@ -609,11 +616,12 @@ export function AssessmentWorkspace({
             outputFooterAction={outputFooterAction}
             outputFooterState={outputFooterState}
             onInspectorStateChange={handleInspectorStateChange}
+            viewToolbarHost={viewToolbarHost}
           />
         </Suspense>
       );
     },
-    [fetchState, projectId, instanceId, isActive, handleInspectorStateChange, state?.workflow_version]
+    [fetchState, projectId, instanceId, isActive, handleInspectorStateChange, state?.workflow_version, viewToolbarHost]
   );
 
   const handlePopulate = useCallback(async (stageId: string) => {
@@ -724,28 +732,23 @@ export function AssessmentWorkspace({
     }, 4500);
 
     try {
-      const { blob, filename } = await api.exportStagedAssessment(instanceId);
-
-      // Narrative DOCX: save into project Files, then open like any other document.
-      // Keep the toast in "running" until open succeeds — success-before-open was lying.
+      // Narrative DOCX: upsert one Files material, then open the normal viewer.
+      // Download stays on the viewer header Export action.
       if (isReport && onOpenAssessmentReport && projectId) {
         setExportToastSteps((prev) => {
           const advanced = advanceExportToastSteps(prev);
           return advanceExportToastSteps(advanced);
         });
-        const file = new File([blob], filename, {
-          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        });
-        const uploaded = await api.uploadProjectMaterial(projectId, file);
+        const published = await api.publishAssessmentReport(instanceId);
         const fallbackTitle = state?.assessment_definition?.name || assessmentId.replace(/_/g, ' ');
         await onOpenAssessmentReport({
           instanceId,
           assessmentId,
           title: displayTitle || assessmentHeaderTitle(assessmentTitle, fallbackTitle),
           material: {
-            ...uploaded.material,
-            id: String(uploaded.material.id),
-            source: uploaded.material.source ?? 'material',
+            ...published.material,
+            id: String(published.material.id),
+            source: published.material.source ?? 'material',
           },
         });
         clearExportPhaseTimer();
@@ -753,6 +756,8 @@ export function AssessmentWorkspace({
         setExportToastPhase('success');
         return;
       }
+
+      const { blob, filename } = await api.exportStagedAssessment(instanceId);
 
       clearExportPhaseTimer();
       setExportToastSteps((prev) => markExportToastComplete(prev));
@@ -904,7 +909,7 @@ export function AssessmentWorkspace({
       a.click();
       URL.revokeObjectURL(url);
     } catch (e: any) {
-      setError(e.message ?? 'Decision log export failed');
+      setError(e.message ?? 'History export failed');
     }
   };
 
@@ -992,6 +997,9 @@ export function AssessmentWorkspace({
   hostInspectorPanelRef.current = isAssessmentMapWidget;
   const companionSidePanelOpen = activityLogOpen
     || (isAssessmentMapWidget && hostedInspectorState != null);
+  // Side-by-side with Agent log / deep dive: clip the outer shell and scroll
+  // the main column independently (otherwise Entities etc. can't scroll).
+  const useSplitLayout = isAssessmentMapWidget || companionSidePanelOpen;
 
   const isCalculationComputedWidget = isComputedStage && [
     'lcoe_results',
@@ -1077,12 +1085,12 @@ export function AssessmentWorkspace({
           isApprovingFinal={isApprovingFinal}
         />
       ) : null}
-      <div className={(isAssessmentMapWidget || companionSidePanelOpen) ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 overflow-y-auto'}>
-        <div className={(isAssessmentMapWidget || companionSidePanelOpen)
+      <div className={useSplitLayout ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 overflow-y-auto'}>
+        <div className={useSplitLayout
           ? 'h-full w-full flex min-h-0 min-w-0'
           : 'w-full p-3 flex flex-col'}
         >
-          <div className={(isAssessmentMapWidget || companionSidePanelOpen)
+          <div className={useSplitLayout
             ? 'flex-1 min-w-0 min-h-0 flex flex-col p-3'
             : 'flex flex-col w-full'}
           >
@@ -1097,23 +1105,25 @@ export function AssessmentWorkspace({
             }}
           />
           {/* Workspace controls row (full panel width) */}
-          <div className={`mt-3 flex items-center gap-4 ${usePanelHeader ? '' : 'justify-between'}`}>
+          <div className="mt-3 flex items-center gap-4 justify-between">
             <StageStepper
               stageDefs={stageDefs}
               stages={stages}
               currentStageId={activeStageId}
               onSelect={setActiveStageId}
             />
-            {!usePanelHeader ? (
             <div className="flex items-center gap-2 shrink-0">
+              <div ref={setViewToolbarHost} className="flex items-center gap-2" />
+              {!usePanelHeader ? (
+              <>
               {projectId && (
                 <div ref={decisionMenuRef} className="relative">
                   <button
                     onClick={() => setDecisionMenuOpen((prev) => !prev)}
                     className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 flex items-center shrink-0"
                   >
-                    <FileSpreadsheet className="w-3 h-3" />
-                    Log
+                    <History className="w-3 h-3" />
+                    History
                     <ChevronDown className="w-3 h-3 opacity-60" />
                   </button>
                   {decisionMenuOpen && (
@@ -1135,12 +1145,20 @@ export function AssessmentWorkspace({
                 </div>
               )}
               {showExportAction && (
-                <ExportButton
-                  onClick={handleExport}
-                  loading={isExporting}
-                  disabled={isApprovingFinal}
-                  label={exportActionKind === 'report' ? 'Report' : 'Export'}
-                />
+                exportActionKind === 'report' ? (
+                  <ReportButton
+                    onClick={handleExport}
+                    loading={isExporting}
+                    disabled={isApprovingFinal}
+                  />
+                ) : (
+                  <ExportButton
+                    onClick={handleExport}
+                    loading={isExporting}
+                    disabled={isApprovingFinal}
+                    label="Export"
+                  />
+                )
               )}
               {canApproveFinal && (
                 <button
@@ -1173,11 +1191,20 @@ export function AssessmentWorkspace({
                   <span className="leading-none">Confirmed</span>
                 </button>
               )}
+              </>
+              ) : null}
             </div>
-            ) : null}
           </div>
 
-          <div className={isAssessmentMapWidget ? 'mt-[38px] flex min-h-0 flex-1 flex-col' : 'mt-[38px] max-w-3xl mx-auto w-full flex flex-col'}>
+          <div
+            className={
+              isAssessmentMapWidget
+                ? 'mt-3 flex min-h-0 flex-1 flex-col'
+                : companionSidePanelOpen
+                  ? 'mt-[38px] max-w-3xl mx-auto w-full min-h-0 flex-1 flex flex-col overflow-y-auto'
+                  : 'mt-[38px] max-w-3xl mx-auto w-full flex flex-col'
+            }
+          >
             {/* Active stage content */}
             {isComputedStage ? (
               // Computed-results stages: no card wrapper, widget renders directly
@@ -1300,10 +1327,10 @@ export function AssessmentWorkspace({
               style={{ width: COMPANION_SIDE_PANEL_WIDTH }}
             >
               <CompanionSidePanel
-                title="Activity log"
+                title="Agent log"
                 eyebrow={assessmentDisplayTitle}
                 onClose={() => setActivityLogOpen(false)}
-                ariaLabel="Assessment activity log"
+                ariaLabel="Assessment agent log"
               >
                 <AssessmentActivityLogTab
                   instanceId={instanceId}

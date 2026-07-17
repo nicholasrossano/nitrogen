@@ -13,7 +13,7 @@ from app.core.billing_guard import require_ai_access
 from app.core.permissions import require_project_editor, require_project_viewer
 from app.core.database import get_db
 from app.plans.registry import get_plan_registry
-from app.services.deep_dive import DeepDiveService
+from app.services.deep_dive import DeepDiveService, is_usable_deep_dive_cache
 
 ai_access = require_ai_access()
 
@@ -319,7 +319,7 @@ async def deep_dive_plan_item(
     # Check for cached LLM result
     plan = _ensure_plan_metadata(db, user.uid, initiative.project_plan) or {}
     cached = plan.get("deep_dives", {}).get(item_id)
-    if cached and "summary_citations" not in cached:
+    if not is_usable_deep_dive_cache(cached):
         cached = None
 
     if cached:

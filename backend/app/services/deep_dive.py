@@ -11,6 +11,7 @@ All deep-dive surfaces use this one lightweight pipeline:
 import asyncio
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -25,11 +26,17 @@ from app.core.model_catalog import Complexity, ModelRole
 from app.core.web_search import run_web_search
 from app.models.project import Project
 from app.services.rag import RAGService
-from app.services.variables import format_variables_for_initiative_prompt
 from app.services.tiered_retrieval import RetrievedFact, TieredRetrievalService
+from app.services.variables import format_variables_for_initiative_prompt
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+# OpenAI web search often embeds citations as `([label](url))` in the prose.
+# These must become footer sources even when url_citation annotations are absent.
+_MARKDOWN_CITATION_RE = re.compile(
+    r"(?:\s*)\(?\[([^\]]+)\]\((https?://[^)\s]+)\)\)?"
+)
 
 
 def _format_assessment_type(value: str | None) -> str | None:
@@ -110,6 +117,24 @@ def _settings_for_assessment(assessment_type: str | None) -> DeepDiveAssessmentS
     return DEEP_DIVE_ASSESSMENT_SETTINGS.get(key, DEFAULT_DEEP_DIVE_SETTINGS)
 
 
+# Strip chatty lead-ins models often prepend before the actual overview prose.
+_CONVERSATIONAL_OVERVIEW_LEAD_IN_RE = re.compile(
+    r"^(?:"
+    r"here(?:'s|’s| is| are)\s+(?:a\s+|an\s+)?"
+    r"(?:concise[, ]*|authoritative[, ]*|brief[, ]*|short[, ]*)*"
+    r"(?:overview|summary|definition|look|rundown)"
+    r"[^.:\n]{0,200}[:.]\s*"
+    r"|"
+    r"(?:let me|i(?:'ll|’ll| will))\s+(?:provide|give|share|offer|walk you through)"
+    r"[^.:\n]{0,120}[:.]\s*"
+    r"|"
+    r"this\s+(?:overview|summary|section)\s+(?:provides|offers|covers|presents)"
+    r"[^.:\n]{0,120}[:.]\s*"
+    r")",
+    re.IGNORECASE,
+)
+
+
 def _clean_overview_text(text: str) -> str:
     cleaned = text.strip()
     for prefix in (
@@ -119,8 +144,64 @@ def _clean_overview_text(text: str) -> str:
         "Overview:",
     ):
         if cleaned.lower().startswith(prefix.lower()):
-            return cleaned[len(prefix):].strip()
+            cleaned = cleaned[len(prefix):].strip()
+            break
+    cleaned = _CONVERSATIONAL_OVERVIEW_LEAD_IN_RE.sub("", cleaned, count=1).strip()
     return cleaned
+
+
+def _extract_markdown_citations(text: str) -> list[dict[str, Any]]:
+    """Pull inline markdown citation links out of overview prose.
+
+    Indices are relative to `text` (typically the cleaned overview).
+    """
+    citations: list[dict[str, Any]] = []
+    for match in _MARKDOWN_CITATION_RE.finditer(text):
+        label = (match.group(1) or "").strip()
+        url = (match.group(2) or "").strip()
+        if not url:
+            continue
+        citations.append(
+            {
+                "url": url,
+                "title": label or urlparse(url).netloc.lstrip("www.") or "Web Source",
+                "start_index": match.start(),
+                "end_index": match.end(),
+                # Spans are relative to cleaned overview text, not the raw model output.
+                "span_basis": "cleaned",
+            }
+        )
+    return citations
+
+
+def _strip_markdown_citations(text: str) -> str:
+    """Remove inline markdown citation markers; keep surrounding prose intact."""
+    stripped = _MARKDOWN_CITATION_RE.sub("", text)
+    stripped = re.sub(r"[ \t]{2,}", " ", stripped)
+    stripped = re.sub(r"\s+([.,;:!?])", r"\1", stripped)
+    return stripped.strip()
+
+
+def _merge_citation_lists(
+    primary: list[dict[str, Any]],
+    fallback: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Prefer annotated citations; add markdown-extracted URLs that were never annotated."""
+    if not primary:
+        return list(fallback)
+    seen_urls = {
+        (c.get("url") or "").strip()
+        for c in primary
+        if (c.get("url") or "").strip()
+    }
+    merged = list(primary)
+    for citation in fallback:
+        url = (citation.get("url") or "").strip()
+        if not url or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        merged.append(citation)
+    return merged
 
 
 def _index_shift_after_clean(raw: str, cleaned: str) -> int:
@@ -205,9 +286,16 @@ def build_cited_overview(
 
     Only sources referenced by at least one sentence appear in the returned
     `sources` list. Citation numbers are dense (1..N) in first-use order.
+
+    Provider url_citation annotations are preferred. When the model embeds
+    markdown links like `([domain](url))` instead (or in addition), those are
+    treated as cited sources and stripped from the displayed prose.
     """
     cleaned = _clean_overview_text(overview_text)
     shift = _index_shift_after_clean(overview_text, cleaned)
+    markdown_citations = _extract_markdown_citations(cleaned)
+    # Map spans while markdown links are still present so URL/host matching works.
+    effective_citations = _merge_citation_lists(citations, markdown_citations)
     spans = _split_overview_sentences(cleaned)
     if not spans:
         return {"summary_items": [], "sources": []}
@@ -239,7 +327,7 @@ def build_cited_overview(
         url_to_number[url] = number
         return number
 
-    for citation in citations:
+    for citation in effective_citations:
         url = (citation.get("url") or "").strip()
         if not url:
             continue
@@ -247,10 +335,16 @@ def build_cited_overview(
         sentence_idx: int | None = None
         start_index = citation.get("start_index")
         if isinstance(start_index, int):
-            sentence_idx = _sentence_index_for_offset(spans, start_index - shift)
+            # Markdown citations are indexed against cleaned text; annotations against raw.
+            offset = (
+                start_index
+                if citation.get("span_basis") == "cleaned"
+                else start_index - shift
+            )
+            sentence_idx = _sentence_index_for_offset(spans, offset)
         if sentence_idx is None:
             sentence_idx = _sentence_index_for_url(spans, url)
-        # Annotated citations are model-cited even when span mapping fails —
+        # Annotated/markdown citations are model-cited even when span mapping fails —
         # attach to the first sentence so the footer stays aligned with use.
         if sentence_idx is None:
             sentence_idx = 0
@@ -270,10 +364,12 @@ def build_cited_overview(
         per_sentence = [[remap[n] for n in nums if n in remap] for nums in per_sentence]
         sources = [sources_by_number[old] for old in sorted(cited_numbers)]
 
-    summary_items = [
-        {"text": sentence, "source_indices": indices}
-        for (sentence, _start, _end), indices in zip(spans, per_sentence)
-    ]
+    summary_items: list[dict[str, Any]] = []
+    for (sentence, _start, _end), indices in zip(spans, per_sentence):
+        cleaned_sentence = _strip_markdown_citations(sentence)
+        if not cleaned_sentence:
+            continue
+        summary_items.append({"text": cleaned_sentence, "source_indices": indices})
     return {"summary_items": summary_items, "sources": sources}
 
 
@@ -296,6 +392,20 @@ def filter_sources_to_cited(
 
     renumbered = [[remap[n] for n in nums if n in remap] for nums in summary_citations]
     return filtered, renumbered
+
+
+def is_usable_deep_dive_cache(cached: Any) -> bool:
+    """Return False for pre-citation or markdown-leak cache payloads that must regenerate."""
+    if not isinstance(cached, dict):
+        return False
+    if "summary_citations" not in cached:
+        return False
+    # Older runs left OpenAI markdown citation markers in the overview while
+    # emitting an empty sources list — force a refresh so the footer populates.
+    overview = cached.get("what_this_is") or []
+    if any(isinstance(sentence, str) and "](http" in sentence for sentence in overview):
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -670,8 +780,8 @@ class DeepDiveService:
             assessment_settings.label,
         )
 
-        # Overview citations come only from web-search url_citation annotations
-        # (sources the model actually cited), not from parallel RAG "looked at" hits.
+        # Overview citations come from web-search url_citation annotations and/or
+        # inline markdown links the model embedded — not from parallel RAG hits.
         try:
             overview_result = await self._generate_overview_with_web_search(search_prompt)
         except Exception as overview_exc:
@@ -719,6 +829,12 @@ class DeepDiveService:
         questions = "\n".join(f"- {question}" for question in assessment_settings.overview_questions)
         return (
             "Run a concise authoritative web search and answer only with a 2-3 sentence overview.\n\n"
+            "TONE — CRITICAL\n"
+            "Write as a research definition / encyclopedic note for a project workspace panel — "
+            "not as a chat reply. Start immediately with the substance. "
+            "Do not address the reader. Do not open with conversational framing such as "
+            "\"Here's a concise overview…\", \"Here is an authoritative overview of…\", "
+            "\"Let me explain…\", or \"This overview provides…\".\n\n"
             "SOURCE PRIORITY\n"
             f"{assessment_settings.search_focus}\n"
             "Prefer primary and institutional sources over blogs, SEO pages, or generic summaries.\n\n"

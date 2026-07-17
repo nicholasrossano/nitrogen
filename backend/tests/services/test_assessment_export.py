@@ -33,6 +33,62 @@ def test_fingerprint_payload_is_stable():
     assert a != fingerprint_payload({"a": [2, 3], "b": 2})
 
 
+@pytest.mark.asyncio
+@patch("app.services.assessment_export.save_workflow_state")
+async def test_upsert_assessment_report_material_updates_same_row(_save):
+    from unittest.mock import MagicMock
+
+    from app.services.assessment_export import (
+        REPORT_MATERIAL_ID_KEY,
+        upsert_assessment_report_material,
+    )
+
+    project_id = uuid4()
+    workspace_id = uuid4()
+    material_id = uuid4()
+    existing = SimpleNamespace(
+        id=material_id,
+        project_id=project_id,
+        storage_path="old/path.docx",
+        filename="landscape_n1_user_report.docx",
+        file_type="docx",
+        file_size=10,
+        content_text="old",
+    )
+    inst = SimpleNamespace(id=uuid4(), project_id=project_id, workflow_state={})
+    state = {REPORT_MATERIAL_ID_KEY: str(material_id)}
+
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = existing
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=result)
+    db.flush = AsyncMock()
+
+    storage = AsyncMock()
+    storage.save = AsyncMock(return_value="new/path.docx")
+    storage.delete = AsyncMock(return_value=True)
+
+    with (
+        patch("app.core.storage.get_uploads_storage", return_value=storage),
+        patch("app.services.document_parser.DocumentParserService") as parser_cls,
+    ):
+        parser_cls.return_value.parse_docx.return_value = "parsed"
+        material, created = await upsert_assessment_report_material(
+            db=db,
+            inst=inst,
+            state=state,
+            content=b"docx-bytes",
+            filename="landscape_n1_user_report.docx",
+            workspace_id=workspace_id,
+        )
+
+    assert created is False
+    assert material is existing
+    assert existing.storage_path == "new/path.docx"
+    assert existing.file_size == len(b"docx-bytes")
+    storage.delete.assert_awaited_once_with("old/path.docx")
+
+
 @patch("app.services.assessment_export.save_workflow_state")
 def test_export_lock_blocks_concurrent_export(_save):
     inst = _make_inst()

@@ -247,7 +247,7 @@ function toInspectorResult(
     documentSourcesTitle: 'Project documents',
     linkSources,
     linkSourcesTitle: 'Citations',
-    loadingLabel: 'Researching stakeholder details...',
+    loadingLabel: 'Researching...',
     emptySourcesMessage: isStakeholderAssessment
       ? 'No external citations are attached to this stakeholder yet.'
       : 'No external citations are attached to this item yet.',
@@ -261,6 +261,7 @@ export function AssessmentMapWidget({
   workflowVersion,
   onWorkflowUpdated,
   onInspectorStateChange,
+  viewToolbarHost,
 }: WorkspaceWidgetProps) {
   const mapData = data as AssessmentMapData;
   const incomingGroups = useMemo<AssessmentGroup[]>(() => mapData?.groups ?? [], [mapData]);
@@ -550,6 +551,7 @@ export function AssessmentMapWidget({
           showItemBranchDelete={false}
           showItemRightActions={false}
           enableItemSorting={false}
+          viewToolbarHost={viewToolbarHost}
         />
       </div>
     </div>
