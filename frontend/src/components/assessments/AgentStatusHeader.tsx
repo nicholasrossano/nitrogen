@@ -35,8 +35,8 @@ export function AgentStatusHeader({ status, loading = false, onOpen, approvedMet
   const displaySummary = isApproved && approvedMeta ? approvedMeta : summary;
 
   return (
-    <div className="flex items-center justify-between rounded-lg border border-divider bg-surface px-3 py-2">
-      <div className="flex items-center gap-2 min-w-0">
+    <div className="flex items-center gap-3 rounded-lg border border-divider bg-surface px-3 py-2">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
         {loading || isRunning ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin text-accent shrink-0" />
         ) : isBlocked ? (
@@ -44,12 +44,12 @@ export function AgentStatusHeader({ status, loading = false, onOpen, approvedMet
         ) : (
           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
         )}
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-xs font-medium text-text-primary">
             {stateLabel(runState)}
           </p>
           {displaySummary && (
-            <p className="text-xs text-text-tertiary truncate">
+            <p className="text-xs text-text-tertiary line-clamp-2">
               {displaySummary}
             </p>
           )}
@@ -59,12 +59,12 @@ export function AgentStatusHeader({ status, loading = false, onOpen, approvedMet
         <button
           type="button"
           onClick={onOpen}
-          className="btn-secondary !py-1 !px-2 !text-[11px] !font-medium !rounded-md shrink-0"
+          className="btn-secondary !py-1 !px-2 !text-[11px] !font-medium !rounded-md shrink-0 self-center"
           disabled={loading}
         >
           <span className="inline-flex items-center gap-1">
             <Play className="h-3 w-3" />
-            Open
+            Agent log
           </span>
         </button>
       )}
