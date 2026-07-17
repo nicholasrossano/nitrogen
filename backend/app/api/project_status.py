@@ -24,6 +24,7 @@ from app.services.project_status import (
     apply_project_status_override,
     create_status_category,
     delete_status_category,
+    ensure_category_criteria,
     generate_category_criteria_for_row,
     list_project_status,
     list_status_category_configs,
@@ -112,6 +113,7 @@ def _serialize_category_config(row) -> ProjectStatusCategoryConfig:
         label=row.label,
         definition_text=row.definition_text,
         criteria=criteria,
+        defined_by_email=getattr(row, "defined_by_email", None),
         is_active=row.is_active,
         created_at=row.created_at,
         updated_at=row.updated_at,
@@ -135,13 +137,14 @@ def _serialize_category_row(
             effective_status="unknown",
             confidence="unknown",
             rationale=(
-                "Generate criteria from your definition, then refresh to assess against project materials."
+                "Status has not been computed yet. Refresh to assess from your project "
+                "definition and materials; assessments are optional and only help fill gaps."
             ),
             critical_insight=(
-                "No assessment yet. Generate criteria from your definition, then refresh to assess."
+                "Not assessed yet. Refresh to score this category from available project materials."
             ),
             supporting_evidence=[],
-            suggested_improvement="Generate criteria, then refresh the status overview.",
+            suggested_improvement="Refresh the status overview to assess from project materials.",
             retrieved_sources=[],
             positive_drivers=[],
             negative_drivers=[],
@@ -242,6 +245,9 @@ async def get_project_status(
 ):
     project = await require_viewer(db, project_id, user)
     categories, result_rows, overrides_by_category, domain = await list_project_status(db, project)
+    # Fill missing/stale short info summaries (backend evaluation lens).
+    if await ensure_category_criteria(db, project, categories):
+        await db.commit()
     return _build_status_response(
         project=project,
         categories=categories,
@@ -327,9 +333,17 @@ async def create_status_category_row(
             label=body.label,
             definition_text=body.definition_text,
             category_key=body.category_key,
+            defined_by_email=user.email,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if (row.definition_text or "").strip():
+        await generate_category_criteria_for_row(
+            db,
+            project,
+            category_key=row.category_key,
+            persist=True,
+        )
     project.touch()
     await db.commit()
     await db.refresh(row)
@@ -358,9 +372,17 @@ async def update_status_category_row(
             definition_text=body.definition_text,
             criteria=criteria_payload,
             is_active=body.is_active,
+            defined_by_email=user.email,
         )
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    if row.criteria is None and (row.definition_text or "").strip():
+        await generate_category_criteria_for_row(
+            db,
+            project,
+            category_key=row.category_key,
+            persist=True,
+        )
     project.touch()
     await db.commit()
     await db.refresh(row)

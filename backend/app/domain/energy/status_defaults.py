@@ -36,46 +36,36 @@ def get_default_status_categories() -> DefaultStatusCategoryPack:
                 category_key="evidence_credibility",
                 label="Evidence & credibility",
                 definition_text=(
-                    "Evidence and credibility means material project claims are supported by traceable sources, "
-                    "variables are explicit and validated where possible, and there are no major contradictions "
-                    "between what the project asserts and what the record shows."
+                    "Material claims are backed by traceable sources, with no major contradictions "
+                    "in the project record."
                 ),
             ),
             DefaultStatusCategory(
                 category_key="technical_viability",
                 label="Technical viability",
                 definition_text=(
-                    "Technical viability means the proposed design, sizing, and modeled outputs are coherent for "
-                    "this site and use case, key technical inputs are present, and there is no sign the configuration "
-                    "is infeasible or based on invalid analysis."
+                    "The proposed design and modeled outputs are coherent for this site and use case."
                 ),
             ),
             DefaultStatusCategory(
                 category_key="funding_economics",
                 label="Funding & economics",
                 definition_text=(
-                    "Funding and economics means the project's cost, revenue, and funding logic hang together, "
-                    "the use-of-funds story is legible to funders or approvers, and the economic case is directionally "
-                    "credible even if not yet decision-grade."
+                    "Cost, revenue, and funding logic hang together and look directionally credible."
                 ),
             ),
             DefaultStatusCategory(
                 category_key="deployment_readiness",
                 label="Deployment readiness",
                 definition_text=(
-                    "Deployment readiness means a credible path to build and operate: named owners for critical "
-                    "workstreams, a realistic timeline with key milestones, identified dependencies such as permits, "
-                    "partners, and procurement, and no unresolved blockers that would prevent starting construction "
-                    "or operations."
+                    "A credible path to build and operate exists, with owners and no unresolved blockers."
                 ),
             ),
             DefaultStatusCategory(
                 category_key="risk_profile",
                 label="Risk profile",
                 definition_text=(
-                    "Risk profile means material risks and dependencies are identified, severity and ownership are "
-                    "understood, mitigation paths exist for the most important items, and no severe unmitigated blocker "
-                    "currently dominates the project's trajectory."
+                    "Material risks are identified, owned, and mitigated for the most important items."
                 ),
             ),
         ),

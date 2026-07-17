@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assessments.utils import llm_json
+from app.core.database import AsyncSessionLocal
 from app.domain.registry import get_default_status_categories
 from app.models.variable import Variable
 from app.models.evidence import EvidenceDoc, EvidenceDocStatus
@@ -23,6 +27,13 @@ from app.models.project_status import (
     ProjectStatusResult,
 )
 from app.services.tiered_retrieval import RetrievedFact, TieredRetrievalService
+
+logger = logging.getLogger(__name__)
+
+# Coalesce bursty uploads/indexing/approvals into one LLM status pass per project.
+_STATUS_REFRESH_DEBOUNCE_SECONDS = 4.0
+_pending_status_refresh_handles: dict[str, asyncio.TimerHandle] = {}
+_pending_status_refresh_meta: dict[str, dict[str, str | None]] = {}
 
 VALID_STATUSES = {"green", "yellow", "red", "unknown"}
 VALID_CONFIDENCE = {"high", "medium", "low", "unknown"}
@@ -565,14 +576,17 @@ async def generate_status_category_criteria(
     definition_text: str,
     project_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Generate an editable criteria lens from a category definition."""
+    """Derive the backend evaluation lens from a category definition (not user-edited)."""
     user_msg = json.dumps(
         {
             "label": label,
             "definition_text": definition_text,
             "project_context": project_context or {},
             "required_response_schema": {
-                "summary": "one-line distillation of what success means for this category",
+                "summary": (
+                    "short tooltip blurb (max ~120 characters) of what this category checks; "
+                    "plain language; do not copy the full definition"
+                ),
                 "criteria": [
                     {
                         "id": "c1",
@@ -587,7 +601,9 @@ async def generate_status_category_criteria(
         }
     )
     system = (
-        "You generate an evaluation lens for one project status category. Return strict JSON only. "
+        "You generate an internal evaluation lens for one project status category. Return strict JSON only. "
+        "summary must be a short info-tooltip line (about 8–18 words, under 120 characters) that captures "
+        "what this category is checking — not a restatement of the full definition and not criteria text. "
         "If the definition is vague, use interpretive license to flesh out a credible, project-appropriate "
         "lens for this category — generative themes, not literal extraction only. "
         "If the definition is detailed, preserve the user's specifics as a skeleton; organize lightly; "
@@ -597,12 +613,12 @@ async def generate_status_category_criteria(
         "Default criterion type to qualitative; use indicator for directional checks the user implied; "
         "use metric only when the user supplied numbers. "
         "Always produce at least two criteria when possible. "
-        "Criteria are a reasoning scaffold, not a pass/fail checklist."
+        "Criteria are a reasoning scaffold for backend assessment, not a pass/fail checklist."
     )
     result = await llm_json(system=system, user_msg=user_msg)
     if not isinstance(result, dict):
         return {
-            "summary": definition_text[:200] if definition_text else label,
+            "summary": _short_definition_summary(definition_text, label),
             "criteria": [{"id": "c1", "text": definition_text or label, "type": "qualitative"}],
             "retrieval_focus": [label],
             "parse_warnings": ["Criteria generation fallback used."],
@@ -629,12 +645,61 @@ async def generate_status_category_criteria(
         normalized_criteria.append(normalized)
     if not normalized_criteria:
         normalized_criteria = [{"id": "c1", "text": definition_text or label, "type": "qualitative"}]
+    summary = str(result.get("summary") or "").strip()
+    if not summary:
+        summary = _short_definition_summary(definition_text, label)
+    else:
+        summary = _clip_text(summary, max_chars=140) or summary
     return {
-        "summary": str(result.get("summary") or definition_text[:200] or label).strip(),
+        "summary": summary,
         "criteria": normalized_criteria,
         "retrieval_focus": _truncate_list(result.get("retrieval_focus"), max_items=8) or [label],
         "parse_warnings": _truncate_list(result.get("parse_warnings"), max_items=4),
     }
+
+
+def _short_definition_summary(definition_text: str, label: str) -> str:
+    clipped = _clip_text(definition_text, max_chars=120)
+    return clipped or label
+
+
+def _category_needs_evaluation_lens(row: ProjectStatusCategory) -> bool:
+    """True when the backend lens (incl. short info summary) is missing or too long."""
+    if not isinstance(row.criteria, dict) or not row.criteria:
+        return True
+    summary = str(row.criteria.get("summary") or "").strip()
+    if not summary:
+        return True
+    if len(summary) > 160:
+        return True
+    definition = (row.definition_text or "").strip()
+    if definition and summary == definition:
+        return True
+    if definition and len(definition) > 80 and len(summary) >= int(0.85 * len(definition)):
+        return True
+    return False
+
+
+async def ensure_category_criteria(
+    db: AsyncSession,
+    project: Project,
+    categories: list[ProjectStatusCategory],
+) -> bool:
+    """Ensure each category has a backend evaluation lens. Returns True if any were generated."""
+    project_context = _project_context_for_generation(project)
+    generated_any = False
+    for row in categories:
+        if not _category_needs_evaluation_lens(row):
+            continue
+        row.criteria = await generate_status_category_criteria(
+            label=row.label,
+            definition_text=row.definition_text,
+            project_context=project_context,
+        )
+        generated_any = True
+    if generated_any:
+        await db.flush()
+    return generated_any
 
 
 async def _llm_category_result(
@@ -772,6 +837,14 @@ async def get_or_seed_status_categories(
     if rows:
         return rows
 
+    # If the project already has categories (even soft-deleted), do not reseed —
+    # the user may have intentionally removed every active category.
+    existing = await db.execute(
+        select(ProjectStatusCategory.id).where(ProjectStatusCategory.project_id == project.id).limit(1)
+    )
+    if existing.scalar_one_or_none() is not None:
+        return []
+
     defaults = get_default_status_categories()
     seeded: list[ProjectStatusCategory] = []
     for item in defaults.categories:
@@ -786,24 +859,8 @@ async def get_or_seed_status_categories(
         db.add(row)
         seeded.append(row)
     await db.flush()
+    await ensure_category_criteria(db, project, seeded)
     return seeded
-
-
-async def ensure_category_criteria(
-    db: AsyncSession,
-    project: Project,
-    categories: list[ProjectStatusCategory],
-) -> None:
-    project_context = _project_context_for_generation(project)
-    for row in categories:
-        if row.criteria:
-            continue
-        row.criteria = await generate_status_category_criteria(
-            label=row.label,
-            definition_text=row.definition_text,
-            project_context=project_context,
-        )
-    await db.flush()
 
 
 async def refresh_project_status(
@@ -938,6 +995,7 @@ async def create_status_category(
     label: str,
     definition_text: str,
     category_key: str | None = None,
+    defined_by_email: str | None = None,
 ) -> ProjectStatusCategory:
     key = (category_key or _slugify_category_key(label)).strip().lower()
     if not key:
@@ -949,8 +1007,18 @@ async def create_status_category(
             ProjectStatusCategory.category_key == key,
         )
     )
-    if existing.scalar_one_or_none():
-        raise ValueError("A category with this key already exists")
+    existing_row = existing.scalar_one_or_none()
+    if existing_row is not None:
+        if existing_row.is_active:
+            raise ValueError("A category with this key already exists")
+        # Reuse a previously deleted category key instead of colliding on uniqueness.
+        existing_row.label = label.strip()
+        existing_row.definition_text = definition_text.strip()
+        existing_row.criteria = None
+        existing_row.defined_by_email = (defined_by_email or "").strip() or None
+        existing_row.is_active = True
+        await db.flush()
+        return existing_row
 
     row = ProjectStatusCategory(
         project_id=project.id,
@@ -958,6 +1026,7 @@ async def create_status_category(
         label=label.strip(),
         definition_text=definition_text.strip(),
         criteria=None,
+        defined_by_email=(defined_by_email or "").strip() or None,
         is_active=True,
     )
     db.add(row)
@@ -974,6 +1043,7 @@ async def update_status_category(
     definition_text: str | None = None,
     criteria: dict[str, Any] | None = None,
     is_active: bool | None = None,
+    defined_by_email: str | None = None,
 ) -> ProjectStatusCategory:
     result = await db.execute(
         select(ProjectStatusCategory).where(
@@ -987,7 +1057,14 @@ async def update_status_category(
     if label is not None:
         row.label = label.strip()
     if definition_text is not None:
-        row.definition_text = definition_text.strip()
+        next_definition = definition_text.strip()
+        # Criteria are a backend evaluation lens derived from the definition —
+        # clear them so the next refresh regenerates against the new text.
+        if next_definition != (row.definition_text or ""):
+            row.criteria = None
+            if defined_by_email is not None:
+                row.defined_by_email = defined_by_email.strip() or None
+        row.definition_text = next_definition
     if criteria is not None:
         row.criteria = criteria
     if is_active is not None:
@@ -1009,8 +1086,12 @@ async def delete_status_category(
         )
     )
     row = result.scalar_one_or_none()
-    if row is None:
+    if row is None or not row.is_active:
         raise LookupError("Category not found")
+
+    # Soft-delete so shared projects stay consistent and related history rows
+    # cannot block removal. Inactive categories are omitted from status views.
+    row.is_active = False
 
     result_rows = await db.execute(
         select(ProjectStatusResult).where(
@@ -1030,7 +1111,6 @@ async def delete_status_category(
     for override_row in override_rows.scalars().all():
         await db.delete(override_row)
 
-    await db.delete(row)
     await db.flush()
 
 
@@ -1104,3 +1184,76 @@ async def apply_project_status_override(
     db.add(override)
     await db.flush()
     return override
+
+
+async def _run_scheduled_project_status_refresh(
+    project_id: str,
+    *,
+    source: str,
+    user_id: str | None,
+) -> None:
+    try:
+        async with AsyncSessionLocal() as db:
+            project = await db.get(Project, UUID(str(project_id)))
+            if project is None:
+                return
+            await refresh_project_status(
+                db,
+                project,
+                source=source,
+                user_id=user_id,
+            )
+            await db.commit()
+    except Exception:
+        logger.exception(
+            "Scheduled project status refresh failed for project %s (source=%s)",
+            project_id,
+            source,
+        )
+
+
+def schedule_project_status_refresh(
+    project_id: UUID | str,
+    *,
+    source: str = "signal_change",
+    user_id: str | None = None,
+) -> None:
+    """Debounced fire-and-forget status refresh after materials/assessments change.
+
+    Safe to call from request handlers: uses its own DB session and coalesces
+    rapid signal bursts (multi-file upload, index + variable extract, etc.).
+    """
+    key = str(project_id)
+    _pending_status_refresh_meta[key] = {"source": source, "user_id": user_id}
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        logger.warning(
+            "No running event loop; skipping scheduled status refresh for %s",
+            key,
+        )
+        return
+
+    existing = _pending_status_refresh_handles.get(key)
+    if existing is not None:
+        existing.cancel()
+
+    def _fire() -> None:
+        _pending_status_refresh_handles.pop(key, None)
+        meta = _pending_status_refresh_meta.pop(
+            key,
+            {"source": source, "user_id": user_id},
+        )
+        asyncio.create_task(
+            _run_scheduled_project_status_refresh(
+                key,
+                source=str(meta.get("source") or source),
+                user_id=meta.get("user_id"),
+            )
+        )
+
+    _pending_status_refresh_handles[key] = loop.call_later(
+        _STATUS_REFRESH_DEBOUNCE_SECONDS,
+        _fire,
+    )

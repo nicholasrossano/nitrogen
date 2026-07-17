@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import { MODAL_BACKDROP_CLASS, MODAL_PANEL_CHROME } from '@/components/ui/ModalShell';
 
 export interface DuplicateEntry {
   original: string;
@@ -59,13 +60,12 @@ export function DuplicateFileDialog({
 
   const modal = (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-150 ${visible ? 'opacity-100' : 'opacity-0'}`}
-      style={{ backgroundColor: 'rgba(0,0,0,0.35)' }}
+      className={`fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-150 ${MODAL_BACKDROP_CLASS} ${visible ? 'opacity-100' : 'opacity-0'}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) handleClose();
       }}
     >
-      <div className="relative w-full max-w-md mx-4 rounded-2xl bg-white shadow-2xl border border-stroke-subtle flex flex-col max-h-[80vh]">
+      <div className={`relative w-full max-w-md mx-4 ${MODAL_PANEL_CHROME} flex flex-col max-h-[80vh]`}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-stroke-subtle flex-shrink-0">
           <div className="flex items-center gap-2.5">

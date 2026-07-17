@@ -690,4 +690,13 @@ async def sync_drive_files(
             logger.error("Drive sync failed for file %s: %s", link.drive_file_id, safe_error)
             errors.append({"file_id": link.drive_file_id, "error": safe_error})
 
+    if updated > 0:
+        from app.services.project_status import schedule_project_status_refresh
+
+        schedule_project_status_refresh(
+            initiative.id,
+            source="drive_sync",
+            user_id=user.uid,
+        )
+
     return {"checked": len(links), "updated": updated, "errors": errors}

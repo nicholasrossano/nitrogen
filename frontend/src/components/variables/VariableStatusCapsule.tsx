@@ -1,4 +1,5 @@
 import type { VariableStatus } from '@/lib/api';
+import { StatusCapsule } from '@/components/ui/StatusCapsule';
 
 const STATUS_CLASS: Record<VariableStatus, string> = {
   validated: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -26,10 +27,8 @@ export function VariableStatusCapsule({
   className?: string;
 }) {
   return (
-    <span
-      className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide leading-none ${STATUS_CLASS[status]} ${className}`.trim()}
-    >
+    <StatusCapsule className={`${STATUS_CLASS[status]} ${className}`.trim()}>
       {status}
-    </span>
+    </StatusCapsule>
   );
 }

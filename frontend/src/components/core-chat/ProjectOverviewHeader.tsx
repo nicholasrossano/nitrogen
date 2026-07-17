@@ -174,6 +174,7 @@ export function ProjectOverviewHeader({
           readOnly={project.shared_role === 'viewer'}
           hideRefreshButton={true}
           refreshToken={healthRefreshToken}
+          recomputeOnToken
           onOpenDocument={onOpenDocument}
           onOpenWorkspaceAssessment={onOpenWorkspaceAssessment}
         />

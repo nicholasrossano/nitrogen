@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { MODAL_BACKDROP_CLASS, MODAL_PANEL_CHROME } from '@/components/ui/ModalShell';
 import { useBillingStore } from '@/stores/billingStore';
 import { BillingOptionsPanel } from '@/components/ui/BillingOptionsPanel';
 
@@ -48,15 +49,14 @@ export function PaywallModal() {
 
   const modal = (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-150 ${
+      className={`fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-150 ${MODAL_BACKDROP_CLASS} ${
         visible ? 'opacity-100' : 'opacity-0 pointer-events-none'
       }`}
-      style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) handleClose();
       }}
     >
-      <div className="relative w-full max-w-2xl mx-4 rounded-2xl bg-white shadow-2xl border border-stroke-subtle flex flex-col max-h-[90vh]">
+      <div className={`relative w-full max-w-2xl mx-4 ${MODAL_PANEL_CHROME} flex flex-col max-h-[90vh]`}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-4 flex-shrink-0">
           <h2 className="text-base font-semibold text-text-primary">
