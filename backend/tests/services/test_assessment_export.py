@@ -206,7 +206,11 @@ def test_stakeholder_fingerprint_includes_details():
 
 
 def test_landscape_deep_dive_complete_helper():
+    # Completeness requires citation-era cache shape (summary_citations present).
     assert LandscapeMappingAssessment._is_map_deep_dive_complete(
+        {"what_this_is": ["An overview."], "summary_citations": [[]]}
+    )
+    assert not LandscapeMappingAssessment._is_map_deep_dive_complete(
         {"what_this_is": ["An overview."]}
     )
     assert not LandscapeMappingAssessment._is_map_deep_dive_complete({"what_this_is": []})
