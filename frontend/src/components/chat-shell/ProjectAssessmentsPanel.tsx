@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Check, ExternalLink, Loader2 } from 'lucide-react';
-import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/AssessmentPicker';
+import { ALL_MODULES } from '@/components/chat/AssessmentPicker';
 import { CHAT_FLOATING_PANEL_CHROME } from '@/components/ui/chatSidebarLayout';
 import type { AssessmentInstance } from '@/lib/api';
 import { assessmentHeaderTitle } from '@/lib/assessmentDisplay';
@@ -11,56 +11,22 @@ const MAX_ROWS = 5;
 
 const ASSESSMENT_META = new Map(ALL_MODULES.map((module) => [module.id, module]));
 
-function resolvePhaseIndex(assessmentId: string): number {
-  const categoryIndex = MODULE_CATEGORIES.findIndex((category) => (
-    category.assessmentIds.includes(assessmentId)
-  ));
-  return categoryIndex >= 0 ? categoryIndex : MODULE_CATEGORIES.length;
+function instanceUpdatedAtMs(instance: AssessmentInstance): number {
+  const raw = instance.updated_at || instance.started_at;
+  const ms = new Date(raw).getTime();
+  return Number.isFinite(ms) ? ms : 0;
 }
 
-/** Same phase order as FrameworkPlanView: category phases, then planned-id order within each. */
-export function orderPlannedAssessmentsByFramework(plannedAssessmentIds: string[]): string[] {
-  const buckets = new Map<number, string[]>();
-  const unmatched: string[] = [];
-
-  plannedAssessmentIds.forEach((assessmentId) => {
-    const phaseIndex = resolvePhaseIndex(assessmentId);
-    if (phaseIndex >= MODULE_CATEGORIES.length) {
-      unmatched.push(assessmentId);
-      return;
-    }
-    const bucket = buckets.get(phaseIndex) ?? [];
-    bucket.push(assessmentId);
-    buckets.set(phaseIndex, bucket);
-  });
-
-  const ordered: string[] = [];
-  for (let index = 0; index < MODULE_CATEGORIES.length; index += 1) {
-    const bucket = buckets.get(index);
-    if (bucket?.length) ordered.push(...bucket);
-  }
-  ordered.push(...unmatched);
-  return ordered;
+function instanceLabel(instance: AssessmentInstance): string {
+  const typeFallback = ASSESSMENT_META.get(instance.assessment_id)?.name
+    || instance.assessment_id.replace(/_/g, ' ');
+  // Prefer server display_name (includes · @creator when useful); else titled name.
+  const raw = instance.display_name?.trim()
+    || assessmentHeaderTitle(instance.title, typeFallback, instance.creator_handle);
+  return raw || typeFallback;
 }
 
-function pickPrimaryInstance(
-  assessmentId: string,
-  instances: AssessmentInstance[],
-): AssessmentInstance | null {
-  const forType = instances
-    .filter((instance) => instance.assessment_id === assessmentId)
-    .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
-  const completed = forType.find((instance) => instance.is_plan_complete === true);
-  return completed ?? forType[0] ?? null;
-}
-
-function statusLabel(instance: AssessmentInstance | null): { label: string; className: string } {
-  if (!instance) {
-    return {
-      label: 'Not started',
-      className: 'border-stroke-subtle bg-surface-subtle text-text-tertiary',
-    };
-  }
+function statusLabel(instance: AssessmentInstance): { label: string; className: string } {
   if (instance.is_plan_complete === true) {
     return {
       label: 'Confirmed',
@@ -80,7 +46,7 @@ function statusLabel(instance: AssessmentInstance | null): { label: string; clas
 }
 
 interface ProjectAssessmentsPanelProps {
-  plannedAssessmentIds: string[];
+  plannedAssessmentIds?: string[];
   assessmentInstances: AssessmentInstance[];
   loading?: boolean;
   readOnly?: boolean;
@@ -94,30 +60,26 @@ interface ProjectAssessmentsPanelProps {
 }
 
 export function ProjectAssessmentsPanel({
-  plannedAssessmentIds,
   assessmentInstances,
   loading = false,
-  readOnly = false,
   onViewAll,
   onOpenAssessment,
-  onStartAssessment,
 }: ProjectAssessmentsPanelProps) {
-  const [startingAssessmentId, setStartingAssessmentId] = useState<string | null>(null);
-  const rows = useMemo(() => {
-    const orderedIds = orderPlannedAssessmentsByFramework(plannedAssessmentIds).slice(0, MAX_ROWS);
-    return orderedIds.map((assessmentId) => {
-      const meta = ASSESSMENT_META.get(assessmentId);
-      const instance = pickPrimaryInstance(assessmentId, assessmentInstances);
-      const name = meta?.name || assessmentId.replace(/_/g, ' ');
-      return {
-        assessmentId,
-        name,
-        icon: meta?.icon ?? null,
-        instance,
-        status: statusLabel(instance),
-      };
-    });
-  }, [assessmentInstances, plannedAssessmentIds]);
+  const [openingInstanceId, setOpeningInstanceId] = useState<string | null>(null);
+  const rows = useMemo(() => (
+    [...assessmentInstances]
+      .sort((a, b) => instanceUpdatedAtMs(b) - instanceUpdatedAtMs(a))
+      .slice(0, MAX_ROWS)
+      .map((instance) => {
+        const meta = ASSESSMENT_META.get(instance.assessment_id);
+        return {
+          instance,
+          name: instanceLabel(instance),
+          icon: meta?.icon ?? null,
+          status: statusLabel(instance),
+        };
+      })
+  ), [assessmentInstances]);
 
   return (
     <aside className={`flex h-full min-h-0 flex-col overflow-hidden ${CHAT_FLOATING_PANEL_CHROME}`}>
@@ -146,39 +108,30 @@ export function ProjectAssessmentsPanel({
           </div>
         ) : rows.length === 0 ? (
           <p className="px-1 text-xs text-text-secondary">
-            No assessments planned yet. Open Assessments to build the plan.
+            No assessments yet. Open Assessments to get started.
           </p>
         ) : (
           <ul className="space-y-1.5">
             {rows.map((row) => {
-              const complete = row.instance?.is_plan_complete === true;
-              const isStarting = startingAssessmentId === row.assessmentId;
+              const complete = row.instance.is_plan_complete === true;
+              const isOpening = openingInstanceId === row.instance.id;
               return (
-                <li key={row.assessmentId}>
+                <li key={row.instance.id}>
                   <button
                     type="button"
-                    disabled={isStarting}
+                    disabled={isOpening}
                     onClick={() => {
-                      if (row.instance && onOpenAssessment) {
-                        onOpenAssessment({
-                          instanceId: row.instance.id,
-                          assessmentId: row.instance.assessment_id,
-                          title: assessmentHeaderTitle(
-                            row.instance.title || row.instance.display_name,
-                            row.name,
-                            row.instance.creator_handle,
-                          ),
-                        });
+                      if (!onOpenAssessment) {
+                        onViewAll?.();
                         return;
                       }
-                      if (!readOnly && onStartAssessment) {
-                        setStartingAssessmentId(row.assessmentId);
-                        void onStartAssessment(row.assessmentId, row.name).finally(() => {
-                          setStartingAssessmentId(null);
-                        });
-                        return;
-                      }
-                      onViewAll?.();
+                      setOpeningInstanceId(row.instance.id);
+                      onOpenAssessment({
+                        instanceId: row.instance.id,
+                        assessmentId: row.instance.assessment_id,
+                        title: row.name,
+                      });
+                      setOpeningInstanceId(null);
                     }}
                     className="flex w-full items-center gap-2 rounded-md border border-stroke-subtle bg-white px-2.5 py-2 text-left transition-colors hover:bg-surface-subtle"
                   >
@@ -190,7 +143,7 @@ export function ProjectAssessmentsPanel({
                     >
                       {complete ? (
                         <Check className="w-3.5 h-3.5" strokeWidth={2.4} />
-                      ) : isStarting ? (
+                      ) : isOpening ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       ) : (
                         <span className="[&>svg]:h-3.5 [&>svg]:w-3.5">{row.icon}</span>

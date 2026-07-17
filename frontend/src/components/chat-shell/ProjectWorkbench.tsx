@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ProjectChatSurface } from '@/components/core-chat/ProjectChatSurface';
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
@@ -40,14 +40,15 @@ import { useProjectStore } from '@/stores/projectStore';
 import {
   CHAT_CONTEXT_STACK_GUTTER,
   CHAT_FLOATING_PANEL_CHROME,
-  COMPANION_SIDE_PANEL_WIDTH_PX,
   clampChatEditorPanelWidth,
   chatEditorPanelGutter,
   readChatEditorPanelWidth,
   writeChatEditorPanelWidth,
 } from '@/components/ui/chatSidebarLayout';
 
-const FLOATING_PANEL_CLASS = `absolute z-20 right-3 flex flex-col min-h-0 overflow-hidden ${CHAT_FLOATING_PANEL_CHROME}`;
+/** Right-anchored float chrome. Width is always explicit so docked↔companion can animate. */
+const FLOATING_PANEL_CLASS = `absolute right-3 top-3 bottom-3 flex flex-col min-h-0 overflow-hidden ${CHAT_FLOATING_PANEL_CHROME}`;
+/** Bare-landing solo: fill the stage with insets (no measured width required). */
 const SOLO_FLOAT_PANEL_CLASS = `absolute z-30 inset-y-3 left-0 right-3 flex flex-col min-h-0 overflow-hidden ${CHAT_FLOATING_PANEL_CHROME}`;
 const RIGHT_MARGIN_PX = 12;
 
@@ -90,8 +91,10 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   const [floatCompanionOpen, setFloatCompanionOpen] = useState(false);
   const [isResizingFloatPanel, setIsResizingFloatPanel] = useState(false);
   const [floatLayout, setFloatLayout] = useState<FloatLayout>('docked');
+  const [workbenchWidthPx, setWorkbenchWidthPx] = useState(0);
   const [frameworkAssessmentInstances, setFrameworkAssessmentInstances] = useState<AssessmentInstance[]>([]);
   const [frameworkAssessmentsLoading, setFrameworkAssessmentsLoading] = useState(false);
+  const workbenchRef = useRef<HTMLDivElement>(null);
   const wasOnLandingRef = useRef(true);
   const ephemeralAssessmentSessionsRef = useRef<Map<string, { projectId: string; engaged: boolean }>>(new Map());
   /** Prevents re-opening a floor from a stale ?panel= while router.replace clears it. */
@@ -385,7 +388,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     if (suppressAssessmentRestoreRef.current) {
       return;
     }
-    // Decision/activity logs and assessment reports keep the same ?assessment=
+    // Decision/agent logs and assessment reports keep the same ?assessment=
     // deep-link — do not yank them back to the workspace float.
     const alreadyOpen = (pinnedFloatWidgets ?? floatWidgets).some(
       (widget) =>
@@ -461,24 +464,38 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   // The mini launcher stack only shows when no float or expanded floor owns the stage.
   const showContextStack = Boolean(projectId)
     && (expandedContextWidget != null || (!showFloatLayer && (!hasMessages || panelParam != null)));
-  const floatIsSolo = showFloatLayer && floatLayout === 'solo';
+  // Companion side panels promote a docked float to full-stage, covering the floor;
+  // side nav lives outside this workbench and is unaffected.
+  // True solo (bare landing) uses inset fill; companion expand uses measured px so
+  // close can animate full → docked instead of jumping from width:auto.
+  const floatLayoutSolo = showFloatLayer && floatLayout === 'solo';
+  const companionExpanded = showFloatLayer && floatCompanionOpen && !floatLayoutSolo;
+  const floatIsSolo = floatLayoutSolo || companionExpanded;
   const floatIsDocked = showFloatLayer && !floatIsSolo;
-  const reserveRightSpace = (showContextStack && !expandedContextWidget) || floatIsDocked;
-  // Grow the docked float when a companion column is open so content + side panel fit.
-  const effectiveFloatPanelWidthPx = floatCompanionOpen
-    ? clampChatEditorPanelWidth(floatPanelWidthPx + COMPANION_SIDE_PANEL_WIDTH_PX, {
-      companionOpen: true,
-    })
+  const floatFullWidthPx = workbenchWidthPx > 0
+    ? Math.max(floatPanelWidthPx, workbenchWidthPx - RIGHT_MARGIN_PX)
     : floatPanelWidthPx;
+  const floatDisplayWidthPx = companionExpanded ? floatFullWidthPx : floatPanelWidthPx;
+  const reserveRightSpace = (showContextStack && !expandedContextWidget) || floatIsDocked;
   const rightGutter = floatIsSolo
     ? undefined
     : showFloatLayer
-      ? chatEditorPanelGutter(effectiveFloatPanelWidthPx)
+      ? chatEditorPanelGutter(floatPanelWidthPx)
       : reserveRightSpace
         ? CHAT_CONTEXT_STACK_GUTTER
         : undefined;
   // Overlay floors shrink to leave room for a docked FloatLayer.
-  const floorRightInset = floatIsDocked ? chatEditorPanelGutter(effectiveFloatPanelWidthPx) : '0.75rem';
+  const floorRightInset = floatIsDocked ? chatEditorPanelGutter(floatPanelWidthPx) : '0.75rem';
+
+  useLayoutEffect(() => {
+    const el = workbenchRef.current;
+    if (!el) return;
+    const update = () => setWorkbenchWidthPx(el.clientWidth);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // rAF-batched so a burst of native mousemove events (which can fire far faster
   // than the browser paints) collapses into one width commit per frame.
@@ -492,14 +509,10 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
       floatResizeFrameRef.current = null;
       const clientX = floatResizePendingClientXRef.current;
       if (clientX == null) return;
-      const nextTotalWidth = window.innerWidth - clientX - RIGHT_MARGIN_PX;
-      // Persist the base (content) width; companion width is added on top when open.
-      const nextBaseWidth = floatCompanionOpen
-        ? nextTotalWidth - COMPANION_SIDE_PANEL_WIDTH_PX
-        : nextTotalWidth;
-      setFloatPanelWidthPx(clampChatEditorPanelWidth(nextBaseWidth));
+      const nextWidth = window.innerWidth - clientX - RIGHT_MARGIN_PX;
+      setFloatPanelWidthPx(clampChatEditorPanelWidth(nextWidth));
     });
-  }, [floatCompanionOpen]);
+  }, []);
 
   const handleFloatResizeEnd = useCallback(() => {
     if (floatResizeFrameRef.current != null) {
@@ -663,7 +676,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     replaceWorkbenchSearchParams,
   ]);
 
-  /** Swap float contents in place (assessment → decision/activity log) without changing dock layout. */
+  /** Swap float contents in place (assessment → decision/agent log) without changing dock layout. */
   const replaceFloatContent = useCallback((widgets: FloatWidget[]) => {
     setPinnedFloatWidgets(widgets);
   }, []);
@@ -675,7 +688,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
         data: {
           instance_id: context.instanceId,
           assessment_id: context.assessmentId,
-          title: `[Log] ${context.title}`,
+          title: `[History] ${context.title}`,
         },
         messageId: `decision-log-${context.instanceId}`,
       },
@@ -1074,7 +1087,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   const chatSurfaceKey = projectId;
 
   return (
-    <div className="relative flex-1 flex flex-col min-h-0 min-w-0 h-full bg-surface">
+    <div ref={workbenchRef} className="relative flex-1 flex flex-col min-h-0 min-w-0 h-full bg-surface">
       <div
         className={`flex-1 flex flex-col min-h-0 min-w-0 ${isResizingFloatPanel ? '' : 'transition-[padding-right] duration-300 ease-in-out'}`}
         style={{ paddingRight: rightGutter }}
@@ -1157,11 +1170,11 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
       {showFloatLayer && (
         <aside
           className={
-            floatIsSolo
-              ? `${SOLO_FLOAT_PANEL_CLASS} ${isResizingFloatPanel ? '' : 'transition-[width] duration-300 ease-in-out'}`
-              : `${FLOATING_PANEL_CLASS} top-3 bottom-3 ${isResizingFloatPanel ? '' : 'transition-[width] duration-300 ease-in-out'}`
+            floatLayoutSolo
+              ? SOLO_FLOAT_PANEL_CLASS
+              : `${FLOATING_PANEL_CLASS} ${companionExpanded ? 'z-30' : 'z-20'} ${isResizingFloatPanel ? '' : 'transition-[width] duration-300 ease-in-out'}`
           }
-          style={floatIsSolo ? undefined : { width: effectiveFloatPanelWidthPx }}
+          style={floatLayoutSolo ? undefined : { width: floatDisplayWidthPx }}
         >
           {!floatIsSolo ? (
             <div
