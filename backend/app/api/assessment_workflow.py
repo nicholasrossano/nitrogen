@@ -41,7 +41,7 @@ from app.domain.energy.assessments.landscape_mapping import LandscapeMappingAsse
 from app.assessments.registry import get_assessment_registry
 from app.domain.energy.assessments.stakeholder_assessment import StakeholderAssessment
 from app.assessments.utils import make_build_item
-from app.services.deep_dive import DeepDiveService
+from app.services.deep_dive import DeepDiveService, is_usable_deep_dive_cache
 from app.services.assessment_workflow_service import (
     clear_final_approval,
     confirm_stage,
@@ -1155,7 +1155,7 @@ async def deep_dive_implementation_item(
     cache = state.get(cache_key) if isinstance(state.get(cache_key), dict) else {}
     cached = cache.get(item_id)
     service = DeepDiveService(db, user_id=user.uid)
-    if cached and "summary_citations" not in cached:
+    if not is_usable_deep_dive_cache(cached):
         cached = None
 
     if cached:
@@ -1204,7 +1204,7 @@ async def deep_dive_map_item(
     cache = state.get(cache_key) if isinstance(state.get(cache_key), dict) else {}
     cached = cache.get(item_id)
     service = DeepDiveService(db, user_id=user.uid)
-    if cached and "summary_citations" not in cached:
+    if not is_usable_deep_dive_cache(cached):
         cached = None
 
     if cached:

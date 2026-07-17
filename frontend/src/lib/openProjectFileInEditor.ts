@@ -56,6 +56,8 @@ export function floatWidgetForAssessmentReport(payload: {
       assessment_title: payload.title,
       instance_id: payload.instanceId,
       assessment_id: payload.assessmentId,
+      // Bust the viewer cache when Report upserts the same material id.
+      reload_token: `${payload.material.id}:${payload.material.file_size ?? 0}:${Date.now()}`,
     },
     messageId: `assessment-report-${payload.instanceId}`,
   };

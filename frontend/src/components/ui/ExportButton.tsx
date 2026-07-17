@@ -1,11 +1,13 @@
 'use client';
 
-import { Download, Loader2 } from 'lucide-react';
-import type { ButtonHTMLAttributes } from 'react';
+import { Download, FileText, Loader2 } from 'lucide-react';
+import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
 interface ExportButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
   label?: string;
+  /** Defaults to download icon; pass file-text for narrative Report actions. */
+  icon?: ReactNode;
 }
 
 const BASE_EXPORT_BUTTON_CLASS =
@@ -14,10 +16,12 @@ const BASE_EXPORT_BUTTON_CLASS =
 export function ExportButton({
   loading = false,
   label = 'Export',
+  icon,
   className = '',
   disabled,
   ...props
 }: ExportButtonProps) {
+  const leading = icon ?? <Download className="w-3 h-3" />;
   return (
     <button
       type="button"
@@ -25,8 +29,19 @@ export function ExportButton({
       className={`${BASE_EXPORT_BUTTON_CLASS}${className ? ` ${className}` : ''}`}
       {...props}
     >
-      {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+      {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : leading}
       {label}
     </button>
+  );
+}
+
+export function ReportButton(props: Omit<ExportButtonProps, 'icon' | 'label'> & { label?: string }) {
+  const { label = 'Report', ...rest } = props;
+  return (
+    <ExportButton
+      {...rest}
+      label={label}
+      icon={<FileText className="w-3 h-3" />}
+    />
   );
 }

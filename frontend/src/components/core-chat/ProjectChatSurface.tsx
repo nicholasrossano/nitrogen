@@ -12,7 +12,6 @@ import { AssociatedAssessmentsTray, type AssociatedChatAssessment } from './Asso
 import { ConversationView } from './ConversationView';
 import { LandingInput } from './LandingInput';
 import { ProjectOverviewHeader } from './ProjectOverviewHeader';
-import { ProjectOutputsSection } from '@/components/chat-shell/ProjectOutputsSection';
 import { CompareProjectPicker, CompareChip } from './CompareProjectPicker';
 import type { CompareProject } from './CompareProjectPicker';
 import { AssessmentPicker } from '@/components/chat/AssessmentPicker';
@@ -1160,14 +1159,6 @@ export function ProjectChatSurface({
           topComposerContent={associatedAssessmentsTray}
           inputChips={inputChips}
           hideComposer={hideLandingComposer}
-          belowComposerContent={
-            hideTiles && onOpenWorkspaceAssessment ? (
-              <ProjectOutputsSection
-                projectId={projectId}
-                onOpenOutput={onOpenWorkspaceAssessment}
-              />
-            ) : null
-          }
         />
       </div>
     );
