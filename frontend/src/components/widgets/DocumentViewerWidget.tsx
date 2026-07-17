@@ -104,8 +104,8 @@ export function DocumentViewerWidget({ data, isActive: _isActive, onClose }: Doc
             return;
           }
 
+          // Plain-text materials are first-class content, not a failed binary fallback.
           const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
-          setShowingExtractedTextFallback(true);
           setChunks([{ id: 'full', chunk_index: 0, content: text }]);
           return;
         }
@@ -132,11 +132,12 @@ export function DocumentViewerWidget({ data, isActive: _isActive, onClose }: Doc
             setFileData(bytes);
           } catch {
             if (cancelled) return;
+            // Binary download failed — show chunks with an explicit fallback notice.
             setShowingExtractedTextFallback(true);
             setChunks(chunkRes.chunks ?? []);
           }
         } else {
-          setShowingExtractedTextFallback(true);
+          // Text / extracted-content docs: render chunks without a failure banner.
           setChunks(chunkRes.chunks ?? []);
         }
       } catch {
@@ -146,7 +147,6 @@ export function DocumentViewerWidget({ data, isActive: _isActive, onClose }: Doc
             const res = await api.getEvidenceContent(evidenceDocId);
             if (cancelled) return;
             setFileType(res.file_type || 'text');
-            setShowingExtractedTextFallback(true);
             setChunks([{ id: 'full', chunk_index: 0, content: res.content }]);
           } catch {
             if (!cancelled) setError('Could not load document');

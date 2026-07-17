@@ -14,6 +14,7 @@ import type {
 
 import { debugChatFlow } from '@/lib/chatDebug';
 import { isStoredFeatureFlagEnabled } from '@/lib/featureFlags';
+import { isDemoActive } from '@/lib/demo/demoSession';
 
 
 export const chatApi = {
@@ -121,6 +122,11 @@ export const chatApi = {
     allowInitialProjectOnboarding?: boolean,
     activeEditorContext?: ActiveEditorContext | null,
   ) => {
+    if (isDemoActive()) {
+      onError('Live AI chat is disabled in the demo. Sign up to continue the conversation.');
+      return;
+    }
+
     const token = await getAuthToken();
     const useBillingTestHeaders = isStoredFeatureFlagEnabled('billing_test_headers');
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };

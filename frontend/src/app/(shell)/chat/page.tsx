@@ -13,6 +13,7 @@ import {
 import { api, type Project } from '@/lib/api';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { PageLoader } from '@/components/ui/PageLoader';
+import { buildDemoProjectPath, isDemoActive } from '@/lib/demo/demoSession';
 
 /**
  * Personal (no-project) chat only. Project work lives on `/projects/[id]`.
@@ -33,10 +34,21 @@ function ChatLandingContent() {
   const assessmentParam = parseAssessmentParam(searchParams.get('assessment'));
 
   useEffect(() => {
+    if (isDemoActive()) {
+      router.replace(buildDemoProjectPath({
+        chat: activeChatId,
+        panel: panelParam,
+      }));
+    }
+  }, [activeChatId, panelParam, router]);
+
+  useEffect(() => {
+    if (isDemoActive()) return;
     if (!activeWorkspace) void loadWorkspaces();
   }, [activeWorkspace, loadWorkspaces]);
 
   useEffect(() => {
+    if (isDemoActive()) return;
     if (!activeWorkspace?.id) {
       setProjects([]);
       setProjectsLoaded(false);
@@ -50,6 +62,7 @@ function ChatLandingContent() {
   }, [activeWorkspace?.id, chatShell?.drawerRefreshKey]);
 
   useEffect(() => {
+    if (isDemoActive()) return;
     if (!projectsLoaded || !activeWorkspace?.id) return;
 
     let cancelled = false;
