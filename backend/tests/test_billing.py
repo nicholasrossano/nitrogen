@@ -5,12 +5,21 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.core import stripe_pricing
 from app.core.llm_client import (
     BYOK_SUPPORTED_PROVIDERS,
     check_usage_budget,
     user_has_byok,
 )
 from app.services.billing import _tier_from_stripe_price
+
+
+@pytest.fixture(autouse=True)
+def _clear_stripe_price_cache():
+    """Isolate from test_stripe_pricing.py's live-price cache (module-global)."""
+    stripe_pricing.clear_price_cache()
+    yield
+    stripe_pricing.clear_price_cache()
 
 
 def test_byok_supported_providers():

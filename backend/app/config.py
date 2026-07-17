@@ -109,13 +109,18 @@ class Settings(BaseSettings):
     # members access to all projects in that workspace (legacy behavior).
     single_org_mode: bool = False
 
-    # Individual list price (source of truth for UI catalog + ops).
+    # Static fallback list price — only used when Stripe isn't configured/reachable
+    # (self-host without billing, or a cold/failed cache). Stripe is the live
+    # source of truth: app.core.stripe_pricing fetches the real Price for
+    # stripe_price_id and that value wins whenever it's available.
     subscription_price_usd: float = 20.0
     # Reserve margin vs OpenRouter invoice: estimates + last-call overshoot.
     usage_budget_buffer_pct: float = 0.05
-    # Included AI budget ($/period). None → derived as price × (1 − buffer).
-    # Set SUBSCRIPTION_USAGE_LIMIT_USD to hard-override.
+    # Fallback included AI budget ($/period), used the same way as
+    # subscription_price_usd above. None → derived as price × (1 − buffer).
     subscription_usage_limit_usd: float | None = None
+    # How long to trust the cached live Stripe price before re-fetching (seconds).
+    stripe_price_ttl_seconds: int = 3600
     # Deprecated aliases
     starter_usage_limit_usd: float = 14.0
     pro_usage_limit_usd: float = 42.0

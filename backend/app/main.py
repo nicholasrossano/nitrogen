@@ -100,6 +100,13 @@ async def lifespan(app: FastAPI):
         _asyncio.create_task(refresh_openrouter_pricing(force=True))
     except Exception as exc:  # noqa: BLE001
         logger.warning("Could not schedule OpenRouter pricing refresh at startup: %s", exc)
+    try:
+        from app.core.stripe_pricing import refresh_stripe_price
+        import asyncio as _asyncio
+
+        _asyncio.create_task(refresh_stripe_price(force=True))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not schedule Stripe price refresh at startup: %s", exc)
     yield
     # Shutdown
     from app.core.http_client import close_http_client
