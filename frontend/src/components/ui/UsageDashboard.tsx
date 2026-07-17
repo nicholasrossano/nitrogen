@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { api, type BillingUsageSummary } from '@/lib/api';
+import { getBarometerScale } from '@/lib/billing/usageBarometer';
 import { useBillingStore } from '@/stores/billingStore';
 
 function formatPeriodDate(iso: string | null | undefined): string {
@@ -19,10 +20,12 @@ function formatPeriodDate(iso: string | null | undefined): string {
 }
 
 export function UsageDashboard() {
-  const { tier, usedUsd, limitUsd, usagePercent } = useBillingStore();
+  const { tier, usedUsd, limitUsd } = useBillingStore();
   const [usage, setUsage] = useState<BillingUsageSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const scale = getBarometerScale(tier, usedUsd, limitUsd);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,16 +48,6 @@ export function UsageDashboard() {
     };
   }, [tier, usedUsd]);
 
-  if (tier === 'byok' || tier === 'unlimited') {
-    return (
-      <div className="px-4 py-3 text-xs text-text-tertiary">
-        {tier === 'byok'
-          ? 'Usage is billed directly to your API key provider — no platform usage cap applies.'
-          : 'Billing is not enabled on this deployment.'}
-      </div>
-    );
-  }
-
   if (loading) {
     return (
       <div className="px-4 py-6 flex justify-center text-text-tertiary">
@@ -69,15 +62,20 @@ export function UsageDashboard() {
 
   if (!usage) return null;
 
-  const barColor =
-    usagePercent >= 90 ? 'bg-red-500' : usagePercent >= 75 ? 'bg-amber-500' : 'bg-accent';
-  const showWarning = limitUsd > 0 && usagePercent >= 80;
+  const showWarning =
+    scale != null && !scale.isReferenceScale && scale.percent >= 80;
 
   return (
     <div className="px-4 py-3 space-y-4">
-      {showWarning && (
+      {tier === 'byok' && (
+        <p className="text-xs text-text-tertiary">
+          Usage is billed directly to your API key provider — no platform usage cap applies.
+        </p>
+      )}
+
+      {showWarning && scale && (
         <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-          You&apos;ve used {usagePercent.toFixed(0)}% of your included AI budget this period.
+          You&apos;ve used {scale.percent.toFixed(0)}% of your included AI budget this period.
           Chat and analyses will stop when you hit the cap.
         </div>
       )}
@@ -98,21 +96,6 @@ export function UsageDashboard() {
           </p>
         </div>
       </div>
-
-      {limitUsd > 0 && (
-        <div>
-          <div className="flex justify-between text-[10px] text-text-tertiary mb-1">
-            <span>${usedUsd.toFixed(2)} used</span>
-            <span>${limitUsd.toFixed(2)} cap</span>
-          </div>
-          <div className="h-2 rounded-full bg-surface-subtle overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${barColor}`}
-              style={{ width: `${Math.min(100, usagePercent)}%` }}
-            />
-          </div>
-        </div>
-      )}
 
       {usage.by_model.length > 0 && (
         <div>

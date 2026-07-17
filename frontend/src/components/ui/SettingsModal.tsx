@@ -14,6 +14,7 @@ import { projectDisplayName } from '@/lib/projectDisplayName';
 import { ModalShell } from '@/components/ui/ModalShell';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { BillingOptionsPanel } from '@/components/ui/BillingOptionsPanel';
+import { UsageBarometer } from '@/components/ui/UsageBarometer';
 import { UsageDashboard } from '@/components/ui/UsageDashboard';
 import { AccessMemberRow } from '@/components/sharing/AccessMemberRow';
 import { EmailAddressField } from '@/components/sharing/EmailAddressField';
@@ -101,7 +102,7 @@ const TIER_LABELS: Record<string, string> = {
 };
 
 function PlanBillingSection() {
-  const { tier, usedUsd, limitUsd, usagePercent, trialMessagesRemaining, loaded } = useBillingStore();
+  const { tier, trialMessagesRemaining, loaded } = useBillingStore();
 
   const [portalLoading, setPortalLoading] = useState(false);
   const [showManageOptions, setShowManageOptions] = useState(false);
@@ -125,10 +126,12 @@ function PlanBillingSection() {
     }
   };
 
-  const barColor = usagePercent >= 90 ? 'bg-red-500' : usagePercent >= 75 ? 'bg-amber-500' : 'bg-accent';
-
   return (
     <>
+      <SettingsSection title="Usage">
+        <UsageBarometer />
+      </SettingsSection>
+
       <SettingsSection title="Manage Plan">
         <div className="px-4 py-3 space-y-3">
           <div className="flex items-center justify-between">
@@ -154,25 +157,11 @@ function PlanBillingSection() {
             </button>
           </div>
 
-          {limitUsd > 0 && (
-            <div>
-              <div className="flex justify-between text-[10px] text-text-tertiary mb-1">
-                <span>${usedUsd.toFixed(2)} used</span>
-                <span>${limitUsd.toFixed(2)} limit</span>
-              </div>
-              <div className="h-1.5 rounded-full bg-surface-subtle overflow-hidden">
-                <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.min(100, usagePercent)}%` }} />
-              </div>
-            </div>
-          )}
-
           {showManageOptions && <BillingOptionsPanel />}
         </div>
       </SettingsSection>
 
-      <SettingsSection title="Usage">
-        <UsageDashboard />
-      </SettingsSection>
+      <UsageDashboard />
     </>
   );
 }

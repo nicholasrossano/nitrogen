@@ -15,6 +15,8 @@ import { ShellNavContext, useChatSidebar } from './ShellContext';
 import { useProjectStore } from '@/stores/projectStore';
 import { useGoogleDriveStore } from '@/stores/googleDriveStore';
 import { useBillingStore } from '@/stores/billingStore';
+import { getBarometerScale } from '@/lib/billing/usageBarometer';
+import { UsageBarometer } from '@/components/ui/UsageBarometer';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useAuth } from '@/lib/auth';
 import { api, type EvidenceDoc, type ProjectMaterial } from '@/lib/api';
@@ -65,11 +67,9 @@ const NAV_LABEL_CLASS = 'whitespace-nowrap';
 function UsagePill() {
   const showBillingFeatures = useFeatureFlag('billing_features');
   const { isDemo } = useDemoMode();
-  const { tier, usagePercent, trialMessagesRemaining, loaded } = useBillingStore();
+  const { tier, trialMessagesRemaining, usedUsd, limitUsd, loaded } = useBillingStore();
   // Demo has no real metering; usage belongs under Billing for signed-in accounts.
-  if (isDemo || !showBillingFeatures || !loaded || tier === 'unlimited' || tier === 'byok' || tier === 'none' || !tier) return null;
-
-  const barColor = usagePercent >= 90 ? 'bg-red-500' : usagePercent >= 75 ? 'bg-amber-500' : 'bg-accent';
+  if (isDemo || !showBillingFeatures || !loaded || tier === 'none' || !tier) return null;
 
   if (tier === 'trial' && trialMessagesRemaining != null) {
     return (
@@ -81,17 +81,8 @@ function UsagePill() {
     );
   }
 
-  if (tier === 'starter' || tier === 'pro') {
-    return (
-      <div className="w-full px-1.5">
-        <div className="h-1 rounded-full bg-surface-subtle overflow-hidden">
-          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.min(100, usagePercent)}%` }} />
-        </div>
-        <div className="text-[9px] text-text-tertiary text-center mt-0.5 whitespace-nowrap">
-          {Math.round(usagePercent)}% used
-        </div>
-      </div>
-    );
+  if (getBarometerScale(tier, usedUsd, limitUsd)) {
+    return <UsageBarometer compact />;
   }
 
   return null;
