@@ -63,7 +63,7 @@ export function UsageDashboard() {
   if (!usage) return null;
 
   const showWarning =
-    scale != null && !scale.isReferenceScale && scale.percent >= 80;
+    scale != null && scale.scaleKind !== 'reference' && scale.percent >= 80;
 
   return (
     <div className="px-4 py-3 space-y-4">
