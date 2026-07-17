@@ -32,4 +32,12 @@ describe('resolveActiveProjectId', () => {
     const projects = [makeProject('proj-a', 'Alpha'), makeProject('proj-b', 'Beta')];
     expect(resolveActiveProjectId('/chat', 'missing-from-list', projects)).toBe('proj-b');
   });
+
+  it('ignores an orphaned demo project route when demo mode is off', () => {
+    writeLastProjectId('proj-a');
+    const projects = [makeProject('proj-a', 'Alpha'), makeProject('proj-b', 'Beta')];
+    expect(
+      resolveActiveProjectId('/projects/demo-rift-valley-solar', null, projects),
+    ).toBe('proj-a');
+  });
 });

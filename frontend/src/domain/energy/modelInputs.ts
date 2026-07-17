@@ -28,14 +28,35 @@ export const SOLAR_LOCATION_MODULE_ID = 'solar_estimate';
 
 export const TECHNOLOGY_TYPE_OPTIONS = ['solar_pv', 'wind', 'battery', 'mini_grid', 'clean_cooking', 'default'];
 
-export const TABLE_CATEGORY_ORDER = ['project', 'energy', 'costs', 'finance', 'timing', 'general'];
+export const TABLE_CATEGORY_ORDER = [
+  'project',
+  'location',
+  'system',
+  'orientation',
+  'activity',
+  'energy',
+  'baseline',
+  'performance',
+  'costs',
+  'finance',
+  'timing',
+  'leakage',
+  'general',
+];
 
 export const TABLE_CATEGORY_LABELS: Record<string, string> = {
   project: 'Project Definition',
+  location: 'Location',
+  system: 'System',
+  orientation: 'Orientation',
+  activity: 'Activity',
   energy: 'Energy Production',
+  baseline: 'Baseline Scenario',
+  performance: 'Performance',
   costs: 'Costs',
   finance: 'Finance & Discounting',
   timing: 'Timing',
+  leakage: 'Leakage',
   general: 'General',
 };
 

@@ -24,6 +24,7 @@ import type { CoreChatMessage, ChatSummary } from '@/types/chat';
 import type { ProposedValueApplyRequest } from '@/components/widgets/ProposedValueWidget';
 import { debugChatFlow } from '@/lib/chatDebug';
 import type { AssessmentProgressData } from '@/components/ui/ReadinessProgressBar';
+import { useDemoMode } from '@/hooks/useDemoMode';
 
 const DELIVERABLE_WIDGET_TYPES = ['memo_viewer', 'checklist_viewer'];
 const CHAT_MODULE_WIDGET_TYPES = new Set([
@@ -194,6 +195,7 @@ export function ProjectChatSurface({
   composerLeadingActions,
 }: ProjectChatSurfaceProps) {
   const chatShell = useChatShell();
+  const { isDemo } = useDemoMode();
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
@@ -706,6 +708,7 @@ export function ProjectChatSurface({
       modelInputsContext?: string | null,
       variableIdOverride?: string | null,
     ) => {
+      if (isDemo) return;
       onBeforeSendMessage?.();
       onMessageSent?.();
 
@@ -771,6 +774,7 @@ export function ProjectChatSurface({
       activeAssessmentContext,
       activeEditorContext,
       focusedVariableId,
+      isDemo,
       localMessages,
       onBeforeSendMessage,
       onMessageSent,
@@ -1098,12 +1102,15 @@ export function ProjectChatSurface({
       <div className="h-full min-h-0">
         <LandingInput
           onSend={onLandingSend ?? handleSend}
-          onUploadFile={handleUploadFile}
+          onUploadFile={isDemo ? undefined : handleUploadFile}
+          disabled={sending}
+          sendDisabled={isDemo}
           sessions={sessions}
           onLoadSession={handleLoadSession}
-          onDeleteSession={onDeleteChat}
+          onDeleteSession={isDemo ? undefined : onDeleteChat}
           hideTiles={hideTiles}
           composerTitle={landingComposerTitle}
+          showAttachments={!isDemo && !allowInitialProjectOnboarding}
           layoutMode={landingLayoutMode ?? (hideTiles ? 'overview' : 'default')}
           headerContent={landingHeaderContent ?? (hideTiles ? (
             project ? (
@@ -1153,7 +1160,6 @@ export function ProjectChatSurface({
           topComposerContent={associatedAssessmentsTray}
           inputChips={inputChips}
           hideComposer={hideLandingComposer}
-          showAttachments={!allowInitialProjectOnboarding}
           belowComposerContent={
             hideTiles && onOpenWorkspaceAssessment ? (
               <ProjectOutputsSection
@@ -1186,7 +1192,7 @@ export function ProjectChatSurface({
           streamingContent={streamingContent}
           error={error}
           onSendMessage={handleSend}
-          onUploadFile={handleUploadFile}
+          onUploadFile={isDemo ? undefined : handleUploadFile}
           onEditMessage={handleEditMessage}
           onRetryMessage={handleRetryMessage}
           messageFeedback={messageFeedback}
@@ -1199,9 +1205,10 @@ export function ProjectChatSurface({
           inputChips={inputChips}
           topContent={topContent}
           topContentMode={topContentMode}
-          onApplyProposedValue={handleApplyProposedValue}
-          showAttachments={!allowInitialProjectOnboarding}
+          onApplyProposedValue={isDemo ? undefined : handleApplyProposedValue}
+          showAttachments={!isDemo && !allowInitialProjectOnboarding}
           historyLoading={loadingChat}
+          sendDisabled={isDemo}
         />
       </div>
     </div>
