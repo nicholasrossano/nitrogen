@@ -76,7 +76,6 @@ interface FloatLayerProps {
   onAssessmentEngaged?: (instanceId: string) => void;
   onOpenDecisionLog?: (context: AssessmentLogContext) => void;
   onOpenActivityLog?: (context: AssessmentLogContext) => void;
-  onExportDecisionLog?: (context: AssessmentLogContext) => void | Promise<void>;
   onOpenAssessmentReport?: (payload: AssessmentReportPayload) => void | Promise<void>;
   onOpenAssessment?: (context: AssessmentLogContext) => void;
   onAssessmentTitleChange?: (instanceId: string, title: string) => void;
@@ -153,7 +152,6 @@ export function FloatLayer({
   onAssessmentEngaged,
   onOpenDecisionLog,
   onOpenActivityLog,
-  onExportDecisionLog,
   onOpenAssessmentReport,
   onOpenAssessment,
   onAssessmentTitleChange,
@@ -267,7 +265,6 @@ export function FloatLayer({
               onAssessmentEngaged={onAssessmentEngaged}
               onOpenDecisionLog={onOpenDecisionLog}
               onOpenActivityLog={onOpenActivityLog}
-              onExportDecisionLog={onExportDecisionLog}
               onOpenAssessmentReport={onOpenAssessmentReport}
               onOpenAssessment={onOpenAssessment}
               onAssessmentTitleChange={onAssessmentTitleChange}
@@ -291,7 +288,6 @@ function FloatWidgetRenderer({
   onAssessmentEngaged,
   onOpenDecisionLog,
   onOpenActivityLog,
-  onExportDecisionLog,
   onOpenAssessmentReport,
   onOpenAssessment,
   onAssessmentTitleChange,
@@ -307,7 +303,6 @@ function FloatWidgetRenderer({
   onAssessmentEngaged?: (instanceId: string) => void;
   onOpenDecisionLog?: (context: AssessmentLogContext) => void;
   onOpenActivityLog?: (context: AssessmentLogContext) => void;
-  onExportDecisionLog?: (context: AssessmentLogContext) => void | Promise<void>;
   onOpenAssessmentReport?: (payload: AssessmentReportPayload) => void | Promise<void>;
   onOpenAssessment?: (context: AssessmentLogContext) => void;
   onAssessmentTitleChange?: (instanceId: string, title: string) => void;
@@ -334,7 +329,12 @@ function FloatWidgetRenderer({
     case 'variable_detail':
       return <VariableDetailWidget data={data as { variable?: Variable; assumption?: Variable }} onClose={onClose} />;
     case 'decision_log':
-      return <DecisionLogWorkspaceTab assessmentInstanceId={data.instance_id} />;
+      return (
+        <DecisionLogWorkspaceTab
+          assessmentInstanceId={data.instance_id}
+          title={typeof data.title === 'string' && data.title.trim() ? data.title.trim() : 'History'}
+        />
+      );
     case 'activity_log':
       return (
         <AssessmentActivityLogTab
@@ -356,7 +356,6 @@ function FloatWidgetRenderer({
           onUserEngaged={() => onAssessmentEngaged?.(data.instance_id)}
           onOpenDecisionLog={onOpenDecisionLog}
           onOpenActivityLog={onOpenActivityLog}
-          onExportDecisionLog={onExportDecisionLog}
           onOpenAssessmentReport={onOpenAssessmentReport}
           onTitleChange={(title) => onAssessmentTitleChange?.(data.instance_id, title)}
           onCompanionSidePanelOpenChange={onCompanionSidePanelOpenChange}
