@@ -833,47 +833,47 @@ export const demoChatMessages: Record<string, ChatMessage[]> = {
   ],
 };
 
-function statusCategory(
-  key: string,
-  label: string,
-  status: 'green' | 'yellow' | 'red',
-  rationale: string,
-  insight: string,
-): ProjectStatusResponse['categories'][number] {
+function statusCategory(input: {
+  key: string;
+  label: string;
+  definition: string;
+  criteriaSummary: string;
+  status: 'green' | 'yellow' | 'red';
+  confidence: 'high' | 'medium' | 'low';
+  rationale: string;
+  insight: string;
+  decisionSignals: Array<{ text: string; sentiment: 'positive' | 'negative' | 'neutral' }>;
+  sources: Array<{ source_title: string; source_type: string; evidence_doc_id: string }>;
+  assessments?: Array<{ instance_id: string; assessment_id: string; display_name: string }>;
+  suggestedImprovement?: string | null;
+}): ProjectStatusResponse['categories'][number] {
+  const positives = input.decisionSignals.filter((s) => s.sentiment === 'positive').map((s) => s.text);
+  const negatives = input.decisionSignals.filter((s) => s.sentiment === 'negative').map((s) => s.text);
+  const neutrals = input.decisionSignals.filter((s) => s.sentiment === 'neutral').map((s) => s.text);
+
   return {
-    category_key: key,
-    label,
-    definition_text: `${label} for project delivery`,
-    criteria_summary: null,
-    status,
-    effective_status: status,
-    confidence: status === 'green' ? 'high' : 'medium',
-    rationale,
-    critical_insight: insight,
-    supporting_evidence: ['Feasibility study', 'PPA term sheet', 'ESIA'],
-    suggested_improvement: status === 'green' ? null : 'Close remaining diligence items before IC.',
-    retrieved_sources: [
-      {
-        source_title: 'Rift Valley Solar Feasibility Study v3',
-        source_type: 'evidence',
-        evidence_doc_id: 'demo-mat-feasibility',
-      },
-    ],
-    positive_drivers: ['Strong resource', 'Indicative offtake'],
-    negative_drivers: status === 'green' ? [] : ['Financing not yet committed'],
+    category_key: input.key,
+    label: input.label,
+    definition_text: input.definition,
+    criteria_summary: input.criteriaSummary,
+    status: input.status,
+    effective_status: input.status,
+    confidence: input.confidence,
+    rationale: input.rationale,
+    critical_insight: input.insight,
+    decision_signals: input.decisionSignals.slice(0, 5),
+    supporting_evidence: positives.slice(0, 3),
+    suggested_improvement: input.suggestedImprovement ?? null,
+    retrieved_sources: input.sources,
+    positive_drivers: positives,
+    negative_drivers: negatives,
     blockers: [],
-    missing_items: status === 'yellow' ? ['Binding PPA', 'Credit committee pack'] : [],
-    relevant_modules: ['lcoe_model', 'carbon_model'],
-    relevant_module_names: ['LCOE Model', 'Carbon Calculator'],
-    relevant_assessments: [
-      {
-        instance_id: DEMO_INSTANCE_LCOE,
-        assessment_id: 'lcoe_model',
-        display_name: 'LCOE Model',
-      },
-    ],
-    improvement_actions: status === 'yellow' ? ['Advance KPLC negotiations'] : [],
-    uncertainties: ['Final EPC pricing'],
+    missing_items: neutrals.filter((t) => t.toLowerCase().startsWith('no ') || t.toLowerCase().includes('not yet')),
+    relevant_modules: (input.assessments ?? []).map((a) => a.assessment_id),
+    relevant_module_names: (input.assessments ?? []).map((a) => a.display_name),
+    relevant_assessments: input.assessments ?? [],
+    improvement_actions: input.suggestedImprovement ? [input.suggestedImprovement] : [],
+    uncertainties: neutrals.filter((t) => t.toLowerCase().includes('remain') || t.toLowerCase().includes('still')),
     update_source: 'demo',
     last_updated_at: NOW,
     is_stale: false,
@@ -887,34 +887,261 @@ export const demoProjectStatus: ProjectStatusResponse = {
   project_id: DEMO_PROJECT_ID,
   stale: false,
   categories: [
-    statusCategory(
-      'technical',
-      'Technical',
-      'green',
-      'Resource, SLD, and geotech packages support the 40 MW + 4h BESS design.',
-      'No critical technical gaps for FEED handoff.',
-    ),
-    statusCategory(
-      'commercial',
-      'Commercial',
-      'yellow',
-      'Indicative PPA at $0.072/kWh exists; binding offtake still in negotiation.',
-      'Commercial path is credible but not locked.',
-    ),
-    statusCategory(
-      'climate',
-      'Climate impact',
-      'green',
-      'Carbon assessment shows ~37 ktCO2e/yr grid displacement at 0.48 t/MWh EF.',
-      'Climate case is investment-grade for DFI reporting.',
-    ),
-    statusCategory(
-      'esg',
-      'ESG & stakeholders',
-      'yellow',
-      'ESIA complete; community engagement sequencing still in progress.',
-      'Stakeholder workstream is the pacing item for construction readiness.',
-    ),
+    statusCategory({
+      key: 'evidence_credibility',
+      label: 'Evidence & credibility',
+      definition:
+        'Material claims are backed by traceable sources, with no major contradictions in the project record.',
+      criteriaSummary: 'Checks whether core claims are supported by indexed project materials.',
+      status: 'green',
+      confidence: 'high',
+      rationale: 'Feasibility, ESIA, SLD, and geotech packages form a coherent, citeable record.',
+      insight: 'Evidence base is strong enough for diligence review.',
+      decisionSignals: [
+        {
+          text: 'Feasibility study, ESIA, SLD, and geotech report are indexed and cross-reference cleanly',
+          sentiment: 'positive',
+        },
+        {
+          text: 'Indicative PPA term sheet is on file with pricing and tenor assumptions',
+          sentiment: 'positive',
+        },
+        {
+          text: 'No material contradictions found across the primary technical and commercial packages',
+          sentiment: 'positive',
+        },
+        {
+          text: 'Independent engineer review memo is not yet in the materials',
+          sentiment: 'neutral',
+        },
+      ],
+      sources: [
+        {
+          source_title: 'Rift Valley Solar Feasibility Study v3',
+          source_type: 'evidence',
+          evidence_doc_id: 'demo-mat-feasibility',
+        },
+        {
+          source_title: 'ESIA Nakuru Solar Storage 2026',
+          source_type: 'evidence',
+          evidence_doc_id: 'demo-mat-esia',
+        },
+        {
+          source_title: 'Geotechnical Report Site A',
+          source_type: 'evidence',
+          evidence_doc_id: 'demo-mat-geo',
+        },
+      ],
+    }),
+    statusCategory({
+      key: 'technical_viability',
+      label: 'Technical viability',
+      definition:
+        'The proposed design and modeled outputs are coherent for this site and use case.',
+      criteriaSummary: 'Checks design coherence, resource quality, and modeled plant performance.',
+      status: 'green',
+      confidence: 'high',
+      rationale: 'Resource, SLD, and geotech packages support the 40 MW + 4h BESS design.',
+      insight: 'No critical technical gaps for FEED handoff.',
+      decisionSignals: [
+        {
+          text: 'On-site resource campaign supports a P50 capacity factor near 22% for the Nakuru site',
+          sentiment: 'positive',
+        },
+        {
+          text: 'Single-line diagram and BESS sizing align with the 40 MW / 160 MWh design basis',
+          sentiment: 'positive',
+        },
+        {
+          text: 'Geotech notes expansive clays but foundation redesign stays within the leased footprint',
+          sentiment: 'positive',
+        },
+        {
+          text: 'Final EPC pricing and equipment vendor shortlist remain unconfirmed',
+          sentiment: 'neutral',
+        },
+      ],
+      sources: [
+        {
+          source_title: 'Rift Valley Solar Feasibility Study v3',
+          source_type: 'evidence',
+          evidence_doc_id: 'demo-mat-feasibility',
+        },
+        {
+          source_title: 'Single Line Diagram 40MW BESS',
+          source_type: 'evidence',
+          evidence_doc_id: 'demo-mat-sld',
+        },
+        {
+          source_title: 'Geotechnical Report Site A',
+          source_type: 'evidence',
+          evidence_doc_id: 'demo-mat-geo',
+        },
+      ],
+      assessments: [
+        {
+          instance_id: DEMO_INSTANCE_SOLAR,
+          assessment_id: 'solar_estimate',
+          display_name: 'Solar Production Estimate',
+        },
+        {
+          instance_id: DEMO_INSTANCE_LCOE,
+          assessment_id: 'lcoe_model',
+          display_name: 'LCOE Model',
+        },
+      ],
+    }),
+    statusCategory({
+      key: 'funding_economics',
+      label: 'Funding & economics',
+      definition:
+        'Cost, revenue, and funding logic hang together and look directionally credible.',
+      criteriaSummary: 'Checks cost, revenue, and funding coherence for investment readiness.',
+      status: 'yellow',
+      confidence: 'medium',
+      rationale: 'Indicative PPA at $0.072/kWh exists; binding offtake and financing are not locked.',
+      insight: 'Commercial path is credible but not closed for IC.',
+      decisionSignals: [
+        {
+          text: 'Indicative KPLC PPA term sheet supports a workable tariff around $0.072/kWh',
+          sentiment: 'positive',
+        },
+        {
+          text: 'LCOE model and feasibility CAPEX assumptions are directionally consistent',
+          sentiment: 'positive',
+        },
+        {
+          text: 'No binding PPA has been signed yet',
+          sentiment: 'neutral',
+        },
+        {
+          text: 'Construction financing is not yet committed',
+          sentiment: 'neutral',
+        },
+        {
+          text: 'Credit committee pack is not yet assembled',
+          sentiment: 'neutral',
+        },
+      ],
+      sources: [
+        {
+          source_title: 'KPLC PPA Term Sheet Draft',
+          source_type: 'evidence',
+          evidence_doc_id: 'demo-mat-ppa',
+        },
+        {
+          source_title: 'Rift Valley Solar Feasibility Study v3',
+          source_type: 'evidence',
+          evidence_doc_id: 'demo-mat-feasibility',
+        },
+      ],
+      assessments: [
+        {
+          instance_id: DEMO_INSTANCE_LCOE,
+          assessment_id: 'lcoe_model',
+          display_name: 'LCOE Model',
+        },
+      ],
+      suggestedImprovement: 'Advance KPLC negotiations toward a binding offtake before IC.',
+    }),
+    statusCategory({
+      key: 'deployment_readiness',
+      label: 'Deployment readiness',
+      definition:
+        'A credible path to build and operate exists, with owners and no unresolved blockers.',
+      criteriaSummary: 'Checks build/operate path, owners, and unresolved delivery blockers.',
+      status: 'yellow',
+      confidence: 'medium',
+      rationale: 'ESIA and implementation drafting are underway; construction sequencing is still open.',
+      insight: 'Delivery path is plausible but not yet owner-locked.',
+      decisionSignals: [
+        {
+          text: 'ESIA is complete and frames land, community, and reinstatement requirements',
+          sentiment: 'positive',
+        },
+        {
+          text: 'Implementation plan assessment is in draft and outlines major workstreams',
+          sentiment: 'positive',
+        },
+        {
+          text: 'Named EPC and O&M owners are not yet evidenced in the materials',
+          sentiment: 'neutral',
+        },
+        {
+          text: 'Detailed construction schedule and grid interconnection milestones remain incomplete',
+          sentiment: 'neutral',
+        },
+      ],
+      sources: [
+        {
+          source_title: 'ESIA Nakuru Solar Storage 2026',
+          source_type: 'evidence',
+          evidence_doc_id: 'demo-mat-esia',
+        },
+        {
+          source_title: 'Rift Valley Solar Feasibility Study v3',
+          source_type: 'evidence',
+          evidence_doc_id: 'demo-mat-feasibility',
+        },
+      ],
+      assessments: [
+        {
+          instance_id: DEMO_INSTANCE_IMPL,
+          assessment_id: 'implementation_plan',
+          display_name: 'Implementation Plan',
+        },
+      ],
+      suggestedImprovement: 'Assign EPC/O&M owners and lock interconnection milestones.',
+    }),
+    statusCategory({
+      key: 'risk_profile',
+      label: 'Risk profile',
+      definition:
+        'Material risks are identified, owned, and mitigated for the most important items.',
+      criteriaSummary: 'Checks whether material risks are identified, owned, and mitigated.',
+      status: 'green',
+      confidence: 'medium',
+      rationale: 'ESIA and stakeholder work identify main risks; no unresolved high-severity items recorded.',
+      insight: 'Risk picture is manageable for this stage, with community sequencing as the watch item.',
+      decisionSignals: [
+        {
+          text: 'ESIA and stakeholder assessment identify land, community, and geotech risks with mitigation paths',
+          sentiment: 'positive',
+        },
+        {
+          text: 'No unresolved high-severity risks are recorded in project signals',
+          sentiment: 'positive',
+        },
+        {
+          text: 'Community engagement sequencing is still in progress ahead of construction',
+          sentiment: 'neutral',
+        },
+      ],
+      sources: [
+        {
+          source_title: 'ESIA Nakuru Solar Storage 2026',
+          source_type: 'evidence',
+          evidence_doc_id: 'demo-mat-esia',
+        },
+        {
+          source_title: 'Geotechnical Report Site A',
+          source_type: 'evidence',
+          evidence_doc_id: 'demo-mat-geo',
+        },
+      ],
+      assessments: [
+        {
+          instance_id: DEMO_INSTANCE_STAKEHOLDER,
+          assessment_id: 'stakeholder_assessment',
+          display_name: 'Stakeholder Assessment',
+        },
+        {
+          instance_id: DEMO_INSTANCE_CARBON,
+          assessment_id: 'carbon_model',
+          display_name: 'Carbon Calculator',
+        },
+      ],
+    }),
   ],
 };
 
