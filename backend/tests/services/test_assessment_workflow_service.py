@@ -4,7 +4,9 @@ Tests the new flat-stages state shape, initial state building, legacy
 migration, and downstream invalidation.
 """
 
+import copy
 from types import SimpleNamespace
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -22,6 +24,8 @@ from app.services.assessment_workflow_service import (
     _migrate_legacy_state,
     _get_downstream_stage_ids,
     _infer_current_stage_id,
+    _normalize_workflow_state,
+    ensure_workflow_state,
     has_meaningful_assessment_progress,
     is_instance_visible_in_lists,
     mark_user_engaged,
@@ -282,3 +286,71 @@ def test_mark_user_engaged_makes_instance_visible():
     mark_user_engaged(state)
     inst.workflow_state = state
     assert is_instance_visible_in_lists(inst)
+
+
+@pytest.mark.asyncio
+async def test_ensure_workflow_state_does_not_dirty_unchanged_snapshot():
+    """Polling GETs must not rewrite workflow_state when nothing changed.
+
+    Always-save+commit on read races with agent populate and can wipe draft items.
+    """
+    assessment = StakeholderAssessment()
+    state = _build_initial_workflow_state(assessment)
+    state["stages"]["categories"] = {
+        "status": "draft",
+        "confirmed_at": None,
+        "confirmed_by": None,
+        "confirmed_by_email": None,
+        "data": {"items": [{"id": "c1", "content": {"label": "Government"}}]},
+    }
+    inst = AssessmentInstance(
+        id=uuid4(),
+        project_id=uuid4(),
+        assessment_id=assessment.definition.id,
+        status="generating",
+        instance_number=1,
+        started_by="user-1",
+        workflow_state=copy.deepcopy(state),
+        workflow_version=2,
+    )
+    original_ref = inst.workflow_state
+
+    ensured = await ensure_workflow_state(FakeDB(), inst, assessment)
+    assert ensured["stages"]["categories"]["status"] == "draft"
+    assert len(ensured["stages"]["categories"]["data"]["items"]) == 1
+    # Unchanged snapshots must not be reassigned (avoids flag_modified on GET).
+    assert inst.workflow_state is original_ref
+
+
+def test_normalize_workflow_state_persists_only_when_filling_gaps():
+    assessment = StakeholderAssessment()
+    complete = _build_initial_workflow_state(assessment)
+    _, needs_persist = _normalize_workflow_state(complete, assessment)
+    assert needs_persist is False
+
+    incomplete = {
+        "assessment_type": "stakeholder_assessment",
+        "current_stage_id": "categories",
+        "stages": {"categories": _build_initial_workflow_state(assessment)["stages"]["categories"]},
+    }
+    normalized, needs_persist = _normalize_workflow_state(incomplete, assessment)
+    assert needs_persist is True
+    assert "stakeholders" in normalized["stages"]
+    assert "map" in normalized["stages"]
+
+
+@pytest.mark.asyncio
+async def test_propose_category_items_normalizes_labels():
+    from app.assessments.utils import propose_category_items
+
+    async def _fake_llm_json(**kwargs):
+        return {"categories": [{"title": "Policy"}, {"label": "Finance", "description": "Funders"}]}
+
+    with patch("app.assessments.utils.llm_json", new=_fake_llm_json):
+        items = await propose_category_items(
+            system="test",
+            context={"project_title": "Demo", "geography": "Kenya"},
+        )
+    assert [i["label"] for i in items] == ["Policy", "Finance"]
+    assert items[1]["description"] == "Funders"
+    assert all("icon" in i for i in items)
