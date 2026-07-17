@@ -417,6 +417,7 @@ export interface ProjectStatusCategoryConfig {
   label: string;
   definition_text: string;
   criteria: ProjectStatusCriteria | null;
+  defined_by_email: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

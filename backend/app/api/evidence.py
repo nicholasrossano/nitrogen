@@ -207,6 +207,13 @@ async def upload_evidence(
     except Exception:
         logger.warning("Could not refresh variables after evidence text upload", exc_info=True)
     await db.commit()
+    from app.services.project_status import schedule_project_status_refresh
+
+    schedule_project_status_refresh(
+        initiative.id,
+        source="evidence_text_upload",
+        user_id=user.uid,
+    )
 
     return EvidenceUploadResponse(
         success=True,
@@ -700,7 +707,16 @@ async def delete_evidence(
         sql_delete(EvidenceChunk).where(EvidenceChunk.evidence_doc_id == evidence_id)
     )
 
+    project_id = evidence_doc.project_id
     await db.delete(evidence_doc)
     await db.commit()
-    
+
+    from app.services.project_status import schedule_project_status_refresh
+
+    schedule_project_status_refresh(
+        project_id,
+        source="evidence_deleted",
+        user_id=user.uid,
+    )
+
     return {"success": True, "message": "Evidence document deleted"}

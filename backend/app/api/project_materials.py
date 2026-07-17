@@ -184,6 +184,14 @@ async def upload_material(
     await db.commit()
     await db.refresh(material)
 
+    from app.services.project_status import schedule_project_status_refresh
+
+    schedule_project_status_refresh(
+        initiative.id,
+        source="material_upload",
+        user_id=user.uid,
+    )
+
     return ProjectMaterialUploadResponse(
         success=True,
         material=ProjectMaterialResponse(
@@ -275,8 +283,17 @@ async def delete_material(
         storage = get_uploads_storage()
         await storage.delete(material.storage_path)
 
+    project_id = material.project_id
     await db.delete(material)
     await db.commit()
+
+    from app.services.project_status import schedule_project_status_refresh
+
+    schedule_project_status_refresh(
+        project_id,
+        source="material_deleted",
+        user_id=user.uid,
+    )
 
     return {"success": True, "message": "Material deleted"}
 

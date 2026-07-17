@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, UserPlus, Loader2, Users } from 'lucide-react';
+import { MODAL_BACKDROP_CLASS, MODAL_PANEL_CHROME } from '@/components/ui/ModalShell';
 import { api, ProjectShare, UserSearchResult } from '@/lib/api';
 import { AccessMemberRow } from './AccessMemberRow';
 import { EmailAddressField } from './EmailAddressField';
@@ -114,11 +115,10 @@ export function ShareProjectModal({ projectId, ownerEmail, onClose }: ShareProje
 
   const modal = (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-150 ${visible ? 'opacity-100' : 'opacity-0'}`}
-      style={{ backgroundColor: 'rgba(0,0,0,0.35)' }}
+      className={`fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-150 ${MODAL_BACKDROP_CLASS} ${visible ? 'opacity-100' : 'opacity-0'}`}
       onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }}
     >
-      <div className="relative w-full max-w-md mx-4 rounded-2xl bg-white shadow-2xl border border-stroke-subtle">
+      <div className={`relative w-full max-w-md mx-4 ${MODAL_PANEL_CHROME}`}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-stroke-subtle">
           <div className="flex items-center gap-2.5">

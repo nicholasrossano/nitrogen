@@ -1540,6 +1540,14 @@ async def approve_final_output(
 
     await db.commit()
 
+    from app.services.project_status import schedule_project_status_refresh
+
+    schedule_project_status_refresh(
+        inst.project_id,
+        source="assessment_approved",
+        user_id=user.uid,
+    )
+
     return {
         "workflow_state": state,
         "workflow_version": inst.workflow_version,
@@ -1571,6 +1579,15 @@ async def revoke_final_approval(
             payload={"reason": "manual_revoke"},
         )
         await db.commit()
+
+    from app.services.project_status import schedule_project_status_refresh
+
+    if was_revoked:
+        schedule_project_status_refresh(
+            inst.project_id,
+            source="assessment_approval_revoked",
+            user_id=user.uid,
+        )
 
     return {
         "workflow_state": state,

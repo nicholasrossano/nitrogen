@@ -3,19 +3,19 @@ title: "Project status"
 description: "Project status tracks a project's health across editable categories, each with an AI-computed status, confidence, and rationale."
 ---
 
-**Project status** gives you an at-a-glance view of how healthy a project is, broken into categories you can customize. Each category is assessed by AI against your project's evidence, materials, and assessment outputs, and can be manually overridden when your judgment differs from the model.
+**Project status** gives you an at-a-glance view of how healthy a project is, broken into categories you can customize. Each category is assessed by AI primarily against your project's definition, evidence, and materials. Formal assessment outputs are optional signals that help fill gaps — they are not required for status to run. You can manually override a result when your judgment differs from the model.
 
 ## Default categories
 
 Every new project starts with five editable categories:
 
-- **Evidence & credibility** — material claims are supported by traceable sources and there are no major contradictions in the project record
-- **Technical viability** — the proposed design and modeled outputs are coherent for the site and use case
-- **Funding & economics** — cost, revenue, and funding logic hang together and the economic case is directionally credible
-- **Deployment readiness** — a credible path to build and operate, with named owners and no unresolved blockers
-- **Risk profile** — material risks are identified, ownership is understood, and mitigation paths exist for the most important items
+- **Evidence & credibility** — material claims are backed by traceable sources, with no major contradictions in the project record
+- **Technical viability** — the proposed design and modeled outputs are coherent for this site and use case
+- **Funding & economics** — cost, revenue, and funding logic hang together and look directionally credible
+- **Deployment readiness** — a credible path to build and operate exists, with owners and no unresolved blockers
+- **Risk profile** — material risks are identified, owned, and mitigated for the most important items
 
-Each category has an editable **definition** describing what "healthy" means for that category on your project.
+Each category has an editable **definition** describing what "healthy" means for that category on your project. Definitions are seeded for the defaults, or written by you when you add or edit a category. The info tip on each category shows a short LLM summary derived from that definition; the fuller definition lives in the editor. Internally, Nitrogen also derives an evaluation lens from the definition during status refresh — users do not edit that lens.
 
 ## Status and confidence
 
@@ -25,7 +25,7 @@ Each assessed category also includes a rationale, positive and negative drivers,
 
 ## Refreshing status
 
-Status doesn't update automatically on every change. Refresh a category manually, or refresh all categories at once, after adding evidence or completing an assessment.
+Status recomputes automatically in the background after materials are indexed, Drive-linked files sync, assessments are approved (or approval is revoked), and variables change. The Overview polls briefly to pick up the new scores. You can still click **Refresh** anytime for an on-demand recompute (for example after editing a category definition).
 
 ## Overriding a status
 

@@ -125,6 +125,7 @@ export function resolveDemoRequest<T>(endpoint: string, options?: RequestInit): 
       label: c.label,
       definition_text: c.definition_text,
       criteria: null,
+      defined_by_email: null,
       is_active: true,
       created_at: demoProject.created_at,
       updated_at: demoProject.updated_at,

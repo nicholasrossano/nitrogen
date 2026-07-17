@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Check, ExternalLink, Loader2 } from 'lucide-react';
 import { ALL_MODULES } from '@/components/chat/AssessmentPicker';
 import { CHAT_FLOATING_PANEL_CHROME } from '@/components/ui/chatSidebarLayout';
+import { StatusCapsule } from '@/components/ui/StatusCapsule';
 import type { AssessmentInstance } from '@/lib/api';
 import { assessmentHeaderTitle } from '@/lib/assessmentDisplay';
 
@@ -152,11 +153,9 @@ export function ProjectAssessmentsPanel({
                     <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-text-primary">
                       {row.name}
                     </span>
-                    <span
-                      className={`shrink-0 inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide leading-none ${row.status.className}`}
-                    >
+                    <StatusCapsule className={`shrink-0 ${row.status.className}`}>
                       {row.status.label}
-                    </span>
+                    </StatusCapsule>
                   </button>
                 </li>
               );

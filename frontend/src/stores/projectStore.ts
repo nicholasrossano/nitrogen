@@ -12,6 +12,15 @@ import {
 } from '@/lib/api';
 import { getCached, setCached, swrKeys } from '@/lib/swrCache';
 
+function notifyProjectSignalsUpdated(projectId?: string | null) {
+  if (typeof window === 'undefined' || !projectId) return;
+  window.dispatchEvent(
+    new CustomEvent('nitrogen:project-signals-updated', {
+      detail: { projectId },
+    }),
+  );
+}
+
 interface ProjectState {
   project: Project | null;
   /** Warm by-id cache so chrome (title) never blanks on soft nav / project switch. */
@@ -128,6 +137,7 @@ async function schedulePollForProcessing(
         } catch {
           // Non-fatal.
         }
+        notifyProjectSignalsUpdated(projectId);
         return;
       }
     }
@@ -261,6 +271,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         };
       });
       schedulePollForProcessing(id, get, set);
+      notifyProjectSignalsUpdated(id);
     } catch (error) {
       console.error('Failed to upload material:', error);
       throw error;
@@ -289,6 +300,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       } else {
         await api.deleteMaterial(materialId);
       }
+      notifyProjectSignalsUpdated(materialsProjectId);
     } catch (error) {
       set({ projectMaterials: prev, materialsProjectId });
       if (materialsProjectId) setCached(swrKeys.materials(materialsProjectId), prev);
@@ -327,6 +339,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           driveLinkedFiles: links,
         };
       });
+      notifyProjectSignalsUpdated(id);
     }
     return result;
   },
@@ -337,6 +350,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const projectMaterials = await api.getMaterials(id);
       setCached(swrKeys.materials(id), projectMaterials);
       set({ projectMaterials, materialsProjectId: id });
+      notifyProjectSignalsUpdated(id);
     }
     return result;
   },
@@ -387,6 +401,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       });
 
       schedulePollForProcessing(id, get, set);
+      notifyProjectSignalsUpdated(id);
     } catch (error) {
       console.error('Failed to upload evidence:', error);
       set({ loading: false, error: null });
@@ -400,6 +415,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       await api.pasteEvidence(id, content, title);
       const project = await api.getProject(id);
       rememberProject(set, project, { loading: false });
+      notifyProjectSignalsUpdated(id);
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Failed to save text',
@@ -418,6 +434,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
       const project = get().project;
       if (project) get()._refreshPlanInBackground(project.id);
+      notifyProjectSignalsUpdated(project?.id ?? get().materialsProjectId);
     } catch (error) {
       console.error('Failed to delete evidence:', error);
       set({ loading: false, error: null });
