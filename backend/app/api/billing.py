@@ -41,11 +41,19 @@ class RedeemCodeRequest(BaseModel):
 
 @router.get("/catalog")
 async def billing_catalog():
-    """Public plan constants from Settings — single source for UI labels."""
+    """Public plan labels for the UI — price/usage-cap come from the live Stripe
+    Price (source of truth) when configured, else the static Settings fallback."""
+    from app.core.stripe_pricing import (
+        ensure_price_fresh,
+        get_subscription_price_usd,
+        get_subscription_usage_limit_usd,
+    )
+
+    await ensure_price_fresh(settings)
     return {
         "billing_enabled": settings.billing_enabled,
-        "subscription_price_usd": settings.subscription_price_usd,
-        "subscription_usage_limit_usd": settings.subscription_usage_limit_usd,
+        "subscription_price_usd": get_subscription_price_usd(settings),
+        "subscription_usage_limit_usd": get_subscription_usage_limit_usd(settings),
         "usage_budget_buffer_pct": settings.usage_budget_buffer_pct,
         "stripe_price_id": settings.stripe_price_id or None,
     }
