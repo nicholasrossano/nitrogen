@@ -124,7 +124,14 @@ export function resolveDemoRequest<T>(endpoint: string, options?: RequestInit): 
       category_key: c.category_key,
       label: c.label,
       definition_text: c.definition_text,
-      criteria: null,
+      criteria: c.criteria_summary
+        ? {
+            summary: c.criteria_summary,
+            criteria: [],
+            retrieval_focus: [],
+            parse_warnings: [],
+          }
+        : null,
       defined_by_email: null,
       is_active: true,
       created_at: demoProject.created_at,

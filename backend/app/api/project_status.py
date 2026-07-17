@@ -103,6 +103,56 @@ def _criteria_summary(category) -> str | None:
     return summary or None
 
 
+def _build_decision_signals(effective_status: str, result_row) -> list[dict]:
+    """Turn the per-assessment reasoning arrays into an ordered, deduped, capped-at-5 list.
+
+    Sourced from the LLM's dynamic per-refresh signals (not the static criteria lens) so the
+    explanation adapts to whatever evidence actually exists in the project, rather than a
+    fixed checklist chosen when the category was created.
+
+    Visual tone: only true blockers render as red X. Ordinary weaknesses and gaps use amber
+    so a yellow category does not look like a wall of failures.
+    """
+    if result_row is None:
+        return [
+            {
+                "text": "Not assessed yet. Refresh to score this category from available project materials.",
+                "sentiment": "neutral",
+            }
+        ]
+
+    positive = [{"text": t, "sentiment": "positive"} for t in (result_row.positive_drivers or []) if t]
+    # True blockers stay red; negative_drivers are softer weaknesses → amber for yellow/unknown.
+    blockers = [{"text": t, "sentiment": "negative"} for t in (result_row.blockers or []) if t]
+    soft_negatives = [
+        {"text": t, "sentiment": "neutral"} for t in (result_row.negative_drivers or []) if t
+    ]
+    gaps = [{"text": t, "sentiment": "neutral"} for t in (result_row.missing_items or []) if t] + [
+        {"text": t, "sentiment": "neutral"} for t in (result_row.uncertainties or []) if t
+    ]
+
+    if effective_status == "red":
+        # Red category: blockers first, then soft weaknesses, then gaps/positives.
+        ordered = blockers + soft_negatives + gaps + positive
+    elif effective_status == "yellow":
+        # Balanced yellow: credit support, then gaps/soft issues; keep at most 1–2 red blockers.
+        ordered = positive + gaps + soft_negatives + blockers[:2]
+    elif effective_status == "green":
+        ordered = positive + gaps + soft_negatives + blockers
+    else:
+        ordered = gaps + soft_negatives + positive + blockers
+
+    seen: set[str] = set()
+    deduped: list[dict] = []
+    for item in ordered:
+        key = item["text"].strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped[:5]
+
+
 def _serialize_category_config(row) -> ProjectStatusCategoryConfig:
     criteria = None
     if isinstance(row.criteria, dict):
@@ -143,6 +193,7 @@ def _serialize_category_row(
             critical_insight=(
                 "Not assessed yet. Refresh to score this category from available project materials."
             ),
+            decision_signals=_build_decision_signals("unknown", None),
             supporting_evidence=[],
             suggested_improvement="Refresh the status overview to assess from project materials.",
             retrieved_sources=[],
@@ -190,6 +241,7 @@ def _serialize_category_row(
         confidence=result_row.confidence,
         rationale=result_row.rationale,
         critical_insight=critical_assessment.get("critical_insight") or result_row.rationale,
+        decision_signals=_build_decision_signals(effective_status, result_row),
         supporting_evidence=critical_assessment.get("supporting_evidence") or result_row.positive_drivers or [],
         suggested_improvement=critical_assessment.get("suggested_improvement")
         or (result_row.improvement_actions or [None])[0],
