@@ -3,6 +3,7 @@
 import { useBillingStore } from '@/stores/billingStore';
 import {
   barColorForPercent,
+  barometerDisclaimer,
   getBarometerScale,
   type BarometerTier,
 } from '@/lib/billing/usageBarometer';
@@ -33,6 +34,7 @@ export function UsageBarometer({
 
   const barColor = barColorForPercent(scale.percent);
   const barHeight = compact ? 'h-1' : 'h-1.5';
+  const disclaimer = barometerDisclaimer(scale);
 
   if (compact) {
     return (
@@ -50,9 +52,10 @@ export function UsageBarometer({
     );
   }
 
-  const limitLabel = scale.isReferenceScale
-    ? `$${scale.denominatorUsd.toFixed(2)}`
-    : `$${scale.denominatorUsd.toFixed(2)} limit`;
+  const limitLabel =
+    scale.scaleKind === 'reference'
+      ? `$${scale.denominatorUsd.toFixed(2)}`
+      : `$${scale.denominatorUsd.toFixed(2)} limit`;
 
   return (
     <div className={`px-4 py-3 space-y-1 ${className}`}>
@@ -66,10 +69,8 @@ export function UsageBarometer({
           style={{ width: `${scale.percent}%` }}
         />
       </div>
-      {scale.isReferenceScale && (
-        <p className="text-[10px] text-text-tertiary text-right pt-0.5">
-          Scale defaults to $100 — no platform usage cap applies.
-        </p>
+      {disclaimer && (
+        <p className="text-[10px] text-text-tertiary text-right pt-0.5">{disclaimer}</p>
       )}
     </div>
   );
