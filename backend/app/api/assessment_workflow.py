@@ -58,6 +58,7 @@ from app.services.decision_event_service import append_decision_event
 from app.services.decision_log_service import (
     build_assessment_decision_history_report,
     build_assessment_decision_log_xlsx,
+    collect_actor_user_ids,
 )
 from app.services.agent_runner_service import derive_assessment_run_state, run_assessment_agent_loop
 from app.services.variables import VariableActor, sync_stage_variables, sync_widget_variables
@@ -67,7 +68,9 @@ from app.services.assessment_export import (
     clear_export_lock,
     generate_assessment_export_bytes,
     resolve_writeup_content,
+    upsert_assessment_report_material,
 )
+from app.schemas.project_material import ProjectMaterialResponse, ProjectMaterialUploadResponse
 
 ai_access = require_ai_access()
 
@@ -194,6 +197,18 @@ async def _assessment_export_filename(
     else:
         safe_prefix = ""
     return f"{safe_prefix}{base}.{ext}"
+
+
+async def _assessment_report_filename(
+    *,
+    db: AsyncSession,
+    inst: AssessmentInstance,
+    assessment: BaseAssessment,
+) -> str:
+    """Stable Files name for narrative reports (no timestamp — upserts in place)."""
+    assessment_token = re.sub(r"[^\w.-]", "-", assessment.definition.name.lower()).strip("._-") or "assessment"
+    creator_token = await _instance_creator_token(db, inst)
+    return f"{assessment_token}_n{inst.instance_number}_{creator_token}_report.docx"
 
 
 async def _read_response_bytes(response: Response) -> bytes:
@@ -1660,6 +1675,114 @@ async def export_assessment_output(
     )
 
 
+@router.post(
+    "/assessment-workflow/{instance_id}/report",
+    response_model=ProjectMaterialUploadResponse,
+)
+async def publish_assessment_report(
+    instance_id: _uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Generate the narrative DOCX and upsert it into project Files.
+
+    Re-running Report updates the same material row (opened in the document
+    viewer). Browser download stays on the viewer's Export action.
+    """
+    inst, assessment = await _get_workflow_instance(db, instance_id, user)
+    await require_project_editor(db, str(inst.project_id), user)
+
+    if assessment.definition.export_format != "docx":
+        raise HTTPException(
+            status_code=400,
+            detail="Only narrative document assessments support Report",
+        )
+
+    project_result = await db.execute(select(Project).where(Project.id == inst.project_id))
+    project = project_result.scalar_one_or_none()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    state = await ensure_workflow_state(db, inst, assessment)
+    context = await get_initiative_context(db, inst.project_id)
+    confirmed_stages: dict[str, Any] = _build_confirmed_stages_snapshot(state)
+    if not confirmed_stages:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one stage must be confirmed before exporting",
+        )
+
+    created = False
+    try:
+        begin_export_lock(inst, state)
+        await db.commit()
+    except ExportInProgressError:
+        raise HTTPException(status_code=409, detail="Export already in progress")
+
+    try:
+        try:
+            export_bytes = await generate_assessment_export_bytes(
+                assessment=assessment,
+                inst=inst,
+                state=state,
+                confirmed_stages=confirmed_stages,
+                context=context,
+                db=db,
+                user_id=user.uid,
+            )
+        except NotImplementedError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Assessment '{assessment.definition.id}' does not implement generate_export()",
+            )
+
+        filename = await _assessment_report_filename(db=db, inst=inst, assessment=assessment)
+        # Re-read state after export mutations (writeup cache / enrichment).
+        locked_state = inst.workflow_state if isinstance(inst.workflow_state, dict) else state
+        material, created = await upsert_assessment_report_material(
+            db=db,
+            inst=inst,
+            state=locked_state,
+            content=export_bytes,
+            filename=filename,
+            workspace_id=project.workspace_id,
+        )
+    finally:
+        locked_state = inst.workflow_state if isinstance(inst.workflow_state, dict) else state
+        clear_export_lock(inst, locked_state)
+        await db.commit()
+
+    await append_decision_event(
+        db,
+        inst=inst,
+        event_type="exported",
+        entity_type="export",
+        entity_id="docx",
+        actor_user_id=user.uid,
+        actor_email=user.email,
+        payload={"format": "docx", "scope": "assessment", "material_id": str(material.id)},
+    )
+    await db.commit()
+    await db.refresh(material)
+
+    return ProjectMaterialUploadResponse(
+        success=True,
+        material=ProjectMaterialResponse(
+            id=material.id,
+            filename=material.filename,
+            file_type=material.file_type,
+            file_size=material.file_size,
+            created_at=material.created_at,
+            source="material",
+        ),
+        message=(
+            f"Report '{material.filename}' saved to Files"
+            if created
+            else f"Report '{material.filename}' updated"
+        ),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Write-up export (LLM-generated, cached) — alias of main export for DOCX
 # ---------------------------------------------------------------------------
@@ -1740,8 +1863,23 @@ async def export_writeup(
 
 
 # ---------------------------------------------------------------------------
-# Assessment-scoped decision log (deterministic, no LLM, always fast)
+# Assessment-scoped history (deterministic, no LLM, always fast)
 # ---------------------------------------------------------------------------
+
+async def _email_by_uid_for_workflow(
+    db: AsyncSession,
+    workflow_state: dict[str, Any],
+) -> dict[str, str]:
+    uids = collect_actor_user_ids(workflow_state)
+    if not uids:
+        return {}
+    result = await db.execute(select(User).where(User.id.in_(uids)))
+    return {
+        user.id: user.email
+        for user in result.scalars().all()
+        if user.email
+    }
+
 
 @router.get("/assessment-workflow/{instance_id}/decision-log")
 async def get_assessment_decision_log(
@@ -1752,12 +1890,14 @@ async def get_assessment_decision_log(
     """Return assessment-scoped, value-level decision history rows."""
     inst, assessment = await _get_workflow_instance(db, instance_id, user)
     state = await ensure_workflow_state(db, inst, assessment)
+    email_by_uid = await _email_by_uid_for_workflow(db, state)
     return build_assessment_decision_history_report(
         workflow_state=state,
         stage_defs=assessment.stage_defs,
         assessment_id=inst.assessment_id,
         assessment_name=assessment.definition.name,
         assessment_instance_id=str(inst.id),
+        email_by_uid=email_by_uid,
     )
 
 
@@ -1770,12 +1910,14 @@ async def export_assessment_decision_log_xlsx(
     """Export assessment-scoped decision history as XLSX."""
     inst, assessment = await _get_workflow_instance(db, instance_id, user)
     state = await ensure_workflow_state(db, inst, assessment)
+    email_by_uid = await _email_by_uid_for_workflow(db, state)
     report = build_assessment_decision_history_report(
         workflow_state=state,
         stage_defs=assessment.stage_defs,
         assessment_id=inst.assessment_id,
         assessment_name=assessment.definition.name,
         assessment_instance_id=str(inst.id),
+        email_by_uid=email_by_uid,
     )
     xlsx_bytes = build_assessment_decision_log_xlsx(report)
 
@@ -1796,7 +1938,7 @@ async def export_assessment_decision_log_xlsx(
         inst=inst,
         assessment=assessment,
         ext="xlsx",
-        prefix="log",
+        prefix="history",
     )
 
     return Response(
