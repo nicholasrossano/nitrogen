@@ -270,7 +270,10 @@ async def check_usage_budget(user_id: str, db: AsyncSession) -> dict:
 
     if tier == "trial":
         if sub.access_code_redeemed:
-            limit = Decimal(str(settings.subscription_usage_limit_usd or 0))
+            from app.core.stripe_pricing import ensure_price_fresh, get_subscription_usage_limit_usd
+
+            await ensure_price_fresh(settings)
+            limit = Decimal(str(get_subscription_usage_limit_usd(settings)))
         else:
             limit = Decimal(str(settings.trial_cost_limit_usd))
         used = sub.trial_cost_used or Decimal("0")
@@ -306,7 +309,10 @@ async def check_usage_budget(user_id: str, db: AsyncSession) -> dict:
                 else settings.pro_usage_limit_usd
             )
         else:
-            limit_usd = float(settings.subscription_usage_limit_usd or 0)
+            from app.core.stripe_pricing import ensure_price_fresh, get_subscription_usage_limit_usd
+
+            await ensure_price_fresh(settings)
+            limit_usd = get_subscription_usage_limit_usd(settings)
         period_start = sub.current_period_start
         if period_start:
             usage_result = await db.execute(
