@@ -11,7 +11,7 @@
     ]
   },
   "recorded_llm": {
-    "assumptions": [
+    "variables": [
       {
         "key": "system_size_kw",
         "label": "System size",
@@ -77,15 +77,52 @@
     ]
   },
   "expect": {
-    "assumptions": [
-      { "label": "System size", "key": "system_size_kw", "value": 50, "quote_contains": "50 kW" },
-      { "label": "Total CAPEX", "key": "total_capex", "value": 180000, "quote_contains": "180,000" },
-      { "label": "Annual OPEX", "key": "annual_opex", "value": 12000, "quote_contains": "12,000" },
-      { "label": "Discount rate", "key": "discount_rate", "value": 8, "quote_contains": "8%" },
-      { "label": "Project lifetime", "key": "project_life_years", "value": 20, "quote_contains": "20-year" },
-      { "label": "Baseline energy source", "key": "baseline_energy_source", "value": "diesel generator", "quote_contains": "diesel generator" },
-      { "label": "Comparable project NPV", "key": "comparable_project_npv", "value": 95000, "quote_contains": "NPV of $95,000" }
+    "rejected": [
+      "Marsabit"
     ],
-    "rejected": ["Marsabit"]
+    "variables": [
+      {
+        "label": "System size",
+        "key": "system_size_kw",
+        "value": 50,
+        "quote_contains": "50 kW"
+      },
+      {
+        "label": "Total CAPEX",
+        "key": "total_capex",
+        "value": 180000,
+        "quote_contains": "180,000"
+      },
+      {
+        "label": "Annual OPEX",
+        "key": "annual_opex",
+        "value": 12000,
+        "quote_contains": "12,000"
+      },
+      {
+        "label": "Discount rate",
+        "key": "discount_rate",
+        "value": 8,
+        "quote_contains": "8%"
+      },
+      {
+        "label": "Project lifetime",
+        "key": "project_life_years",
+        "value": 20,
+        "quote_contains": "20-year"
+      },
+      {
+        "label": "Baseline energy source",
+        "key": "baseline_energy_source",
+        "value": "diesel generator",
+        "quote_contains": "diesel generator"
+      },
+      {
+        "label": "Comparable project NPV",
+        "key": "comparable_project_npv",
+        "value": 95000,
+        "quote_contains": "NPV of $95,000"
+      }
+    ]
   }
 }

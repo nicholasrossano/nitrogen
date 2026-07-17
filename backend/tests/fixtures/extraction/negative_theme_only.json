@@ -11,7 +11,7 @@
     ]
   },
   "recorded_llm": {
-    "assumptions": [
+    "variables": [
       {
         "key": "operator_model",
         "label": "Operator model",
@@ -22,7 +22,9 @@
     ]
   },
   "expect": {
-    "assumptions": [],
-    "rejected": ["community ownership"]
+    "rejected": [
+      "community ownership"
+    ],
+    "variables": []
   }
 }

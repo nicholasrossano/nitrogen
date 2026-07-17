@@ -11,7 +11,7 @@
     ]
   },
   "recorded_llm": {
-    "assumptions": [
+    "variables": [
       {
         "key": "capacity_factor",
         "label": "Capacity factor",
@@ -39,10 +39,25 @@
     ]
   },
   "expect": {
-    "assumptions": [
-      { "key": "capacity_factor", "label": "Capacity factor", "value": 22, "quote_contains": "22%" },
-      { "key": "collection_rate", "label": "Collection rate", "value": 85, "quote_contains": "85%" },
-      { "key": "total_capex", "label": "Total CAPEX", "value": 180000, "quote_contains": "180,000" }
+    "variables": [
+      {
+        "key": "capacity_factor",
+        "label": "Capacity factor",
+        "value": 22,
+        "quote_contains": "22%"
+      },
+      {
+        "key": "collection_rate",
+        "label": "Collection rate",
+        "value": 85,
+        "quote_contains": "85%"
+      },
+      {
+        "key": "total_capex",
+        "label": "Total CAPEX",
+        "value": 180000,
+        "quote_contains": "180,000"
+      }
     ]
   }
 }
