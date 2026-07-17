@@ -28,10 +28,10 @@ import {
   floatWidgetForAssessmentReport,
   floatWidgetForCitation,
   floatWidgetForProjectMaterial,
-  floatWidgetForVariablesWorkspace,
+  floatWidgetForVariable,
 } from '@/lib/openProjectFileInEditor';
 import { activeEditorContextFromWidget } from '@/lib/activeEditorContext';
-import { api, type AssessmentInstance, type FieldContext, type ProjectMaterial } from '@/lib/api';
+import { api, type AssessmentInstance, type FieldContext, type ProjectMaterial, type Variable } from '@/lib/api';
 import { projectDisplayName } from '@/lib/projectDisplayName';
 import { discardEphemeralAssessmentInstance } from '@/lib/assessmentEngagement';
 import { assessmentHeaderTitle } from '@/lib/assessmentDisplay';
@@ -51,7 +51,7 @@ const FLOATING_PANEL_CLASS = `absolute z-20 right-3 flex flex-col min-h-0 overfl
 const SOLO_FLOAT_PANEL_CLASS = `absolute z-30 inset-y-3 left-0 right-3 flex flex-col min-h-0 overflow-hidden ${CHAT_FLOATING_PANEL_CHROME}`;
 const RIGHT_MARGIN_PX = 12;
 
-/** Docked = companion beside an active floor (Chat / Overview / Files / Assessments). Solo = float owns the stage. */
+/** Docked = companion beside an active floor (Chat / Overview / Variables / Files / Assessments). Solo = float owns the stage. */
 type FloatLayout = 'docked' | 'solo';
 
 type PendingInvestigateAutoSend = {
@@ -102,6 +102,8 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   const assessmentParam = parseAssessmentParam(searchParams.get(ASSESSMENT_SEARCH_PARAM));
   const variableParam = parseVariableParam(searchParams.get(VARIABLE_SEARCH_PARAM));
   const restoringAssessmentRef = useRef<string | null>(null);
+  /** Blocks ?assessment= restore while a close/dismiss clears the URL (router lag). */
+  const suppressAssessmentRestoreRef = useRef(false);
 
   const replaceWorkbenchSearchParams = useCallback((mutate: (params: URLSearchParams) => void) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -114,6 +116,15 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     const variable = parseVariableParam(params.get(VARIABLE_SEARCH_PARAM));
     router.replace(buildProjectWorkbenchPath(projectId, { chat, panel, assessment, variable }));
   }, [projectId, router, searchParams]);
+
+  /** Clear ?assessment= and stop the restore effect from reopening a float we just closed. */
+  const dismissAssessmentDeepLink = useCallback(() => {
+    suppressAssessmentRestoreRef.current = true;
+    restoringAssessmentRef.current = null;
+    replaceWorkbenchSearchParams((params) => {
+      params.delete(ASSESSMENT_SEARCH_PARAM);
+    });
+  }, [replaceWorkbenchSearchParams]);
 
   const clearContextPanelParam = useCallback(() => {
     replaceWorkbenchSearchParams((params) => {
@@ -184,15 +195,20 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
 
     if (!panelParam) {
       dismissingPanelRef.current = null;
-      // Floors / variables float are URL-backed via ?panel= — tear down when absent.
+      // Floors are URL-backed via ?panel= — tear down when the param is absent.
       if (expandedContextWidget) {
         setExpandedContextWidget(null);
         chatShell?.setActiveContextWidget(null);
         setExpandMotionMode('stack');
       }
+      // Variable detail floats are scoped to the Variables floor.
       setPinnedFloatWidgets((prev) => {
-        if (!prev?.some((widget) => widget.type === 'variables_workspace')) return prev;
-        const rest = prev.filter((widget) => widget.type !== 'variables_workspace');
+        if (!prev?.some((widget) => widget.type === 'variable_detail' || widget.type === 'variables_workspace')) {
+          return prev;
+        }
+        const rest = prev.filter(
+          (widget) => widget.type !== 'variable_detail' && widget.type !== 'variables_workspace',
+        );
         return rest.length > 0 ? rest : null;
       });
       setFloatCompanionOpen(false);
@@ -206,38 +222,11 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
       dismissingPanelRef.current = null;
     }
 
-    // Variables is a float, not a floor.
-    if (panelParam === 'variables') {
-      if (expandedContextWidget) {
-        setExpandedContextWidget(null);
-        setExpandMotionMode('stack');
-      }
-      chatShell?.setActiveContextWidget('variables');
-      const openWorkspace = (pinnedFloatWidgets ?? floatWidgets).find(
-        (widget) => widget.type === 'variables_workspace',
-      );
-      const openFocusId =
-        typeof openWorkspace?.data?.focus_variable_id === 'string'
-          ? openWorkspace.data.focus_variable_id
-          : null;
-      if (!openWorkspace) {
-        const layout: FloatLayout = hasMessages ? 'docked' : 'solo';
-        setFloatLayout(layout);
-        if (layout === 'solo') {
-          setHasMessages(true);
-        }
-        setPinnedFloatWidgets([floatWidgetForVariablesWorkspace(projectId, variableParam)]);
-      } else if (variableParam && openFocusId !== variableParam) {
-        // Refresh / deep-link: keep the float mounted but apply the focused variable.
-        setPinnedFloatWidgets([floatWidgetForVariablesWorkspace(projectId, variableParam)]);
-      }
-      return;
-    }
-
     if (expandedContextWidget === panelParam) return;
 
     // Honor capsule / deep-link opens even when a stack floor is already up.
     // Keep an assessment float when restoring both ?panel= and ?assessment=.
+    // Variable detail is reopened by the ?variable= restore effect below.
     if (!assessmentParam) {
       setPinnedFloatWidgets(null);
       setFloatWidgets([]);
@@ -253,11 +242,47 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     assessmentParam,
     chatShell,
     expandedContextWidget,
+    panelParam,
+  ]);
+
+  // Restore selected-variable float beside the Variables floor from ?variable=.
+  useEffect(() => {
+    if (panelParam !== 'variables' || !variableParam) return;
+    if (expandedContextWidget !== 'variables') return;
+
+    const alreadyOpen = (pinnedFloatWidgets ?? floatWidgets).some((widget) => {
+      if (widget.type !== 'variable_detail') return false;
+      const id =
+        (typeof widget.data?.variable?.id === 'string' && widget.data.variable.id)
+        || (typeof widget.data?.assumption?.id === 'string' && widget.data.assumption.id)
+        || null;
+      return id === variableParam || widget.messageId === `variable-${variableParam}`;
+    });
+    if (alreadyOpen) return;
+
+    let cancelled = false;
+    void api.getVariable(variableParam)
+      .then((variable) => {
+        if (cancelled) return;
+        setFloatLayout('docked');
+        setPinnedFloatWidgets([floatWidgetForVariable(variable)]);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        replaceWorkbenchSearchParams((params) => {
+          params.delete(VARIABLE_SEARCH_PARAM);
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    expandedContextWidget,
     floatWidgets,
-    hasMessages,
     panelParam,
     pinnedFloatWidgets,
-    projectId,
+    replaceWorkbenchSearchParams,
     variableParam,
   ]);
 
@@ -354,6 +379,10 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   useEffect(() => {
     if (!assessmentParam) {
       restoringAssessmentRef.current = null;
+      suppressAssessmentRestoreRef.current = false;
+      return;
+    }
+    if (suppressAssessmentRestoreRef.current) {
       return;
     }
     // Decision/activity logs and assessment reports keep the same ?assessment=
@@ -519,16 +548,29 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
 
   const handleCloseFloatLayer = useCallback(() => {
     cleanupActiveEphemeralAssessment(pinnedFloatWidgets ?? floatWidgets);
-    const closingVariables = (pinnedFloatWidgets ?? floatWidgets).some(
-      (widget) => widget.type === 'variables_workspace',
+    const closingVariableDetail = (pinnedFloatWidgets ?? floatWidgets).some(
+      (widget) => widget.type === 'variable_detail',
     );
+    const closingAssessment = (pinnedFloatWidgets ?? floatWidgets).some(
+      (widget) =>
+        widget.type === 'assessment_workspace'
+        || widget.type === 'decision_log'
+        || widget.type === 'activity_log'
+        || (widget.type === 'document_viewer' && Boolean(widget.data?.instance_id)),
+    );
+    // Drop ?assessment= before/with widget clear so the restore effect cannot remount.
+    if (closingAssessment || assessmentParam) {
+      dismissAssessmentDeepLink();
+    }
     setPinnedFloatWidgets(null);
     setFloatWidgets([]);
     setFloatLayout('docked');
     setFloatCompanionOpen(false);
-    if (closingVariables && panelParam === 'variables') {
-      chatShell?.setActiveContextWidget(null);
-      dismissContextPanelParam();
+    // Keep the Variables floor; only clear the selected-variable deep link.
+    if (closingVariableDetail && variableParam) {
+      replaceWorkbenchSearchParams((params) => {
+        params.delete(VARIABLE_SEARCH_PARAM);
+      });
     }
     // If a context panel is still the floor, chat stays hidden behind it.
     if (!activeChatId && !expandedContextWidget) {
@@ -536,13 +578,14 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     }
   }, [
     activeChatId,
-    chatShell,
+    assessmentParam,
     cleanupActiveEphemeralAssessment,
-    dismissContextPanelParam,
+    dismissAssessmentDeepLink,
     expandedContextWidget,
     floatWidgets,
-    panelParam,
     pinnedFloatWidgets,
+    replaceWorkbenchSearchParams,
+    variableParam,
   ]);
 
   const handleAssessmentEngaged = useCallback((instanceId: string) => {
@@ -563,58 +606,62 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
 
   const resolveFloatLayoutForOpen = useCallback((): FloatLayout => {
     // Dock beside whichever floor is already active — an overlay FloorLayer
-    // (Files/Overview/Assessments), or Chat (messages on stage). Only a bare landing
-    // with no floor content yet opens the float solo.
+    // (Variables/Files/Overview/Assessments), or Chat (messages on stage). Only a bare
+    // landing with no floor content yet opens the float solo.
     if (expandedContextWidget != null || hasMessages) return 'docked';
     return 'solo';
   }, [expandedContextWidget, hasMessages]);
 
   const openPinnedFloat = useCallback((widgets: FloatWidget[], layout: FloatLayout) => {
-    const openingVariables = widgets.some((widget) => widget.type === 'variables_workspace');
-    if (!openingVariables && panelParam === 'variables') {
-      chatShell?.setActiveContextWidget(null);
-      dismissContextPanelParam();
-    }
+    suppressAssessmentRestoreRef.current = false;
     if (layout === 'solo') {
       // Bare landing — float owns the stage; dismiss any stale overlay floor.
       setExpandedContextWidget(null);
       setExpandMotionMode('stack');
-      if (!openingVariables) {
-        chatShell?.setActiveContextWidget(null);
-        dismissContextPanelParam();
-      }
+      chatShell?.setActiveContextWidget(null);
+      dismissContextPanelParam();
       setHasMessages(true);
     }
     setFloatLayout(layout);
     setFloatCompanionOpen(false);
     setPinnedFloatWidgets(widgets);
-  }, [chatShell, dismissContextPanelParam, panelParam]);
+  }, [chatShell, dismissContextPanelParam]);
 
-  const handleOpenVariablesWorkspace = useCallback((focusVariableId?: string | null) => {
-    const layout = resolveFloatLayoutForOpen();
-    setExpandedContextWidget(null);
+  /** Open Variables floor (if needed) and dock the selected variable as a float. */
+  const handleOpenVariableDetail = useCallback((variable: Variable) => {
+    cleanupActiveEphemeralAssessment(pinnedFloatWidgets ?? floatWidgets);
+    if (
+      assessmentParam
+      || (pinnedFloatWidgets ?? floatWidgets).some(
+        (w) =>
+          w.type === 'assessment_workspace'
+          || w.type === 'decision_log'
+          || w.type === 'activity_log',
+      )
+    ) {
+      dismissAssessmentDeepLink();
+    }
+    setFloatWidgets([]);
+    setExpandedContextWidget('variables');
     setExpandMotionMode('stack');
     chatShell?.setActiveContextWidget('variables');
-    if (layout === 'solo') {
-      setHasMessages(true);
-    }
-    setFloatLayout(layout);
+    setFloatLayout('docked');
     setFloatCompanionOpen(false);
-    setPinnedFloatWidgets([floatWidgetForVariablesWorkspace(projectId, focusVariableId)]);
+    setPinnedFloatWidgets([floatWidgetForVariable(variable)]);
     replaceWorkbenchSearchParams((params) => {
       params.delete('chat');
       params.set(CONTEXT_PANEL_SEARCH_PARAM, 'variables');
-      if (focusVariableId) params.set(VARIABLE_SEARCH_PARAM, focusVariableId);
-      else params.delete(VARIABLE_SEARCH_PARAM);
+      params.set(VARIABLE_SEARCH_PARAM, variable.id);
     });
-  }, [chatShell, projectId, replaceWorkbenchSearchParams, resolveFloatLayoutForOpen]);
-
-  const handleVariablesSelectionChange = useCallback((variableId: string | null) => {
-    replaceWorkbenchSearchParams((params) => {
-      if (variableId) params.set(VARIABLE_SEARCH_PARAM, variableId);
-      else params.delete(VARIABLE_SEARCH_PARAM);
-    });
-  }, [replaceWorkbenchSearchParams]);
+  }, [
+    assessmentParam,
+    chatShell,
+    cleanupActiveEphemeralAssessment,
+    dismissAssessmentDeepLink,
+    floatWidgets,
+    pinnedFloatWidgets,
+    replaceWorkbenchSearchParams,
+  ]);
 
   /** Swap float contents in place (assessment → decision/activity log) without changing dock layout. */
   const replaceFloatContent = useCallback((widgets: FloatWidget[]) => {
@@ -812,6 +859,9 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
 
     if (pinnedFloatWidgets?.length || floatWidgets.length) {
       cleanupActiveEphemeralAssessment(pinnedFloatWidgets ?? floatWidgets);
+      if (assessmentParam) {
+        dismissAssessmentDeepLink();
+      }
       setPinnedFloatWidgets(null);
       setFloatWidgets([]);
       setFloatLayout('docked');
@@ -826,8 +876,10 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     return didReset;
   }, [
     activeChatId,
+    assessmentParam,
     chatShell,
     cleanupActiveEphemeralAssessment,
+    dismissAssessmentDeepLink,
     floatWidgets.length,
     expandedContextWidget,
     panelParam,
@@ -841,16 +893,16 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     widget: ChatContextExpandedWidget | null,
     options?: ExpandedWidgetChangeOptions,
   ) => {
-    if (widget === 'variables') {
-      handleOpenVariablesWorkspace(null);
-      return;
-    }
-
     const motion = options?.motion ?? (widget ? 'stack' : undefined);
 
     // A docked float is scoped to whichever floor is active; clear it on any floor
     // change, including closing the floor (e.g. Back on Files → Chat).
     cleanupActiveEphemeralAssessment(pinnedFloatWidgets ?? floatWidgets);
+    if (assessmentParam || (pinnedFloatWidgets ?? floatWidgets).some(
+      (w) => w.type === 'assessment_workspace' || w.type === 'decision_log' || w.type === 'activity_log',
+    )) {
+      dismissAssessmentDeepLink();
+    }
     setPinnedFloatWidgets(null);
     setFloatLayout('docked');
     setFloatCompanionOpen(false);
@@ -883,11 +935,12 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
       dismissContextPanelParam();
     }
   }, [
+    assessmentParam,
     chatShell,
     cleanupActiveEphemeralAssessment,
+    dismissAssessmentDeepLink,
     dismissContextPanelParam,
     floatWidgets,
-    handleOpenVariablesWorkspace,
     pinnedFloatWidgets,
     replaceWorkbenchSearchParams,
     searchParams,
@@ -1085,7 +1138,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
           expandedWidget={expandedContextWidget}
           expandMotionMode={expandMotionMode}
           onExpandedWidgetChange={handleExpandedContextWidgetChange}
-          onOpenVariablesWorkspace={handleOpenVariablesWorkspace}
+          onOpenVariableDetail={handleOpenVariableDetail}
           onOpenFile={handleOpenProjectFile}
           onOpenDocument={handleOpenDocument}
           onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
@@ -1140,7 +1193,6 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
             onCompanionSidePanelOpenChange={setFloatCompanionOpen}
             onOpenDocument={handleOpenDocument}
             onOpenFile={handleOpenProjectFile}
-            onVariablesSelectionChange={handleVariablesSelectionChange}
           />
         </aside>
       )}
