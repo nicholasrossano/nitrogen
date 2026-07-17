@@ -4,11 +4,13 @@
   "description": "Installed capacity alias maps through quality gate when key is system_size_kw.",
   "input": {
     "chunks": [
-      { "content": "Installed capacity: 120 kW for the mini-grid site." }
+      {
+        "content": "Installed capacity: 120 kW for the mini-grid site."
+      }
     ]
   },
   "recorded_llm": {
-    "assumptions": [
+    "variables": [
       {
         "key": "system_size_kw",
         "label": "System size",
@@ -20,8 +22,13 @@
     ]
   },
   "expect": {
-    "assumptions": [
-      { "key": "system_size_kw", "label": "System size", "value": 120, "quote_contains": "120 kW" }
+    "variables": [
+      {
+        "key": "system_size_kw",
+        "label": "System size",
+        "value": 120,
+        "quote_contains": "120 kW"
+      }
     ]
   }
 }

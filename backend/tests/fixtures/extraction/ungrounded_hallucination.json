@@ -11,7 +11,7 @@
     ]
   },
   "recorded_llm": {
-    "assumptions": [
+    "variables": [
       {
         "key": "total_capex",
         "label": "Total CAPEX",
@@ -23,7 +23,9 @@
     ]
   },
   "expect": {
-    "assumptions": [],
-    "rejected": ["Total CAPEX"]
+    "rejected": [
+      "Total CAPEX"
+    ],
+    "variables": []
   }
 }
