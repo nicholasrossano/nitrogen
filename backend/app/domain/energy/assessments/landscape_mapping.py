@@ -7,7 +7,7 @@ Stage workflow:
 
 Exports:
   - Write-up DOCX: LLM-generated, cached in workflow_state after first generation.
-  - Decision Log DOCX: deterministic extraction, no LLM, always fast.
+  - History DOCX: deterministic extraction, no LLM, always fast.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from typing import Any
 
 from app.assessments.base import BaseAssessment, FieldDef, PopulationStep, StageDef, AssessmentDefinition, AssessmentManifest
 from app.assessments.retrieval import retrieve_evidence
-from app.assessments.utils import llm_json, infer_category_icon
+from app.assessments.utils import llm_json, propose_category_items
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -381,27 +381,19 @@ class LandscapeMappingAssessment(BaseAssessment):
     # ------------------------------------------------------------------ #
 
     async def _generate_themes(self, context: dict) -> list[dict]:
-        data = await llm_json(
+        return await propose_category_items(
             system=(
                 "You are a landscape analysis expert. Generate 5–8 high-level categories or dimensions "
                 "for a landscape mapping assessment. Return JSON with key 'categories', a list of objects "
                 "with 'label' (no descriptions needed)."
             ),
+            context=context,
             user_msg=(
                 f"Region: {context.get('geography', '')}\n"
                 f"Project type / sector: {context.get('project_type', '')}\n"
                 f"Project description: {context.get('project_description', '')}"
             ),
-            context=context,
         )
-        return [
-            {
-                "label": t.get("label", t.get("title", "")),
-                "description": t.get("description", ""),
-                "icon": infer_category_icon(t.get("label", t.get("title", ""))),
-            }
-            for t in data.get("categories", [])
-        ]
 
     async def _generate_entities(self, context: dict, theme_items: list[dict]) -> list[dict]:
         themes = [i["content"].get("label", "").strip() for i in theme_items if i["content"].get("label", "").strip()]
@@ -521,7 +513,9 @@ class LandscapeMappingAssessment(BaseAssessment):
     @staticmethod
     def _is_map_deep_dive_complete(record: dict[str, Any]) -> bool:
         """Return True when a landscape deep dive has usable overview text."""
-        if not isinstance(record, dict):
+        from app.services.deep_dive import is_usable_deep_dive_cache
+
+        if not is_usable_deep_dive_cache(record):
             return False
         what = record.get("what_this_is")
         if isinstance(what, list) and any(str(bit).strip() for bit in what):

@@ -86,6 +86,57 @@ def make_build_item(content: dict, derivation: str = "inferred", sources: list[d
     }
 
 
+def default_project_context_prompt(context: dict) -> str:
+    """Shared project-context block for category / entity proposal prompts."""
+    return (
+        f"Project: {context.get('project_title', 'Unknown')}\n"
+        f"Geography / region: {context.get('geography', '')}\n"
+        f"Project type / sector: {context.get('project_type', '')}\n"
+        f"Project description: {context.get('project_description', '')}"
+    )
+
+
+async def propose_category_items(
+    *,
+    system: str,
+    context: dict,
+    user_msg: str | None = None,
+    result_key: str = "categories",
+) -> list[dict]:
+    """Shared LLM category-list proposal for layered assessments.
+
+    Assessments supply unique ``system`` prompts; parsing/normalization is shared.
+    """
+    data = await llm_json(
+        system=system,
+        user_msg=user_msg or default_project_context_prompt(context),
+        context=context,
+    )
+    raw = data.get(result_key)
+    if not isinstance(raw, list):
+        raw = data.get("categories")
+    if not isinstance(raw, list):
+        raw = data.get("themes")
+    if not isinstance(raw, list):
+        return []
+
+    items: list[dict] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        label = str(entry.get("label") or entry.get("title") or "").strip()
+        if not label:
+            continue
+        items.append(
+            {
+                "label": label,
+                "description": str(entry.get("description") or ""),
+                "icon": infer_category_icon(label),
+            }
+        )
+    return items
+
+
 def infer_category_icon(label: str) -> str:
     """Infer a deterministic icon name from a category label."""
     normalized = (label or "").strip().lower()
