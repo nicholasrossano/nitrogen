@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, useMemo, useCallback, R
 import type { User, Auth } from 'firebase/auth';
 import { isDemoActive } from '@/lib/demo/demoSession';
 import { leaveDemoSession } from '@/lib/demo/demoBoundary';
+import { syncAuthSessionBoundary } from '@/lib/sessionBoundary';
 
 interface AuthContextType {
   user: User | null;
@@ -13,7 +14,14 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  sendVerificationEmail: () => Promise<void>;
+  reloadUser: () => Promise<User | null>;
   getIdToken: () => Promise<string | null>;
+}
+
+/** True when the signed-in user must verify email before using the app. */
+export function needsEmailVerification(user: User | null | undefined): boolean {
+  return Boolean(user && !user.emailVerified);
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -55,6 +63,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (nextUser && isDemoActive()) {
             leaveDemoSession();
           }
+          // Drop cross-account workspace / last-project / tour prefs when the
+          // Firebase UID changes so new signups never inherit another user's IDs.
+          syncAuthSessionBoundary(nextUser?.uid ?? null);
           setUser(nextUser);
           setLoading(false);
         });
@@ -80,8 +91,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUpWithEmail = useCallback(async (email: string, password: string) => {
     if (!auth) throw new Error('Auth not initialized');
-    const { createUserWithEmailAndPassword } = await import('firebase/auth');
-    await createUserWithEmailAndPassword(auth, email, password);
+    const {
+      createUserWithEmailAndPassword,
+      sendEmailVerification,
+    } = await import('firebase/auth');
+    const credential = await createUserWithEmailAndPassword(auth, email, password);
+    // Best-effort: account exists even if the verification email fails to send.
+    try {
+      await sendEmailVerification(credential.user);
+    } catch (err) {
+      console.error('Failed to send verification email after signup:', err);
+    }
   }, [auth]);
 
   const signInWithGoogle = useCallback(async () => {
@@ -103,6 +123,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await sendPasswordResetEmail(auth, email);
   }, [auth]);
 
+  const sendVerificationEmail = useCallback(async () => {
+    if (!auth?.currentUser) throw new Error('Not signed in');
+    const { sendEmailVerification } = await import('firebase/auth');
+    await sendEmailVerification(auth.currentUser);
+  }, [auth]);
+
+  const reloadUser = useCallback(async (): Promise<User | null> => {
+    if (!auth?.currentUser) return null;
+    await auth.currentUser.reload();
+    // Force a fresh ID token so backend sees updated email_verified.
+    await auth.currentUser.getIdToken(true);
+    const next = auth.currentUser;
+    setUser(next);
+    return next;
+  }, [auth]);
+
   const getIdToken = useCallback(async (): Promise<string | null> => {
     if (!user) return null;
     return user.getIdToken();
@@ -116,8 +152,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signInWithGoogle,
     signOut,
     resetPassword,
+    sendVerificationEmail,
+    reloadUser,
     getIdToken,
-  }), [user, loading, signInWithEmail, signUpWithEmail, signInWithGoogle, signOut, resetPassword, getIdToken]);
+  }), [
+    user,
+    loading,
+    signInWithEmail,
+    signUpWithEmail,
+    signInWithGoogle,
+    signOut,
+    resetPassword,
+    sendVerificationEmail,
+    reloadUser,
+    getIdToken,
+  ]);
 
   if (configError) {
     return (

@@ -118,6 +118,7 @@ export function TourOverlay() {
   const activeGroup = useTourStore((s) => s.activeGroup);
   const activeStepId = useTourStore((s) => s.activeStepId);
   const welcomeActive = useTourStore((s) => s.welcomeActive);
+  const completedStepIds = useTourStore((s) => s.completedStepIds);
   const setActiveStep = useTourStore((s) => s.setActiveStep);
   const markStepCompleted = useTourStore((s) => s.markStepCompleted);
   const finishWelcome = useTourStore((s) => s.finishWelcome);
@@ -163,8 +164,11 @@ export function TourOverlay() {
   const availableStepIds = useMemo(() => {
     return groupSteps
       .map((s) => s.id)
-      .filter((id) => Boolean(getTourAnchorRect(id)));
-  }, [groupSteps, dots]);
+      .filter((id) => Boolean(getTourAnchorRect(id)))
+      // Deferred welcome tips reuse group=welcome after welcomeCompleted — hide
+      // already-finished chrome tips so only newly-visible widgets are tagged.
+      .filter((id) => !completedStepIds.includes(id) || id === activeStepId);
+  }, [activeStepId, completedStepIds, groupSteps, dots]);
 
   const activeStep = activeStepId ? getTourStep(activeStepId) : undefined;
   const activeIndex = activeStepId ? availableStepIds.indexOf(activeStepId) : -1;
@@ -190,8 +194,11 @@ export function TourOverlay() {
       return;
     }
     const steps = getStepsForGroup(activeGroup);
+    const completed = useTourStore.getState().completedStepIds;
+    const currentActive = useTourStore.getState().activeStepId;
     const nextDots: DotLayout[] = [];
     for (const step of steps) {
+      if (completed.includes(step.id) && step.id !== currentActive) continue;
       const dot = measureDot(step.id);
       if (dot) nextDots.push(dot);
     }
@@ -334,13 +341,13 @@ export function TourOverlay() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        if (activeGroup === 'welcome') skipWelcome();
+        if (activeGroup === 'welcome' && welcomeActive) skipWelcome(availableStepIds);
         else dismissActiveGroup();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [activeGroup, dismissActiveGroup, skipWelcome]);
+  }, [activeGroup, availableStepIds, dismissActiveGroup, skipWelcome, welcomeActive]);
 
   const goRelative = useCallback(
     (delta: number) => {
@@ -355,20 +362,28 @@ export function TourOverlay() {
 
   const handleDone = useCallback(() => {
     if (activeStepId) markStepCompleted(activeStepId);
-    if (activeGroup === 'welcome') {
-      finishWelcome();
+    if (activeGroup === 'welcome' && welcomeActive) {
+      finishWelcome(availableStepIds);
       return;
     }
     dismissActiveGroup();
-  }, [activeGroup, activeStepId, dismissActiveGroup, finishWelcome, markStepCompleted]);
+  }, [
+    activeGroup,
+    activeStepId,
+    availableStepIds,
+    dismissActiveGroup,
+    finishWelcome,
+    markStepCompleted,
+    welcomeActive,
+  ]);
 
   const handleSkip = useCallback(() => {
-    if (activeGroup === 'welcome') {
-      skipWelcome();
+    if (activeGroup === 'welcome' && welcomeActive) {
+      skipWelcome(availableStepIds);
       return;
     }
     dismissActiveGroup();
-  }, [activeGroup, dismissActiveGroup, skipWelcome]);
+  }, [activeGroup, availableStepIds, dismissActiveGroup, skipWelcome, welcomeActive]);
 
   if (!mounted || !activeGroup || !activeStep) return null;
 

@@ -238,6 +238,7 @@ export function ProjectChatSurface({
   /** Blocks URL→loadChat while Back is clearing ?chat= (avoids bounce-back). */
   const suppressChatReloadRef = useRef(false);
   const hasAttemptedAutoRestoreRef = useRef(false);
+  const [restoreSettled, setRestoreSettled] = useState(!restoreLatestChatOnMount);
 
   const project = useProjectStore((s) => s.project);
   const projectMaterials = useProjectStore((s) => s.projectMaterials);
@@ -330,11 +331,26 @@ export function ProjectChatSurface({
   }, [currentChatId, initialChatId, initialTitle, loadChat, localMessages.length]);
 
   useEffect(() => {
-    if (!restoreLatestChatOnMount) return;
-    if (initialChatId) return;
-    if (showLanding) return;
-    if (currentChatId) return;
-    if (localMessages.length > 0) return;
+    if (!restoreLatestChatOnMount) {
+      setRestoreSettled(true);
+      return;
+    }
+    if (initialChatId) {
+      setRestoreSettled(true);
+      return;
+    }
+    if (showLanding) {
+      setRestoreSettled(true);
+      return;
+    }
+    if (currentChatId) {
+      setRestoreSettled(true);
+      return;
+    }
+    if (localMessages.length > 0) {
+      setRestoreSettled(true);
+      return;
+    }
     if (hasAttemptedAutoRestoreRef.current) return;
 
     hasAttemptedAutoRestoreRef.current = true;
@@ -347,6 +363,9 @@ export function ProjectChatSurface({
       })
       .catch(() => {
         // Keep default landing behavior if auto-restore fails.
+      })
+      .finally(() => {
+        setRestoreSettled(true);
       });
   }, [
     currentChatId,
@@ -832,6 +851,7 @@ export function ProjectChatSurface({
 
   // One-time auto-send for the description typed on /projects/new before this
   // project existed — fires exactly once for a brand-new, history-less thread.
+  // Wait for restore so we never double-start a thread that already exists.
   // Must wait for allowInitialProjectOnboarding: on first mount the parent often
   // still has project=null, so the flag is false until loadProject resolves. If we
   // send early the backend skips the upload-prompt short-circuit and answers like
@@ -840,6 +860,7 @@ export function ProjectChatSurface({
   useEffect(() => {
     if (!autoSendOnMount) return;
     if (autoSendHandledRef.current) return;
+    if (!restoreSettled) return;
     if (!allowInitialProjectOnboarding) return;
     if (loadingChat) return;
     if (initialChatId || currentChatId) return;
@@ -857,6 +878,7 @@ export function ProjectChatSurface({
     loadingChat,
     localMessages.length,
     onAutoSendOnMountHandled,
+    restoreSettled,
   ]);
 
   const handleEditMessage = useCallback(

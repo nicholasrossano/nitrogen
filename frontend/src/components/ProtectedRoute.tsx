@@ -3,11 +3,21 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
-import { useAuth } from '@/lib/auth';
-import { DEMO_SESSION_EVENT, isDemoActive, isDemoProjectPath } from '@/lib/demo/demoSession';
+import { needsEmailVerification, useAuth } from '@/lib/auth';
+import { DEMO_SESSION_EVENT, isDemoActive, isDemoProjectPath, isLeavingDemoForAuth } from '@/lib/demo/demoSession';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
+}
+
+function loginRedirect(pathname: string | null, mode?: 'verify'): string {
+  const params = new URLSearchParams();
+  if (mode) params.set('mode', mode);
+  if (pathname && pathname !== '/') {
+    params.set('returnUrl', pathname);
+  }
+  const query = params.toString();
+  return query ? `/login?${query}` : '/login';
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
@@ -17,6 +27,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   // Always start false so SSR and the hydration pass match (sessionStorage is client-only).
   const [demoActive, setDemoActive] = useState(false);
   const [demoChecked, setDemoChecked] = useState(false);
+  const mustVerify = needsEmailVerification(user);
 
   useEffect(() => {
     const sync = () => setDemoActive(isDemoActive());
@@ -35,17 +46,19 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     if (!user && !demoActive) {
       // Orphaned / shared demo project URLs must re-bootstrap via /demo —
       // never send visitors to login when they asked for the sample project.
-      if (isDemoProjectPath(pathname)) {
+      // Skip while Sign up is intentionally leaving demo for /login.
+      if (isDemoProjectPath(pathname) && !isLeavingDemoForAuth()) {
         router.replace('/demo');
         return;
       }
-      const returnUrl =
-        pathname && pathname !== '/'
-          ? `?returnUrl=${encodeURIComponent(pathname)}`
-          : '';
-      router.push(`/login${returnUrl}`);
+      router.push(loginRedirect(pathname));
+      return;
     }
-  }, [user, loading, router, pathname, demoActive, demoChecked]);
+    // Demo sessions skip email verification; real accounts must verify first.
+    if (user && mustVerify && !demoActive) {
+      router.replace(loginRedirect(pathname, 'verify'));
+    }
+  }, [user, loading, router, pathname, demoActive, demoChecked, mustVerify]);
 
   if (loading && !demoActive) {
     return (
@@ -65,6 +78,14 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       );
     }
     return null;
+  }
+
+  if (user && mustVerify && !demoActive) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-surface">
+        <Loader2 className="w-8 h-8 text-accent animate-spin" />
+      </div>
+    );
   }
 
   return <>{children}</>;

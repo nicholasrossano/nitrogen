@@ -16,7 +16,7 @@ describe('tourStore', () => {
     });
   });
 
-  it('starts and finishes the welcome tour', () => {
+  it('starts and finishes the welcome tour without burning invisible tips', () => {
     act(() => {
       useTourStore.getState().startWelcome('welcome-composer');
     });
@@ -24,12 +24,27 @@ describe('tourStore', () => {
     expect(useTourStore.getState().activeStepId).toBe('welcome-composer');
 
     act(() => {
-      useTourStore.getState().finishWelcome();
+      useTourStore.getState().finishWelcome(['welcome-composer', 'welcome-workspace']);
     });
     expect(useTourStore.getState().welcomeCompleted).toBe(true);
     expect(useTourStore.getState().welcomeActive).toBe(false);
+    expect(useTourStore.getState().completedStepIds).toEqual([
+      'welcome-composer',
+      'welcome-workspace',
+    ]);
+    expect(useTourStore.getState().completedStepIds).not.toContain('welcome-context-stack');
+  });
+
+  it('skip welcome only completes currently visible tips', () => {
+    act(() => {
+      useTourStore.getState().startWelcome('welcome-composer');
+      useTourStore.getState().skipWelcome(['welcome-composer']);
+    });
+    expect(useTourStore.getState().welcomeCompleted).toBe(true);
+    expect(useTourStore.getState().completedStepIds).toEqual(['welcome-composer']);
     for (const id of WELCOME_STEP_IDS) {
-      expect(useTourStore.getState().completedStepIds).toContain(id);
+      if (id === 'welcome-composer') continue;
+      expect(useTourStore.getState().completedStepIds).not.toContain(id);
     }
   });
 

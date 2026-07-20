@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
@@ -9,6 +10,7 @@ from app.models.subscription import Subscription
 from app.core.llm_client import check_usage_budget
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 _VALID_PAID_TIERS = frozenset({"individual", "starter", "pro"})
 
@@ -118,6 +120,29 @@ async def ensure_subscription(user_id: str, db: AsyncSession) -> Subscription:
         await db.flush()
         await db.refresh(sub)
     return sub
+
+
+async def cancel_active_subscription(user_id: str, db: AsyncSession) -> None:
+    """Best-effort immediate cancellation of any active Stripe subscription.
+
+    Called on account deletion so billing stops right away instead of
+    continuing to charge a card tied to a deleted account. Never raises —
+    a Stripe hiccup must not block the rest of account deletion.
+    """
+    result = await db.execute(select(Subscription).where(Subscription.user_id == user_id))
+    sub = result.scalar_one_or_none()
+    if not sub or not sub.stripe_subscription_id:
+        return
+    stripe.api_key = settings.stripe_secret_key
+    try:
+        stripe.Subscription.delete(sub.stripe_subscription_id)
+    except Exception:
+        logger.warning(
+            "Failed to cancel Stripe subscription %s for deleted user %s",
+            sub.stripe_subscription_id,
+            user_id,
+            exc_info=True,
+        )
 
 
 async def ensure_stripe_customer(user_id: str, email: str | None, db: AsyncSession) -> str:

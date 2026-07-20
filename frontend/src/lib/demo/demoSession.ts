@@ -4,12 +4,15 @@ export const DEMO_PROJECT_ID = 'demo-rift-valley-solar';
 export const DEMO_WORKSPACE_ID = 'demo-workspace';
 
 const DEMO_ACTIVE_KEY = 'nitrogen-demo-active';
+const LEAVING_DEMO_FOR_AUTH_KEY = 'nitrogen-leaving-demo-for-auth';
 export const DEMO_SESSION_EVENT = 'nitrogen:demo-session-change';
 
 /** Same-tab fallback when sessionStorage is unavailable or briefly out of sync. */
 let memoryDemoActive = false;
 /** Blocks leaveDemo while /demo (or View Demo) is still bootstrapping. */
 let demoEntryInProgress = false;
+/** Suppresses /demo re-bootstrap while navigating to login/signup. */
+let leavingDemoForAuth = false;
 
 function emitDemoSessionChange() {
   if (typeof window === 'undefined') return;
@@ -30,8 +33,40 @@ export function isDemoEntryInProgress(): boolean {
   return demoEntryInProgress;
 }
 
+export function isLeavingDemoForAuth(): boolean {
+  if (leavingDemoForAuth) return true;
+  if (typeof window === 'undefined') return false;
+  try {
+    return sessionStorage.getItem(LEAVING_DEMO_FOR_AUTH_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Call before clearing demo when heading to /login so orphaned-path guards stay quiet. */
+export function beginLeavingDemoForAuth(): void {
+  leavingDemoForAuth = true;
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.setItem(LEAVING_DEMO_FOR_AUTH_KEY, '1');
+  } catch {
+    // Memory flag is enough for this tab's React effects.
+  }
+}
+
+export function clearLeavingDemoForAuth(): void {
+  leavingDemoForAuth = false;
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.removeItem(LEAVING_DEMO_FOR_AUTH_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export function beginDemoEntry(): void {
   demoEntryInProgress = true;
+  clearLeavingDemoForAuth();
 }
 
 export function endDemoEntry(): void {
@@ -41,6 +76,7 @@ export function endDemoEntry(): void {
 export function enterDemo(): void {
   if (typeof window === 'undefined') return;
   memoryDemoActive = true;
+  clearLeavingDemoForAuth();
   try {
     sessionStorage.setItem(DEMO_ACTIVE_KEY, '1');
   } catch {

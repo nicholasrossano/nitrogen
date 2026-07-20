@@ -57,7 +57,7 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'welcome-context-stack',
     group: 'welcome',
     title: 'Project context',
-    body: 'Overview, Variables, Assessments, and Files remain available on the right so you can review them while you chat.',
+    body: "The project's home page has floating widgets on the right so you can access all the key information at a glance.",
     placement: 'left',
   },
   {

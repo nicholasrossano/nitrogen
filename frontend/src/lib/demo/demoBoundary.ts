@@ -4,13 +4,11 @@
  * direction must clear in-memory stores so the two never render mixed data.
  */
 
-import { useProjectStore } from '@/stores/projectStore';
-import { invalidateWorkspaceLoads, useWorkspaceStore } from '@/stores/workspaceStore';
-import { useBillingStore } from '@/stores/billingStore';
-import { clearSwrCache } from '@/lib/swrCache';
+import { resetClientStores } from '@/lib/sessionBoundary';
 import {
   DEMO_PROJECT_ID,
   beginDemoEntry,
+  beginLeavingDemoForAuth,
   endDemoEntry,
   enterDemo,
   exitDemo,
@@ -21,31 +19,7 @@ import {
 const LAST_PROJECT_KEY = 'nitrogen-last-project-id';
 
 export function resetClientStateForDemoBoundary(): void {
-  invalidateWorkspaceLoads();
-  clearSwrCache();
-  useProjectStore.getState().reset();
-  useProjectStore.setState({ projectsById: {} });
-  useWorkspaceStore.setState({
-    workspaces: [],
-    activeWorkspace: null,
-    activeWorkspaceDetail: null,
-    loading: false,
-    error: null,
-  });
-  useBillingStore.setState({
-    tier: null,
-    status: '',
-    usedUsd: 0,
-    limitUsd: 0,
-    usagePercent: 0,
-    trialMessagesRemaining: null,
-    accessCodeRedeemed: false,
-    accessCodeAvailable: false,
-    showPaywall: false,
-    paywallContext: null,
-    loading: false,
-    loaded: false,
-  });
+  resetClientStores();
   // Never leave a demo project id as the post-login landing preference.
   try {
     if (typeof window !== 'undefined' && localStorage.getItem(LAST_PROJECT_KEY) === DEMO_PROJECT_ID) {
@@ -101,4 +75,21 @@ export function leaveDemoSession(): void {
   }
   exitDemo();
   resetClientStateForDemoBoundary();
+}
+
+/**
+ * Leave demo and open signup.
+ *
+ * Clearing the demo flag while still on `/projects/demo-*` races ProtectedRoute
+ * / the project page, which otherwise re-bootstrap via `/demo`. Mark leaving
+ * first, then hard-navigate so soft client routing cannot win that race.
+ */
+export function leaveDemoForSignup(
+  navigate: (url: string) => void = (url) => {
+    window.location.assign(url);
+  },
+): void {
+  beginLeavingDemoForAuth();
+  leaveDemoSession();
+  navigate('/login?mode=signup');
 }

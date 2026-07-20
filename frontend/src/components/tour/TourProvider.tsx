@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { TourOverlay } from '@/components/tour/TourOverlay';
 import {
   getTourAnchorElement,
+  getTourAnchorRect,
   isTourAnchorRegistered,
   subscribeTourAnchors,
 } from '@/components/tour/tourRegistry';
@@ -16,19 +17,25 @@ import {
   WELCOME_STEP_IDS,
 } from '@/lib/tour/tourSteps';
 import { useTourStore } from '@/stores/tourStore';
+import { isDemoProjectPath } from '@/lib/demo/demoSession';
 
 const WELCOME_START_DELAY_MS = 900;
 const MIN_WELCOME_ANCHORS = 2;
 
+/** Welcome tips assume project chrome (composer, context stack) — not bare /chat. */
+function isProjectWorkbenchPath(pathname: string): boolean {
+  return /^\/projects\/[^/]+/.test(pathname) && !isDemoProjectPath(pathname);
+}
+
 function firstAvailableWelcomeStepId(): string | null {
   for (const id of WELCOME_STEP_IDS) {
-    if (isTourAnchorRegistered(id)) return id;
+    if (getTourAnchorRect(id)) return id;
   }
   return null;
 }
 
 function availableWelcomeCount(): number {
-  return WELCOME_STEP_IDS.filter((id) => isTourAnchorRegistered(id)).length;
+  return WELCOME_STEP_IDS.filter((id) => Boolean(getTourAnchorRect(id))).length;
 }
 
 function isFloorTourAnchor(id: string): boolean {
@@ -68,10 +75,12 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
 
   const startedWelcomeRef = useRef(false);
   const promptedFeatureGroupsRef = useRef<Set<TourGroup>>(new Set());
+  const promptedDeferredWelcomeRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!welcomeCompleted) {
       startedWelcomeRef.current = false;
+      promptedDeferredWelcomeRef.current = new Set();
     }
   }, [welcomeCompleted, replayNonce]);
 
@@ -79,13 +88,15 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     // Fresh replay should be allowed to re-prompt floor tips later in the session.
     if (replayNonce > 0) {
       promptedFeatureGroupsRef.current = new Set();
+      promptedDeferredWelcomeRef.current = new Set();
     }
   }, [replayNonce]);
 
-  // Auto-start welcome once enough anchors exist on the chat shell.
+  // Auto-start welcome after the first project workbench is ready.
+  // New users: /projects/new → first description creates the project → tour.
   useEffect(() => {
     if (welcomeCompleted || welcomeActive || startedWelcomeRef.current) return;
-    if (!(pathname.startsWith('/chat') || pathname === '/' || pathname.startsWith('/projects/'))) return;
+    if (!isProjectWorkbenchPath(pathname)) return;
     // Replay has its own starter — avoid racing with a half-open floor/sidebar state.
     if (replayNonce > 0) return;
 
@@ -96,6 +107,9 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
       if (cancelled || startedWelcomeRef.current) return;
       const state = useTourStore.getState();
       if (state.welcomeCompleted || state.welcomeActive) return;
+      // Composer only mounts on a real project surface — wait for it so we never
+      // tip over the empty /chat bootstrap loader.
+      if (!getTourAnchorRect('welcome-composer')) return;
       if (availableWelcomeCount() < MIN_WELCOME_ANCHORS) return;
       const firstId = firstAvailableWelcomeStepId();
       if (!firstId) return;
@@ -122,8 +136,10 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     if (replayNonce === 0) return;
     if (welcomeCompleted) return;
 
-    const onWorkbench = pathname.startsWith('/chat') || pathname === '/' || pathname.startsWith('/projects/');
+    const onWorkbench = isProjectWorkbenchPath(pathname);
     if (!onWorkbench) {
+      // Resolve via /chat so an empty Personal workspace still auto-creates
+      // a first project before welcome tips run.
       router.push('/chat');
       return;
     }
@@ -138,6 +154,10 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
       if (cancelled) return;
       if (useTourStore.getState().welcomeActive) return;
       attempts += 1;
+      if (!getTourAnchorRect('welcome-composer') && attempts < 20) {
+        window.setTimeout(tryStart, 150);
+        return;
+      }
       if (availableWelcomeCount() < MIN_WELCOME_ANCHORS && attempts < 20) {
         window.setTimeout(tryStart, 150);
         return;
@@ -169,6 +189,8 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   // First-visit feature tips — only after welcome is done.
   // Mount-triggered tips fire when a floor panel header registers (including
   // mini-stack expands that now also set ?panel=). Route-triggered tips still use pathname/search.
+  // Deferred welcome tips (e.g. context mini floats hidden during onboarding) fire
+  // the first time their anchor becomes visible on screen.
   useEffect(() => {
     if (welcomeActive || !welcomeCompleted) return;
     if (activeGroup) return;
@@ -179,6 +201,16 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     const tryStart = () => {
       if (cancelled || useTourStore.getState().activeGroup) return;
       const completed = useTourStore.getState().completedStepIds;
+
+      // 0) Welcome tips that were not visible during the first tour (mini floats, etc.).
+      for (const id of WELCOME_STEP_IDS) {
+        if (completed.includes(id)) continue;
+        if (promptedDeferredWelcomeRef.current.has(id)) continue;
+        if (!getTourAnchorRect(id)) continue;
+        promptedDeferredWelcomeRef.current.add(id);
+        startFeatureGroup('welcome', id);
+        return;
+      }
 
       // 1) Expanded floors (Overview / Variables / Assessments / Files) — tip when the
       //    floor header mounts. Require surface=floor so sidebar nav wrappers with the

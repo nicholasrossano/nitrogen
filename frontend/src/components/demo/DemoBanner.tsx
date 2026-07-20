@@ -1,21 +1,18 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useDemoMode } from '@/hooks/useDemoMode';
-import { leaveDemoSession } from '@/lib/demo/demoBoundary';
+import { leaveDemoForSignup } from '@/lib/demo/demoBoundary';
 
 /**
  * Fixed floating disclaimer for demo mode — bottom-right over the workbench.
  */
 export function DemoBanner() {
   const { isDemo } = useDemoMode();
-  const router = useRouter();
 
   if (!isDemo) return null;
 
   const goToSignup = () => {
-    leaveDemoSession();
-    router.push('/login?mode=signup');
+    leaveDemoForSignup();
   };
 
   return (

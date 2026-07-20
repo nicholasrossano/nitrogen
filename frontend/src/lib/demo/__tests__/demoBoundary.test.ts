@@ -6,8 +6,10 @@ import {
   isDemoActive,
   isDemoEntryInProgress,
   isDemoProjectPath,
+  isLeavingDemoForAuth,
 } from '@/lib/demo/demoSession';
 import {
+  leaveDemoForSignup,
   leaveDemoSession,
   resetClientStateForDemoBoundary,
   startDemoSession,
@@ -25,6 +27,17 @@ describe('demoBoundary', () => {
   afterEach(() => {
     exitDemo();
     endDemoEntry();
+  });
+
+  it('leaveDemoForSignup marks leaving, clears demo, and navigates to signup', () => {
+    enterDemo();
+    const navigate = jest.fn();
+
+    leaveDemoForSignup(navigate);
+
+    expect(isLeavingDemoForAuth()).toBe(true);
+    expect(isDemoActive()).toBe(false);
+    expect(navigate).toHaveBeenCalledWith('/login?mode=signup');
   });
 
   it('startDemoSession sets the demo flag before awaiting sign-out', async () => {

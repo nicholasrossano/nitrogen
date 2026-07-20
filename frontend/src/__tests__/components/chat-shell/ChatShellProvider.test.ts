@@ -40,4 +40,14 @@ describe('resolveActiveProjectId', () => {
       resolveActiveProjectId('/projects/demo-rift-valley-solar', null, projects),
     ).toBe('proj-a');
   });
+
+  it('does not resurrect a stale last-project when the workspace has no projects', () => {
+    writeLastProjectId('ghost-from-other-account');
+    expect(resolveActiveProjectId('/chat', null, [])).toBeNull();
+  });
+
+  it('ignores orphan ?project= params when the workspace project list is empty', () => {
+    writeLastProjectId('ghost-from-other-account');
+    expect(resolveActiveProjectId('/chat', 'ghost-from-other-account', [])).toBeNull();
+  });
 });

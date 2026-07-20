@@ -17,7 +17,10 @@ import { buildDemoProjectPath, isDemoActive } from '@/lib/demo/demoSession';
 
 /**
  * Personal (no-project) chat only. Project work lives on `/projects/[id]`.
- * Resolves a project when possible and navigates there so entry points stay unchanged.
+ *
+ * New-user path: empty workspace → `/projects/new` (three-step onboarding header
+ * + describe composer). First send creates the project and seeds the existing
+ * upload → assessments script via `?seed=`.
  */
 function ChatLandingContent() {
   const router = useRouter();
@@ -65,8 +68,6 @@ function ChatLandingContent() {
     if (isDemoActive()) return;
     if (!projectsLoaded || !activeWorkspace?.id) return;
 
-    let cancelled = false;
-
     const goToProject = (projectId: string) => {
       writeLastProjectId(projectId);
       router.replace(buildProjectWorkbenchPath(projectId, {
@@ -82,29 +83,18 @@ function ChatLandingContent() {
       return;
     }
 
+    // No projects yet — send them through the real onboarding route instead of
+    // auto-creating an empty workbench that skips the describe step.
     if (projects.length === 0) {
-      void api.createProject('New Project', activeWorkspace.id)
-        .then((project) => {
-          if (cancelled) return;
-          setProjects([project]);
-          chatShell?.refreshDrawer();
-          goToProject(project.id);
-        })
-        .catch(() => {
-          if (!cancelled) setResolving(false);
-        });
-      return () => {
-        cancelled = true;
-      };
+      router.replace('/projects/new');
+      return;
     }
 
     setResolving(false);
-    return undefined;
   }, [
     activeChatId,
     activeWorkspace?.id,
     assessmentParam,
-    chatShell,
     legacyProjectParam,
     panelParam,
     projects,

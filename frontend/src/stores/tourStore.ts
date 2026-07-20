@@ -17,8 +17,13 @@ interface TourState {
   markStepCompleted: (stepId: string) => void;
   setActiveStep: (stepId: string | null) => void;
   startWelcome: (firstStepId: string) => void;
-  skipWelcome: () => void;
-  finishWelcome: () => void;
+  /**
+   * End the welcome tour. Only mark `visibleStepIds` complete so tips for
+   * widgets that were not on screen (e.g. mini context floats) can still fire
+   * later when those anchors mount.
+   */
+  skipWelcome: (visibleStepIds?: string[]) => void;
+  finishWelcome: (visibleStepIds?: string[]) => void;
   replayWelcome: () => void;
   startFeatureGroup: (group: TourGroup, firstStepId: string) => void;
   dismissActiveGroup: () => void;
@@ -27,6 +32,20 @@ interface TourState {
 function withCompleted(ids: string[], stepId: string): string[] {
   if (ids.includes(stepId)) return ids;
   return [...ids, stepId];
+}
+
+function endWelcomeTour(visibleStepIds: string[] | undefined, get: () => TourState) {
+  const completed = new Set(get().completedStepIds);
+  for (const id of visibleStepIds ?? []) {
+    if (WELCOME_STEP_IDS.includes(id)) completed.add(id);
+  }
+  return {
+    completedStepIds: Array.from(completed),
+    welcomeCompleted: true,
+    welcomeActive: false,
+    activeGroup: null as TourGroup | null,
+    activeStepId: null as string | null,
+  };
 }
 
 export const useTourStore = create<TourState>()(
@@ -56,28 +75,12 @@ export const useTourStore = create<TourState>()(
         });
       },
 
-      skipWelcome: () => {
-        const completed = new Set(get().completedStepIds);
-        for (const id of WELCOME_STEP_IDS) completed.add(id);
-        set({
-          completedStepIds: Array.from(completed),
-          welcomeCompleted: true,
-          welcomeActive: false,
-          activeGroup: null,
-          activeStepId: null,
-        });
+      skipWelcome: (visibleStepIds) => {
+        set(endWelcomeTour(visibleStepIds, get));
       },
 
-      finishWelcome: () => {
-        const completed = new Set(get().completedStepIds);
-        for (const id of WELCOME_STEP_IDS) completed.add(id);
-        set({
-          completedStepIds: Array.from(completed),
-          welcomeCompleted: true,
-          welcomeActive: false,
-          activeGroup: null,
-          activeStepId: null,
-        });
+      finishWelcome: (visibleStepIds) => {
+        set(endWelcomeTour(visibleStepIds, get));
       },
 
       replayWelcome: () => {
@@ -101,17 +104,17 @@ export const useTourStore = create<TourState>()(
       },
 
       dismissActiveGroup: () => {
-        const { activeGroup, activeStepId, completedStepIds } = get();
+        const { activeGroup, activeStepId, completedStepIds, welcomeCompleted, welcomeActive } = get();
         if (!activeGroup) return;
         let nextCompleted = completedStepIds;
         if (activeStepId) {
           nextCompleted = withCompleted(completedStepIds, activeStepId);
         }
-        if (activeGroup === 'welcome') {
-          const completed = new Set(nextCompleted);
-          for (const id of WELCOME_STEP_IDS) completed.add(id);
+        if (activeGroup === 'welcome' && welcomeActive && !welcomeCompleted) {
+          // First-run welcome dismissed via overlay without going through
+          // finish/skip — only burn the active tip, leave deferred ones open.
           set({
-            completedStepIds: Array.from(completed),
+            completedStepIds: nextCompleted,
             welcomeCompleted: true,
             welcomeActive: false,
             activeGroup: null,

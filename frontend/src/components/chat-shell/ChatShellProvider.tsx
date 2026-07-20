@@ -48,13 +48,15 @@ export function resolveActiveProjectId(
   const fromRoute = initiativeMatch?.[1] ?? projectParam;
   if (fromRoute === DEMO_PROJECT_ID && !isDemoActive()) {
     // Orphaned demo URL after leaving demo — fall through to a real project.
-  } else if (fromRoute && (projects.length === 0 || projects.some((project) => project.id === fromRoute))) {
+  } else if (fromRoute && projects.some((project) => project.id === fromRoute)) {
     return fromRoute;
   }
   if (projects.length > 0) {
     return resolveDefaultProjectId(projects, fromRoute === DEMO_PROJECT_ID ? null : fromRoute, readLastProjectId());
   }
-  return fromRoute === DEMO_PROJECT_ID ? readLastProjectId() : (fromRoute ?? readLastProjectId());
+  // Empty workspace: never resurrect a cross-account last-project preference
+  // (that blocks auto-create of the first project and floods 404s).
+  return null;
 }
 
 /** @deprecated Prefer buildProjectWorkbenchPath — kept for Settings delete flows on /chat. */

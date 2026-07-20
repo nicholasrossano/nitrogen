@@ -16,6 +16,8 @@ import type {
 export const sharingApi = {
   searchUsers: (q: string): Promise<UserSearchResult[]> =>
     fetchApi<UserSearchResult[]>(`/api/v1/users/search?q=${encodeURIComponent(q)}`),
+  deleteAccount: (): Promise<void> =>
+    fetchApi<void>('/api/v1/users/me', { method: 'DELETE' }),
   getShares: (projectId: string): Promise<ProjectShare[]> =>
     fetchApi<ProjectShare[]>(`/api/v1/projects/${projectId}/shares`),
   createShare: (projectId: string, email: string, role: 'editor' | 'viewer'): Promise<ProjectShare> =>
