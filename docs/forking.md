@@ -1,6 +1,6 @@
 # Forking and staying current with upstream
 
-Nitrogen is designed to be forked and self-hosted. Your durable value — uploaded materials, workspace knowledge, and custom assessments — should survive upstream upgrades. This guide covers the git workflow that makes that practical.
+Nitrogen AI is designed to be forked and self-hosted. Your durable value — uploaded materials, workspace knowledge, and custom assessments — should survive upstream upgrades. This guide covers the git workflow that makes that practical.
 
 For how to run a fork, see [self-hosting](self-hosting.md). For writing assessments, see [assessments/authoring-guide.md](assessments/authoring-guide.md). For naming your fork, see [TRADEMARKS.md](../TRADEMARKS.md).
 
@@ -28,7 +28,7 @@ Confirm remotes:
 ```bash
 git remote -v
 # origin    → your fork
-# upstream  → Nitrogen canonical repo
+# upstream  → Nitrogen AI canonical repo
 ```
 
 ## Pulling upstream updates
@@ -89,4 +89,4 @@ Private expertise can stay on your fork forever; rebase still works as long as y
 
 ## License reminder
 
-Code remains AGPLv3. Forks and self-hosting are welcome; the Nitrogen **name** is reserved — rename your product if it is a separate offering ([TRADEMARKS.md](../TRADEMARKS.md)). Commercial terms outside AGPL are optional ([COMMERCIAL_LICENSE.md](../COMMERCIAL_LICENSE.md)).
+Code remains AGPLv3. Forks and self-hosting are welcome; the Nitrogen AI **name** is reserved — rename your product if it is a separate offering ([TRADEMARKS.md](../TRADEMARKS.md)). Commercial terms outside AGPL are optional ([COMMERCIAL_LICENSE.md](../COMMERCIAL_LICENSE.md)).
