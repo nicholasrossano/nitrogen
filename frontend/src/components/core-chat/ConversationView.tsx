@@ -4,6 +4,8 @@ import { Fragment, useRef, useEffect, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+
+import { preprocessMath } from '@/lib/chatMarkdown';
 import {
   ArrowUp,
   BookOpen,
@@ -75,28 +77,6 @@ export interface ConversationViewProps {
   historyLoading?: boolean;
   /** Keep send disabled even when the field has text (e.g. demo mode) */
   sendDisabled?: boolean;
-}
-
-function preprocessMath(content: string): string {
-  // KaTeX-friendly: normalize \[ \] / \( \), strip stray LaTeX outside $...$ segments.
-  let result = content
-    .replace(/\\\[([\s\S]*?)\\\]/g, (_: string, math: string) => `$$${math}$$`)
-    .replace(/\\\(([\s\S]*?)\\\)/g, (_: string, math: string) => `$${math}$`);
-
-  const segments = result.split(/(\$\$[\s\S]*?\$\$|\$[^$\n]*?\$)/);
-  return segments.map((seg, i) => {
-    if (i % 2 === 1) return seg; // inside delimiters — leave KaTeX alone
-    return seg
-      .replace(/\\text\{([^}]*)\}/g, '$1')                   // \text{X}  → X
-      .replace(/\\mathrm\{([^}]*)\}/g, '$1')                 // \mathrm{X} → X
-      .replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '$1/$2')     // \frac{a}{b} → a/b
-      .replace(/\\times/g, '×')
-      .replace(/\\cdot/g, '·')
-      .replace(/\\,/g, '\u202f')   // thin space
-      .replace(/\\!/g, '')
-      .replace(/\\quad/g, '  ')
-      .replace(/\\:/g, ' ');
-  }).join('');
 }
 
 export function ConversationView({

@@ -702,7 +702,7 @@ export const demoChatMessages: Record<string, ChatMessage[]> = {
       id: 'demo-msg-lcoe-a1',
       role: 'assistant',
       content:
-        'At the current 22% capacity factor, 8% WACC, and $18/kW-yr O&M, raising all-in CAPEX from **$1,100/kW to $1,200/kW** lifts LCOE from about **$0.054/kWh to ~$0.058/kWh** — roughly a **7–8%** increase.\n\nThat still clears the indicative **$0.072/kWh** PPA tariff with headroom, but the equity IRR compresses. I can propose updating the CAPEX variable if you want to run the model at $1,200.',
+        'At the current 22% capacity factor, 8% WACC, and $18/kW-yr O&M, raising all-in CAPEX from **$1,100/kW to $1,200/kW** lifts LCOE from about **$0.054/kWh to ~$0.058/kWh**, roughly a **7-8%** increase.\n\nThat still clears the indicative **$0.072/kWh** PPA tariff with headroom, but the equity IRR compresses. I can propose updating the CAPEX variable if you want to run the model at $1,200.',
       widget_type: 'proposed_value',
       widget_data: {
         field_name: 'capex_per_kw',
@@ -724,7 +724,7 @@ export const demoChatMessages: Record<string, ChatMessage[]> = {
     {
       id: 'demo-msg-lcoe-u2',
       role: 'user',
-      content: 'Keep base case at 1100 for now — note the stress case for IC.',
+      content: 'Keep base case at 1100 for now; note the stress case for IC.',
       widget_type: null,
       widget_data: null,
       created_at: '2026-06-04T11:40:00.000Z',
