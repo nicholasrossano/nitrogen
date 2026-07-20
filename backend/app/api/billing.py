@@ -47,6 +47,7 @@ async def billing_catalog():
         ensure_price_fresh,
         get_subscription_price_usd,
         get_subscription_usage_limit_usd,
+        is_key_invalid,
     )
 
     await ensure_price_fresh(settings)
@@ -56,6 +57,10 @@ async def billing_catalog():
         "subscription_usage_limit_usd": get_subscription_usage_limit_usd(settings),
         "usage_budget_buffer_pct": settings.usage_budget_buffer_pct,
         "stripe_price_id": settings.stripe_price_id or None,
+        # False once Stripe has explicitly rejected STRIPE_SECRET_KEY — lets the
+        # frontend disable Subscribe with an accurate message instead of a
+        # generic error after a failed checkout round-trip.
+        "stripe_key_valid": not is_key_invalid(),
     }
 
 
@@ -106,14 +111,27 @@ async def checkout(
         raise HTTPException(status_code=503, detail="Subscription price is not configured")
     success_url = validate_billing_redirect_url(body.success_url)
     cancel_url = validate_billing_redirect_url(body.cancel_url)
-    url = await create_checkout_session(
-        user_id=user.uid,
-        email=user.email,
-        price_id=price_id,
-        db=db,
-        success_url=success_url,
-        cancel_url=cancel_url,
-    )
+    try:
+        url = await create_checkout_session(
+            user_id=user.uid,
+            email=user.email,
+            price_id=price_id,
+            db=db,
+            success_url=success_url,
+            cancel_url=cancel_url,
+        )
+    except stripe.AuthenticationError:
+        logger.error("Checkout failed: STRIPE_SECRET_KEY was rejected by Stripe (401)")
+        raise HTTPException(
+            status_code=503,
+            detail="Stripe is misconfigured on this deployment (invalid API key). Contact support.",
+        )
+    except stripe.InvalidRequestError as e:
+        logger.error("Checkout failed: Stripe rejected the request: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail="Stripe is misconfigured on this deployment (invalid price). Contact support.",
+        )
     await db.commit()
     return {"url": url}
 
@@ -135,6 +153,12 @@ async def portal(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except stripe.AuthenticationError:
+        logger.error("Portal session failed: STRIPE_SECRET_KEY was rejected by Stripe (401)")
+        raise HTTPException(
+            status_code=503,
+            detail="Stripe is misconfigured on this deployment (invalid API key). Contact support.",
+        )
     await db.commit()
     return {"url": url}
 

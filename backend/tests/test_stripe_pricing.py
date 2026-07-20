@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import stripe
 
 from app.core import stripe_pricing as sp
 
@@ -92,3 +93,50 @@ async def test_ensure_price_fresh_never_raises(monkeypatch):
     settings = _settings()
 
     await sp.ensure_price_fresh(settings)  # should not raise
+
+
+@pytest.mark.asyncio
+async def test_refresh_flags_invalid_key_on_auth_error(monkeypatch):
+    """A bad/placeholder STRIPE_SECRET_KEY must be distinguishable from a
+    transient network failure so the catalog endpoint can warn accurately."""
+    monkeypatch.setattr(
+        sp.stripe.Price,
+        "retrieve_async",
+        AsyncMock(side_effect=stripe.AuthenticationError("Invalid API Key provided")),
+    )
+    settings = _settings()
+
+    assert sp.is_key_invalid() is False
+    ok = await sp.refresh_stripe_price(force=True, settings=settings)
+    assert ok is False
+    assert sp.is_key_invalid() is True
+
+
+@pytest.mark.asyncio
+async def test_refresh_does_not_flag_invalid_key_on_generic_failure(monkeypatch):
+    monkeypatch.setattr(
+        sp.stripe.Price, "retrieve_async", AsyncMock(side_effect=RuntimeError("network down"))
+    )
+    settings = _settings()
+
+    await sp.refresh_stripe_price(force=True, settings=settings)
+    assert sp.is_key_invalid() is False
+
+
+@pytest.mark.asyncio
+async def test_refresh_clears_invalid_key_flag_on_recovery(monkeypatch):
+    monkeypatch.setattr(
+        sp.stripe.Price,
+        "retrieve_async",
+        AsyncMock(side_effect=stripe.AuthenticationError("Invalid API Key provided")),
+    )
+    settings = _settings()
+    await sp.refresh_stripe_price(force=True, settings=settings)
+    assert sp.is_key_invalid() is True
+
+    monkeypatch.setattr(
+        sp.stripe.Price, "retrieve_async", AsyncMock(return_value={"unit_amount": 2000})
+    )
+    ok = await sp.refresh_stripe_price(force=True, settings=settings)
+    assert ok is True
+    assert sp.is_key_invalid() is False

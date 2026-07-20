@@ -33,6 +33,15 @@ Cloud agent VMs are fresh every session. They cannot read your local `.env` or y
 
 ### One-time setup in Cursor → Cloud Agents → Secrets
 
+> ⚠ **Scope every secret to this repo only — never "All Repositories".**
+> If your Cursor account also has other projects (each with their own
+> Stripe/Vercel/DB credentials under the same variable names), an
+> "All Repositories" scope injects *this* repo's values into *their* cloud
+> agent sessions too, and vice versa — e.g. a checkout session or webhook
+> created against the wrong Stripe account. Reusing the same variable name
+> (`STRIPE_SECRET_KEY`, etc.) across repos is fine; reusing "All
+> Repositories" scope across repos with different credentials is not.
+
 **Option A — Vercel pull (recommended if frontend is on Vercel)**
 
 Add three secrets:

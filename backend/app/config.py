@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from pydantic import field_validator, model_validator, computed_field
+from pydantic import AliasChoices, Field, field_validator, model_validator, computed_field
 from functools import lru_cache
 import json
 from typing import Self
@@ -13,7 +13,13 @@ class Settings(BaseSettings):
     database_url: str
     
     # OpenAI - Model separation for cost/capability optimization
-    openai_api_key: str = ""
+    # Shared infra (Railway/Cursor) scopes credentials per-repo with a
+    # _NITROGEN suffix to avoid colliding with other projects on the same
+    # team/account — see scripts/cursor_secrets_manifest.txt. The suffixed
+    # name takes precedence when both are present.
+    openai_api_key: str = Field(
+        default="", validation_alias=AliasChoices("OPENAI_API_KEY_NITROGEN", "OPENAI_API_KEY")
+    )
     # Orchestration model: Used for deciding actions, understanding intent (smart, fast)
     openai_orchestration_model: str = "gpt-4o"
     # Generation model: Used for content creation, memos, checklists (cheaper for bulk)
@@ -89,10 +95,21 @@ class Settings(BaseSettings):
     google_redirect_uri: str = "http://localhost:8000/api/v1/google/callback"
     frontend_url: str = "http://localhost:3000"
 
-    # Stripe billing
-    stripe_secret_key: str = ""
-    stripe_webhook_secret: str = ""
-    stripe_price_id: str = ""
+    # Stripe billing — same repo-scoped _NITROGEN convention as openai_api_key
+    # above. Prefer the suffixed name; fall back to the plain name for local
+    # .env / self-hosted deployments that don't need the suffix at all.
+    stripe_secret_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("STRIPE_SECRET_KEY_NITROGEN", "STRIPE_SECRET_KEY"),
+    )
+    stripe_webhook_secret: str = Field(
+        default="",
+        validation_alias=AliasChoices("STRIPE_WEBHOOK_SECRET_NITROGEN", "STRIPE_WEBHOOK_SECRET"),
+    )
+    stripe_price_id: str = Field(
+        default="",
+        validation_alias=AliasChoices("STRIPE_PRICE_ID_NITROGEN", "STRIPE_PRICE_ID"),
+    )
     # Deprecated — kept for existing Stripe price / subscription rows
     stripe_starter_price_id: str = ""
     stripe_pro_price_id: str = ""
@@ -156,6 +173,9 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         extra = "ignore"
+        # Let direct keyword construction (tests, etc.) still use the plain
+        # field name even for fields with a validation_alias.
+        populate_by_name = True
 
 
 @lru_cache()

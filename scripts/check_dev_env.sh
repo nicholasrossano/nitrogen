@@ -56,4 +56,14 @@ fi
 
 echo "✓ Auth mode: Firebase"
 echo "✓ DATABASE_URL set"
+
+# Best-effort live-key check (non-blocking, never fails this script) — reuses
+# scripts/check_secrets.sh so there's one place that knows how to validate
+# OpenAI/OpenRouter/Stripe keys, rather than duplicating curl calls here.
+# Catches a placeholder/stale STRIPE_SECRET_KEY at `dev_daemon.sh start` time
+# instead of only when a user clicks Subscribe in the browser.
+if [[ -x "$ROOT/scripts/check_secrets.sh" ]]; then
+  bash "$ROOT/scripts/check_secrets.sh" || true
+fi
+
 echo "✓ Dev environment OK"
