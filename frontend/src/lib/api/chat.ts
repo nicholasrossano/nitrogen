@@ -14,6 +14,7 @@ import type {
 
 import { debugChatFlow } from '@/lib/chatDebug';
 import { isStoredFeatureFlagEnabled } from '@/lib/featureFlags';
+import { streamDemoPlaceholderReply } from '@/lib/demo/demoPlaceholderReply';
 import { isDemoActive } from '@/lib/demo/demoSession';
 
 
@@ -123,7 +124,12 @@ export const chatApi = {
     activeEditorContext?: ActiveEditorContext | null,
   ) => {
     if (isDemoActive()) {
-      onError('Live AI chat is disabled in the demo. Sign up to continue the conversation.');
+      await streamDemoPlaceholderReply({
+        chatId: chat_id,
+        onThinking,
+        onWord,
+        onComplete,
+      });
       return;
     }
 

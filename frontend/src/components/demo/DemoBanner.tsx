@@ -35,7 +35,7 @@ export function DemoBanner() {
             </p>
           </div>
           <p className="mt-0.5 text-xs text-text-secondary">
-            Browse the workspace and open past chats. Creating projects, uploading files, running assessments, and live AI chat are turned off.
+            Browse the workspace, open past chats, and try sending a message for a short feature overview. Creating projects, uploading files, running assessments, and live AI are turned off.
           </p>
         </div>
         <button

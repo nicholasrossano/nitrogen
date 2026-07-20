@@ -753,7 +753,6 @@ export function ProjectChatSurface({
       modelInputsContext?: string | null,
       variableIdOverride?: string | null,
     ) => {
-      if (isDemo) return;
       onBeforeSendMessage?.();
       onMessageSent?.();
 
@@ -823,7 +822,6 @@ export function ProjectChatSurface({
       activeAssessmentContext,
       activeEditorContext,
       focusedVariableId,
-      isDemo,
       localMessages,
       onBeforeSendMessage,
       onMessageSent,
@@ -1171,7 +1169,6 @@ export function ProjectChatSurface({
           onSend={onLandingSend ?? handleSend}
           onUploadFile={isDemo ? undefined : handleUploadFile}
           disabled={sending}
-          sendDisabled={isDemo}
           sessions={sessions}
           onLoadSession={handleLoadSession}
           onDeleteSession={isDemo ? undefined : onDeleteChat}
@@ -1272,7 +1269,6 @@ export function ProjectChatSurface({
           onApplyProposedValue={isDemo ? undefined : handleApplyProposedValue}
           showAttachments={!isDemo && !allowInitialProjectOnboarding}
           historyLoading={loadingChat}
-          sendDisabled={isDemo}
           pendingDraft={pendingAutoSend}
           onPendingDraftHandled={onPendingAutoSendHandled}
         />
