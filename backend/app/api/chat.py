@@ -263,6 +263,18 @@ def _to_title_case(text: str) -> str:
     return " ".join(formatted)
 
 
+# Placeholder name given to every new project at creation time (see
+# POST /projects). Projects api.py always sets a truthy `name`, so treat this
+# specific default as "unset" too — otherwise the create-time placeholder
+# permanently blocks the onboarding auto-rename below.
+_DEFAULT_PROJECT_TITLE = "new project"
+
+
+def _has_placeholder_title(initiative: Project) -> bool:
+    title = (initiative.title or "").strip().lower()
+    return not title or title == _DEFAULT_PROJECT_TITLE
+
+
 async def _update_initiative_from_inputs(
     db: AsyncSession,
     initiative: Project,
@@ -274,7 +286,7 @@ async def _update_initiative_from_inputs(
 
     updated = False
 
-    if extracted.get("project_title") and not initiative.title:
+    if extracted.get("project_title") and _has_placeholder_title(initiative):
         initiative.title = _to_title_case(extracted["project_title"])
         updated = True
 
@@ -885,7 +897,7 @@ async def chat_stream(
                         and (
                             not verified_initiative.project_type
                             or not verified_initiative.geography
-                            or not verified_initiative.title
+                            or _has_placeholder_title(verified_initiative)
                         )
                     )
                     if should_extract:
