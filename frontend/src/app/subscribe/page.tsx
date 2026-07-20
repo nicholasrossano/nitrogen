@@ -6,6 +6,7 @@ import { Check, ArrowLeft, Loader2, CreditCard } from 'lucide-react';
 import { useBillingStore } from '@/stores/billingStore';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { BillingOptionsPanel } from '@/components/ui/BillingOptionsPanel';
+import { api } from '@/lib/api';
 
 function SubscribeContent() {
   const router = useRouter();
@@ -17,18 +18,33 @@ function SubscribeContent() {
 
   const success = searchParams.get('success') === 'true';
   const canceled = searchParams.get('canceled') === 'true';
+  const sessionId = searchParams.get('session_id');
 
   useEffect(() => {
     fetchBillingStatus();
   }, [fetchBillingStatus]);
 
   useEffect(() => {
-    if (success) {
-      fetchBillingStatus();
-      const timer = setTimeout(() => router.push('/'), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [success, router, fetchBillingStatus]);
+    if (!success) return;
+    let cancelled = false;
+    (async () => {
+      if (sessionId) {
+        try {
+          await api.confirmCheckout(sessionId);
+        } catch {
+          // Webhook or status reconcile may still catch up.
+        }
+      }
+      if (!cancelled) {
+        await fetchBillingStatus();
+      }
+    })();
+    const timer = setTimeout(() => router.push('/'), 2000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [success, sessionId, router, fetchBillingStatus]);
 
   if (success) {
     return (

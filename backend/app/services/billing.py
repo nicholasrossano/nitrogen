@@ -1,3 +1,6 @@
+from datetime import datetime, timezone
+from typing import Any
+
 import stripe
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,17 +10,102 @@ from app.core.llm_client import check_usage_budget
 
 settings = get_settings()
 
+_VALID_PAID_TIERS = frozenset({"individual", "starter", "pro"})
 
-def _tier_from_stripe_price(price_id: str | None) -> str | None:
-    if not price_id:
-        return None
-    if price_id == settings.stripe_price_id:
-        return "individual"
-    if price_id == settings.stripe_starter_price_id:
-        return "starter"
-    if price_id == settings.stripe_pro_price_id:
-        return "pro"
+
+def _tier_from_stripe_price(price_id: str | None, price_obj: Any | None = None) -> str | None:
+    if price_id:
+        if price_id == settings.stripe_price_id:
+            return "individual"
+        if price_id == settings.stripe_starter_price_id:
+            return "starter"
+        if price_id == settings.stripe_pro_price_id:
+            return "pro"
+    # Stripe Price metadata is the durable source when env price IDs drift.
+    if price_obj is not None:
+        meta = getattr(price_obj, "metadata", None) or {}
+        if isinstance(price_obj, dict):
+            meta = price_obj.get("metadata") or {}
+        tier = meta.get("app_tier") if isinstance(meta, dict) else None
+        if tier in _VALID_PAID_TIERS:
+            return tier
     return None
+
+
+def _first_subscription_item(stripe_sub: Any) -> Any | None:
+    items = stripe_sub.get("items") if isinstance(stripe_sub, dict) else getattr(stripe_sub, "items", None)
+    if not items:
+        return None
+    data = items.get("data") if isinstance(items, dict) else getattr(items, "data", None)
+    if not data:
+        return None
+    return data[0]
+
+
+def _subscription_period_bounds(stripe_sub: Any) -> tuple[datetime | None, datetime | None]:
+    """Stripe API 2025+ stores period bounds on the item, not the subscription root."""
+    start_ts = None
+    end_ts = None
+    if isinstance(stripe_sub, dict):
+        start_ts = stripe_sub.get("current_period_start")
+        end_ts = stripe_sub.get("current_period_end")
+    else:
+        start_ts = getattr(stripe_sub, "current_period_start", None)
+        end_ts = getattr(stripe_sub, "current_period_end", None)
+
+    item = _first_subscription_item(stripe_sub)
+    if item is not None:
+        if start_ts is None:
+            start_ts = item.get("current_period_start") if isinstance(item, dict) else getattr(item, "current_period_start", None)
+        if end_ts is None:
+            end_ts = item.get("current_period_end") if isinstance(item, dict) else getattr(item, "current_period_end", None)
+
+    start = datetime.fromtimestamp(start_ts, tz=timezone.utc) if start_ts else None
+    end = datetime.fromtimestamp(end_ts, tz=timezone.utc) if end_ts else None
+    return start, end
+
+
+def _price_from_subscription(stripe_sub: Any) -> tuple[str | None, Any | None]:
+    item = _first_subscription_item(stripe_sub)
+    if item is None:
+        return None, None
+    price = item.get("price") if isinstance(item, dict) else getattr(item, "price", None)
+    if price is None:
+        return None, None
+    price_id = price.get("id") if isinstance(price, dict) else getattr(price, "id", None)
+    return price_id, price
+
+
+def _apply_stripe_subscription(sub: Subscription, stripe_sub: Any) -> None:
+    """Copy Stripe subscription fields onto our Subscription row."""
+    sub_id = stripe_sub.get("id") if isinstance(stripe_sub, dict) else getattr(stripe_sub, "id", None)
+    if sub_id:
+        sub.stripe_subscription_id = sub_id
+
+    price_id, price_obj = _price_from_subscription(stripe_sub)
+    mapped_tier = _tier_from_stripe_price(price_id, price_obj)
+    if mapped_tier:
+        sub.tier = mapped_tier
+
+    raw_status = (
+        stripe_sub.get("status", "active")
+        if isinstance(stripe_sub, dict)
+        else getattr(stripe_sub, "status", "active")
+    )
+    if raw_status == "active":
+        sub.status = "active"
+    elif raw_status == "past_due":
+        sub.status = "past_due"
+    elif raw_status == "trialing":
+        sub.status = "active"
+    else:
+        sub.status = raw_status or "active"
+
+    period_start, period_end = _subscription_period_bounds(stripe_sub)
+    if period_start:
+        sub.current_period_start = period_start
+    if period_end:
+        sub.current_period_end = period_end
 
 
 async def ensure_subscription(user_id: str, db: AsyncSession) -> Subscription:
@@ -66,6 +154,7 @@ async def create_checkout_session(
         success_url=success_url,
         cancel_url=cancel_url,
         metadata={"user_id": user_id},
+        client_reference_id=user_id,
     )
     return session.url
 
@@ -83,8 +172,58 @@ async def create_portal_session(user_id: str, db: AsyncSession, return_url: str)
     return session.url
 
 
+async def fulfill_checkout_session(user_id: str, session_id: str, db: AsyncSession) -> dict:
+    """Client-return fulfillment: apply Checkout Session when webhooks lag or fail."""
+    stripe.api_key = settings.stripe_secret_key
+    session = stripe.checkout.Session.retrieve(session_id, expand=["subscription"])
+    meta_uid = (session.get("metadata") or {}).get("user_id") or session.get("client_reference_id")
+    if meta_uid and meta_uid != user_id:
+        raise ValueError("Checkout session does not belong to this user")
+
+    customer_id = session.get("customer")
+    sub = await ensure_subscription(user_id, db)
+    if customer_id and not sub.stripe_customer_id:
+        sub.stripe_customer_id = customer_id
+
+    subscription_obj = session.get("subscription")
+    if isinstance(subscription_obj, str):
+        subscription_obj = stripe.Subscription.retrieve(subscription_obj)
+    if subscription_obj:
+        _apply_stripe_subscription(sub, subscription_obj)
+    await db.flush()
+    return await check_usage_budget(user_id, db)
+
+
+async def reconcile_subscription_from_stripe(user_id: str, db: AsyncSession) -> bool:
+    """If local row still looks unpaid but Stripe has an active sub, sync it.
+
+    Returns True when a Stripe subscription was applied.
+    """
+    sub = await ensure_subscription(user_id, db)
+    if not sub.stripe_customer_id:
+        return False
+    if sub.tier in _VALID_PAID_TIERS and sub.stripe_subscription_id and sub.status in ("active", "trialing"):
+        return False
+
+    stripe.api_key = settings.stripe_secret_key
+    listing = stripe.Subscription.list(
+        customer=sub.stripe_customer_id,
+        status="all",
+        limit=5,
+    )
+    candidates = list(listing.get("data") or [])
+    active = next((s for s in candidates if s.get("status") in ("active", "trialing", "past_due")), None)
+    if not active:
+        return False
+    _apply_stripe_subscription(sub, active)
+    await db.flush()
+    return True
+
+
 async def get_billing_status(user_id: str, db: AsyncSession) -> dict:
     """Return billing status for frontend consumption."""
+    # Self-heal missed webhooks (e.g. Stripe period fields moved onto items).
+    await reconcile_subscription_from_stripe(user_id, db)
     return await check_usage_budget(user_id, db)
 
 
@@ -189,7 +328,7 @@ async def handle_webhook_event(payload: bytes, sig_header: str, db: AsyncSession
 
     if event_type == "checkout.session.completed":
         await _handle_checkout_completed(data, db)
-    elif event_type == "customer.subscription.updated":
+    elif event_type in ("customer.subscription.created", "customer.subscription.updated"):
         await _handle_subscription_updated(data, db)
     elif event_type == "customer.subscription.deleted":
         await _handle_subscription_deleted(data, db)
@@ -200,48 +339,53 @@ async def handle_webhook_event(payload: bytes, sig_header: str, db: AsyncSession
 async def _handle_checkout_completed(data: dict, db: AsyncSession) -> None:
     customer_id = data.get("customer")
     subscription_id = data.get("subscription")
-    if not customer_id:
+    user_id = (data.get("metadata") or {}).get("user_id") or data.get("client_reference_id")
+    if not customer_id and not user_id:
         return
-    result = await db.execute(
-        select(Subscription).where(Subscription.stripe_customer_id == customer_id)
-    )
-    sub = result.scalar_one_or_none()
+
+    sub = None
+    if customer_id:
+        result = await db.execute(
+            select(Subscription).where(Subscription.stripe_customer_id == customer_id)
+        )
+        sub = result.scalar_one_or_none()
+    if not sub and user_id:
+        result = await db.execute(select(Subscription).where(Subscription.user_id == user_id))
+        sub = result.scalar_one_or_none()
     if not sub:
         return
+
+    if customer_id and not sub.stripe_customer_id:
+        sub.stripe_customer_id = customer_id
+
     if subscription_id:
-        sub.stripe_subscription_id = subscription_id
         stripe.api_key = settings.stripe_secret_key
-        stripe_sub = stripe.Subscription.retrieve(subscription_id)
-        price_id = stripe_sub["items"]["data"][0]["price"]["id"] if stripe_sub["items"]["data"] else None
-        mapped_tier = _tier_from_stripe_price(price_id)
-        if mapped_tier:
-            sub.tier = mapped_tier
-        sub.status = "active"
-        from datetime import datetime, timezone
-        sub.current_period_start = datetime.fromtimestamp(stripe_sub["current_period_start"], tz=timezone.utc)
-        sub.current_period_end = datetime.fromtimestamp(stripe_sub["current_period_end"], tz=timezone.utc)
+        stripe_sub = (
+            subscription_id
+            if isinstance(subscription_id, dict)
+            else stripe.Subscription.retrieve(subscription_id)
+        )
+        _apply_stripe_subscription(sub, stripe_sub)
     await db.flush()
 
 
 async def _handle_subscription_updated(data: dict, db: AsyncSession) -> None:
     sub_id = data.get("id")
+    customer_id = data.get("customer")
     result = await db.execute(
         select(Subscription).where(Subscription.stripe_subscription_id == sub_id)
     )
     sub = result.scalar_one_or_none()
+    if not sub and customer_id:
+        # subscription.created often arrives before checkout.session.completed
+        # has written stripe_subscription_id.
+        result = await db.execute(
+            select(Subscription).where(Subscription.stripe_customer_id == customer_id)
+        )
+        sub = result.scalar_one_or_none()
     if not sub:
         return
-    price_id = data["items"]["data"][0]["price"]["id"] if data.get("items", {}).get("data") else None
-    mapped_tier = _tier_from_stripe_price(price_id)
-    if mapped_tier:
-        sub.tier = mapped_tier
-    status = data.get("status", "active")
-    sub.status = "active" if status == "active" else ("past_due" if status == "past_due" else status)
-    from datetime import datetime, timezone
-    if data.get("current_period_start"):
-        sub.current_period_start = datetime.fromtimestamp(data["current_period_start"], tz=timezone.utc)
-    if data.get("current_period_end"):
-        sub.current_period_end = datetime.fromtimestamp(data["current_period_end"], tz=timezone.utc)
+    _apply_stripe_subscription(sub, data)
     await db.flush()
 
 

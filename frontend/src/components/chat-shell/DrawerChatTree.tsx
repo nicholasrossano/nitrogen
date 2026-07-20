@@ -1,7 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronRight, FolderOpen, Home, ListChecks, Loader2, Map as MapIcon, Plus } from 'lucide-react';
+import {
+  ChevronRight,
+  FolderOpen,
+  Home,
+  LayoutDashboard,
+  ListChecks,
+  Loader2,
+  Map as MapIcon,
+  Plus,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { api, type Project } from '@/lib/api';
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
@@ -29,11 +38,17 @@ interface DrawerChatTreeProps {
 const PAGE_SIZE = 5;
 const TREE_LEADING_SLOT = 'flex h-5 w-5 shrink-0 items-center justify-center';
 
-const PROJECT_CONTEXT_CAPSULES: Array<{ id: ChatContextExpandedWidget; label: string; Icon: LucideIcon }> = [
-  { id: 'overview', label: 'Overview', Icon: Home },
-  { id: 'variables', label: PROJECT_VARIABLES.title, Icon: ListChecks },
-  { id: 'assessments', label: 'Assessments', Icon: MapIcon },
-  { id: 'files', label: 'Files', Icon: FolderOpen },
+type ProjectCapsule =
+  | { kind: 'home'; label: string; Icon: LucideIcon }
+  | { kind: 'panel'; id: ChatContextExpandedWidget; label: string; Icon: LucideIcon };
+
+/** Home = bare chat landing (mini context stack). Panels open floor overlays. */
+const PROJECT_CONTEXT_CAPSULES: ProjectCapsule[] = [
+  { kind: 'home', label: 'Home', Icon: Home },
+  { kind: 'panel', id: 'overview', label: 'Overview', Icon: LayoutDashboard },
+  { kind: 'panel', id: 'variables', label: PROJECT_VARIABLES.title, Icon: ListChecks },
+  { kind: 'panel', id: 'assessments', label: 'Assessments', Icon: MapIcon },
+  { kind: 'panel', id: 'files', label: 'Files', Icon: FolderOpen },
 ];
 
 function contextCapsuleClass(isActive: boolean): string {
@@ -262,25 +277,32 @@ export function DrawerChatTree({
           type="button"
           onClick={() => onNewChat(key)}
           className="w-full flex items-center px-1.5 py-1 rounded-md text-left hover:bg-black/[0.03] transition-colors"
-          title={`Open ${name}`}
+          title={`Open ${name} home`}
         >
           <span className="truncate flex-1 text-xs font-semibold text-text-primary">{name}</span>
         </button>
 
         <div className="flex flex-wrap items-center gap-1 px-1.5 mb-1.5">
           {PROJECT_CONTEXT_CAPSULES.map((capsule) => {
+            const onThisProject = chatShell?.activeProjectId === key && !chatShell?.activeChatId;
             const isActive =
-              chatShell?.activeProjectId === key &&
-              !chatShell?.activeChatId &&
-              chatShell?.activeContextWidget === capsule.id;
+              capsule.kind === 'home'
+                ? onThisProject && !chatShell?.activeContextWidget
+                : onThisProject && chatShell?.activeContextWidget === capsule.id;
 
             return (
               <button
-                key={capsule.id}
+                key={capsule.kind === 'home' ? 'home' : capsule.id}
                 type="button"
-                onClick={() => chatShell?.openProjectContextPanel(key, capsule.id)}
+                onClick={() => {
+                  if (capsule.kind === 'home') {
+                    onNewChat(key);
+                    return;
+                  }
+                  chatShell?.openProjectContextPanel(key, capsule.id);
+                }}
                 className={contextCapsuleClass(isActive)}
-                title={`Open ${capsule.label}`}
+                title={capsule.kind === 'home' ? `Open ${name} home` : `Open ${capsule.label}`}
               >
                 <capsule.Icon className="w-3 h-3 shrink-0" aria-hidden="true" />
                 {capsule.label}

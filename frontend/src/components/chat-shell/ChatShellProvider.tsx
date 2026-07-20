@@ -114,35 +114,30 @@ export function ChatShellProvider({ children }: { children: ReactNode }) {
   const handleNewChat = useCallback((projectId?: string | null) => {
     const currentProject = pathProjectId ?? searchParams.get('project');
     const currentChat = searchParams.get('chat');
-    const onProjectWorkbench = Boolean(pathProjectId);
     const onChatLandingPage = pathname === '/chat' || pathname === '/';
 
-    // Already on this project's chat floor — clear overlays unless switching project.
-    if (onProjectWorkbench && !currentChat) {
-      const leftOverlay = landingResetRef.current?.() ?? false;
-      if (leftOverlay) {
-        if (!projectId || projectId === currentProject) return;
-      } else if (projectId && currentProject === projectId) {
-        return;
+    // Project home: bare /projects/:id with the mini context stack (no chat/floor).
+    // Always replace to the canonical URL so Overview/?chat= can't stick from an
+    // early-return that only cleared in-memory state.
+    if (projectId) {
+      writeLastProjectId(projectId);
+      setActiveChatId(null);
+      setActiveContextWidget(null);
+      if (pathProjectId === projectId) {
+        landingResetRef.current?.();
       }
+      router.replace(buildProjectWorkbenchPath(projectId));
+      return;
     }
 
     if (onChatLandingPage && !currentChat) {
       const leftOverlay = landingResetRef.current?.() ?? false;
-      if (leftOverlay) {
-        if (!projectId || projectId === currentProject) return;
-      } else {
-        if (projectId && currentProject === projectId) return;
-        if (!projectId && !currentProject) return;
-      }
+      if (leftOverlay) return;
+      if (!currentProject) return;
     }
 
     setActiveChatId(null);
-    if (projectId) {
-      writeLastProjectId(projectId);
-      router.replace(buildProjectWorkbenchPath(projectId));
-      return;
-    }
+    setActiveContextWidget(null);
     const lastProjectId = readLastProjectId();
     if (lastProjectId) {
       router.replace(buildProjectWorkbenchPath(lastProjectId));
