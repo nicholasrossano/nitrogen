@@ -29,6 +29,21 @@ The platform helps teams:
 From the built-in demo (`/demo`) — a sample diligence workspace for **Rift Valley Solar — 40 MW PV + BESS**.
 
 <p align="center">
+  <img src="docs/images/demo-overview.png" alt="Project overview status rubric" width="900" />
+</p>
+<p align="center"><em>Overview page shows project health...</em></p>
+
+<p align="center">
+  <img src="docs/images/demo-assessments.png" alt="Assessments plan with LCOE, carbon, and stakeholder work" width="900" />
+</p>
+<p align="center"><em>Framework — diligence plan across definition, feasibility, and impact</em></p>
+
+<p align="center">
+  <img src="docs/images/demo-variables.png" alt="Variables table with capacity factor detail" width="900" />
+</p>
+<p align="center"><em>Structured variables with status, source, and team comments</em></p>
+
+<p align="center">
   <img src="docs/images/demo-chat-assessment.png" alt="Project chat beside an open LCOE assessment" width="900" />
 </p>
 <p align="center"><em>Chat-first diligence with an LCOE assessment float</em></p>
@@ -37,21 +52,6 @@ From the built-in demo (`/demo`) — a sample diligence workspace for **Rift Val
   <img src="docs/images/demo-assessment.png" alt="Full-screen carbon calculator with net emission reductions" width="900" />
 </p>
 <p align="center"><em>Full-screen assessment — carbon emissions reduction results</em></p>
-
-<p align="center">
-  <img src="docs/images/demo-overview.png" alt="Project overview status rubric" width="900" />
-</p>
-<p align="center"><em>Overview page shows project health...</em></p>
-
-<p align="center">
-  <img src="docs/images/demo-variables.png" alt="Variables table with capacity factor detail" width="900" />
-</p>
-<p align="center"><em>Structured variables with status, source, and team comments</em></p>
-
-<p align="center">
-  <img src="docs/images/demo-assessments.png" alt="Assessments plan with LCOE, carbon, and stakeholder work" width="900" />
-</p>
-<p align="center"><em>Assessments — diligence plan across definition, feasibility, and impact</em></p>
 
 ## Tech Stack
 
