@@ -149,4 +149,4 @@ See [`.env.example`](../.env.example) for the full annotated list of every varia
 
 ## Forking and upstream updates
 
-If you fork Nitrogen to add custom assessments or other changes and still want upstream releases, see [forking.md](forking.md) for the `upstream` remote + rebase workflow, what is safe to edit, and how to contribute improvements back.
+If you fork Nitrogen AI to add custom assessments or other changes and still want upstream releases, see [forking.md](forking.md) for the `upstream` remote + rebase workflow, what is safe to edit, and how to contribute improvements back.
