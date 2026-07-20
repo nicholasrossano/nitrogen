@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Loader2, RefreshCw, SquarePen } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { ChatMessage, FieldContext, ResearchStep, ActiveEditorContext } from '@/lib/api';
 import type { ResearchPanelCitation } from './ResearchPanel';
@@ -16,7 +16,10 @@ import { CompareProjectPicker, CompareChip } from './CompareProjectPicker';
 import type { CompareProject } from './CompareProjectPicker';
 import { AssessmentPicker } from '@/components/chat/AssessmentPicker';
 import { FLOAT_WIDGET_TYPES, type FloatWidget } from '@/components/editor/FloatLayer';
-import { EditorPanelHeader } from '@/components/editor/EditorPanelHeader';
+import {
+  EditorPanelHeader,
+  EditorPanelHeaderIconButton,
+} from '@/components/editor/EditorPanelHeader';
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
 import { projectDisplayName } from '@/lib/projectDisplayName';
 import type { CoreChatMessage, ChatSummary } from '@/types/chat';
@@ -1173,6 +1176,11 @@ export function ProjectChatSurface({
         titleSaving={titleSaving}
         suffix={project ? projectDisplayName(project) : null}
         onBack={handleLeaveChat}
+        actions={(
+          <EditorPanelHeaderIconButton label="New chat" onClick={handleLeaveChat}>
+            <SquarePen className="h-3.5 w-3.5" />
+          </EditorPanelHeaderIconButton>
+        )}
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <ConversationView
