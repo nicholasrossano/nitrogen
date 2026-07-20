@@ -1,6 +1,6 @@
-# Nitrogen positioning
+# Nitrogen AI positioning
 
-Nitrogen is a **domain-agnostic, chat-first diligence reference architecture** with **climate-impact investment** as the worked example. The repo is meant to be cloned, self-hosted, and extended — not a single-vendor SaaS lock-in.
+Nitrogen AI is a **domain-agnostic, chat-first diligence reference architecture** with **climate-impact investment** as the worked example. The repo is meant to be cloned, self-hosted, and extended — not a single-vendor SaaS lock-in.
 
 ## What changed (contract cutover)
 

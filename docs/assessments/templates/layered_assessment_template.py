@@ -1,4 +1,4 @@
-"""Template for a Nitrogen assessment assessment using the staged workflow.
+"""Template for a Nitrogen AI assessment assessment using the staged workflow.
 
 Assessment assessments are an ordered sequence of confirmable stages:
   1. A list/categorized_list stage for top-level categories or themes

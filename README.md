@@ -1,4 +1,4 @@
-# Nitrogen
+# Nitrogen AI
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![CI](https://github.com/nicholasrossano/nitrogen/actions/workflows/ci.yml/badge.svg)](https://github.com/nicholasrossano/nitrogen/actions/workflows/ci.yml)
@@ -9,13 +9,13 @@
 
 Open-source, chat-first reference architecture for climate-impact investment diligence.
 
-Nitrogen is a self-hostable platform for impact investors and diligence teams: research companies in personal chat, promote findings to shared project records, and track deal health with rubric snapshots. Energy calculators (carbon, LCOE, solar) ship as signal providers for the worked example — the engine is domain-agnostic.
+Nitrogen AI is a self-hostable platform for impact investors and diligence teams: research companies in personal chat, promote findings to shared project records, and track deal health with rubric snapshots. Energy calculators (carbon, LCOE, solar) ship as signal providers for the worked example — the engine is domain-agnostic.
 
 See [docs/positioning.md](docs/positioning.md) for the product narrative and [docs/architecture.md](docs/architecture.md) for system design.
 
 ## Overview
 
-Investment diligence is fragmented across spreadsheets, data rooms, consultant memos, and ad-hoc notes. Nitrogen brings that work into a shared, chat-native system with clear promotion boundaries between private research and team-visible findings.
+Investment diligence is fragmented across spreadsheets, data rooms, consultant memos, and ad-hoc notes. Nitrogen AI brings that work into a shared, chat-native system with clear promotion boundaries between private research and team-visible findings.
 
 The platform helps teams:
 
@@ -121,4 +121,4 @@ bash scripts/github_post_public_setup.sh
 
 ## License
 
-Code: [GNU Affero General Public License v3.0](LICENSE). The Nitrogen name and branding are not covered by that license — see [brand and naming](TRADEMARKS.md). Organizations needing terms outside the AGPLv3 may contact us about a [commercial license](COMMERCIAL_LICENSE.md).
+Code: [GNU Affero General Public License v3.0](LICENSE). The Nitrogen AI name and branding are not covered by that license — see [brand and naming](TRADEMARKS.md). Organizations needing terms outside the AGPLv3 may contact us about a [commercial license](COMMERCIAL_LICENSE.md).

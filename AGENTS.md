@@ -4,6 +4,7 @@ Keep this file minimal and always-on. Put specialized guidance in `docs/agent-pl
 
 ## Core Rules
 
+- Product display name is **Nitrogen AI** — never bare "Nitrogen" in user-facing copy (README, docs, UI chrome, emails). Code identifiers, env keys, paths, and repo URLs may still use `nitrogen`.
 - Make surgical changes only; avoid broad refactors unless explicitly requested.
 - If a request is high-risk (security/schema/architecture/core flows) or ambiguous, ask 1–3 clarifying questions.
 - Start from the narrowest relevant files and symbols; expand scope only when needed.

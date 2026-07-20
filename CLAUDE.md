@@ -1,4 +1,4 @@
-# Claude Instructions (Nitrogen)
+# Claude Instructions (Nitrogen AI)
 
 Use `AGENTS.md` as the primary operating guide for workflow, testing, scope discipline, and **Terminal Output Safety** (avoid unbounded shell output in chat).
 

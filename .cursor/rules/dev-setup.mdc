@@ -1,5 +1,5 @@
 ---
-description: Nitrogen development setup and common issues
+description: Nitrogen AI development setup and common issues
 globs:
   - backend/**
   - frontend/**
@@ -12,7 +12,7 @@ globs:
 alwaysApply: false
 ---
 
-# Nitrogen Development Setup
+# Nitrogen AI Development Setup
 
 ## Standard Ports (DO NOT CHANGE)
 
