@@ -70,7 +70,7 @@ export interface ProjectShare {
   user_display_name: string | null;
   role: 'editor' | 'viewer';
   created_at: string;
-  /** True when the email was invited but no Nitrogen account exists yet. */
+  /** True when the email was invited but no Nitrogen AI account exists yet. */
   pending?: boolean;
 }
 
@@ -82,7 +82,7 @@ export interface WorkspaceMember {
   user_display_name: string | null;
   role: 'owner' | 'member';
   created_at: string;
-  /** True when the email was invited but no Nitrogen account exists yet. */
+  /** True when the email was invited but no Nitrogen AI account exists yet. */
   pending?: boolean;
 }
 

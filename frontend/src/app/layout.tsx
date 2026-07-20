@@ -3,7 +3,7 @@ import './globals.css';
 import { Providers } from './providers';
 
 export const metadata: Metadata = {
-  title: 'Nitrogen',
+  title: 'Nitrogen AI',
   description: 'Chat-first climate-impact investment diligence',
 };
 

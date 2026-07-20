@@ -769,7 +769,7 @@ export const demoChatMessages: Record<string, ChatMessage[]> = {
           source_type: 'corpus',
           source_title: 'Kenya grid emission factor guidance',
           confidence: 0.78,
-          publisher: 'Nitrogen corpus',
+          publisher: 'Nitrogen AI corpus',
         },
       ],
       completion_meta: { latency_ms: 2100, citation_count: 2, tiers_used: ['evidence', 'corpus'] },

@@ -1,4 +1,4 @@
-# Nitrogen UI Style Guide Examples
+# Nitrogen AI UI Style Guide Examples
 
 Use this doc for implementation patterns and edge cases that do not need to be loaded for every UI change.
 

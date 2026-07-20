@@ -180,7 +180,7 @@ function LoginPageContent() {
                   ? 'Enter your email to receive a reset link'
                   : mode === 'signup'
                     ? 'Sign up to start diligence research'
-                    : 'Sign in to continue to Nitrogen'}
+                    : 'Sign in to continue to Nitrogen AI'}
               </p>
             </div>
 

@@ -8,7 +8,7 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Nitrogen Design System — soft cool-grey workbench palette
+        // Nitrogen AI Design System — soft cool-grey workbench palette
         // Shell & Surfaces
         shell: {
           DEFAULT: '#FCFBFB',

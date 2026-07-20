@@ -1021,7 +1021,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-text-primary">Product docs</p>
                       <p className="text-xs text-text-tertiary mt-0.5 leading-snug">
-                        Open the full Nitrogen documentation in a new tab.
+                        Open the full Nitrogen AI documentation in a new tab.
                       </p>
                     </div>
                     <ExternalLink className="w-3.5 h-3.5 shrink-0 text-text-tertiary" />

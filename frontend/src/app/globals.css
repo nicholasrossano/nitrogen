@@ -5,7 +5,7 @@
 @tailwind utilities;
 
 :root {
-  /* Nitrogen Design Tokens — soft cool-grey workbench palette */
+  /* Nitrogen AI Design Tokens — soft cool-grey workbench palette */
   /* Shell & Surfaces */
   --color-shell: #FCFBFB;
   --color-shell-bar: #FEFEFD;

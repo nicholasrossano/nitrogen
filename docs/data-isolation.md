@@ -1,6 +1,6 @@
 # Data isolation and collaboration model
 
-Nitrogen uses **pooled multi-tenancy**: a workspace is an organizational shell (templates, guidance, knowledge banks, billing settings). **Project access is separate from workspace membership.**
+Nitrogen AI uses **pooled multi-tenancy**: a workspace is an organizational shell (templates, guidance, knowledge banks, billing settings). **Project access is separate from workspace membership.**
 
 ## Who can see a project
 
