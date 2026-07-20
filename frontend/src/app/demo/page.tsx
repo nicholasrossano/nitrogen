@@ -20,39 +20,51 @@ export default function DemoEntryPage() {
   const router = useRouter();
   const { user, loading, signOut } = useAuth();
   const startedRef = useRef(false);
+  // Always-current auth snapshots — read once when bootstrap starts so signing
+  // out (user → null) cannot re-enter the effect and cancel navigation.
+  const userRef = useRef(user);
+  const signOutRef = useRef(signOut);
+  userRef.current = user;
+  signOutRef.current = signOut;
+
+  // Claim demo immediately on mount so a slow Firebase init cannot bounce the
+  // visitor to /login if they somehow reach a protected route mid-bootstrap.
+  useEffect(() => {
+    beginDemoEntry();
+    enterDemo();
+    return () => {
+      if (!startedRef.current) {
+        endDemoEntry();
+      }
+    };
+  }, []);
 
   useEffect(() => {
-    // Claim demo immediately — do not wait for Firebase. Otherwise a signed-in
-    // visitor can lose the race to ProtectedRoute and land on /login.
-    if (!startedRef.current) {
-      beginDemoEntry();
-      enterDemo();
-    }
+    if (loading || startedRef.current) return;
 
-    if (loading) {
-      return () => {
-        if (!startedRef.current) endDemoEntry();
-      };
-    }
-
-    if (startedRef.current) return;
     startedRef.current = true;
+    const hasUser = Boolean(userRef.current);
+    const signOutFn = signOutRef.current;
 
-    let cancelled = false;
     void (async () => {
-      await startDemoSession({
-        hasUser: Boolean(user),
-        signOut,
-      });
-      if (!cancelled) {
+      try {
+        await startDemoSession({
+          hasUser,
+          signOut: signOutFn,
+        });
+        // Always navigate — do not gate on an effect "cancelled" flag. Signing
+        // out a restored Firebase session flips `user`, which used to cancel
+        // this replace and leave the page stuck on "Opening demo…".
         router.replace(buildDemoProjectPath());
+      } catch (err) {
+        console.error('Failed to start demo session:', err);
+        startedRef.current = false;
+        endDemoEntry();
+        beginDemoEntry();
+        enterDemo();
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [loading, user, signOut, router]);
+  }, [loading, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">

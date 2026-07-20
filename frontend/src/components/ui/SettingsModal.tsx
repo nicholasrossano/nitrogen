@@ -1,6 +1,6 @@
 'use client';
 
-import { X, FlaskConical, CreditCard, Loader2, ExternalLink, UserPlus, Check, ChevronDown, CircleHelp, RotateCcw } from 'lucide-react';
+import { X, FlaskConical, CreditCard, Loader2, ExternalLink, UserPlus, Check, ChevronDown, CircleHelp, RotateCcw, Key, Server } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -9,6 +9,7 @@ import { useTourStore } from '@/stores/tourStore';
 import { useBillingStore } from '@/stores/billingStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
+import { useDemoMode } from '@/hooks/useDemoMode';
 import { isMeteredBillingTier } from '@/lib/billing/isMeteredBillingTier';
 import { api, type Project, type ProjectShare } from '@/lib/api';
 import { projectDisplayName } from '@/lib/projectDisplayName';
@@ -29,6 +30,10 @@ import {
   resolveActiveProjectId,
   writeLastProjectId,
 } from '@/components/chat-shell/ChatShellProvider';
+import { leaveDemoForSignup } from '@/lib/demo/demoBoundary';
+import { DEMO_PROJECT_ID, isDemoActive } from '@/lib/demo/demoSession';
+
+const DEMO_BILLING_CONTACT_EMAIL = 'nicholas.rossano@gmail.com';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -102,11 +107,96 @@ const TIER_LABELS: Record<string, string> = {
   unlimited: 'Unlimited',
 };
 
-function PlanBillingSection() {
+function DemoBillingSection({ onClose }: { onClose: () => void }) {
+  const goToSignup = () => {
+    onClose();
+    leaveDemoForSignup();
+  };
+
+  return (
+    <>
+      <SettingsSection title="Demo">
+        <div className="px-4 py-3 space-y-2">
+          <p className="text-sm font-medium text-text-primary">Billing is not active in the demo</p>
+          <p className="text-xs text-text-secondary leading-relaxed">
+            Sign up to subscribe, bring your own API key, or reach out for self-hosting help.
+            There is no usage meter on this sample project.
+          </p>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection title="Options">
+        <div className="px-4 py-3 space-y-3">
+          <div className="flex items-start gap-3">
+            <AccentIconBadge icon={Server} size="md" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-text-primary">Self-hosting</p>
+              <p className="text-xs text-text-tertiary mt-0.5 leading-snug">
+                If you&apos;re interested in running Nitrogen AI yourself, please reach out. I&apos;m happy to help early adopters get set up and can also discuss options for ongoing support.
+              </p>
+              <a
+                href={`mailto:${DEMO_BILLING_CONTACT_EMAIL}?subject=Nitrogen%20AI%20self-hosting`}
+                className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-accent hover:underline"
+              >
+                {DEMO_BILLING_CONTACT_EMAIL}
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 border-t border-stroke-subtle pt-3">
+            <AccentIconBadge icon={CreditCard} size="md" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-text-primary">Individual plan</p>
+              <p className="text-xs text-text-tertiary mt-0.5 leading-snug">
+                Paid individual plans are available for a flat rate of $20/month right now.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 border-t border-stroke-subtle pt-3">
+            <AccentIconBadge icon={Key} size="md" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-text-primary">Bring your own API key</p>
+              <p className="text-xs text-text-tertiary mt-0.5 leading-snug">
+                Use your OpenAI or OpenRouter key after you sign up if you want to pay the provider directly for only what you use.
+              </p>
+            </div>
+          </div>
+        </div>
+      </SettingsSection>
+
+      <div className="px-1">
+        <button
+          type="button"
+          onClick={goToSignup}
+          className="btn-primary w-full !rounded-lg !text-sm !font-medium"
+        >
+          Sign up to continue
+        </button>
+      </div>
+    </>
+  );
+}
+
+function PlanBillingSection({ onClose }: { onClose: () => void }) {
+  const { isDemo } = useDemoMode();
+  const pathname = usePathname();
   const { tier, trialMessagesRemaining, loaded } = useBillingStore();
 
   const [portalLoading, setPortalLoading] = useState(false);
   const [showManageOptions, setShowManageOptions] = useState(false);
+
+  // Settings opens client-side — prefer a live demo check so Billing is not blank
+  // while useDemoMode is still catching up after mount.
+  const showDemoBilling =
+    isDemo
+    || isDemoActive()
+    || (pathname?.includes(DEMO_PROJECT_ID) ?? false);
+
+  if (showDemoBilling) {
+    return <DemoBillingSection onClose={onClose} />;
+  }
 
   if (!loaded) return null;
 
@@ -172,11 +262,17 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const chatShell = useChatShell();
+  const { isDemo } = useDemoMode();
   const { devMode, setDevMode } = useSettingsStore();
   const showBillingFeatures = useFeatureFlag('billing_features');
   const billingTier = useBillingStore((s) => s.tier);
   const billingLoaded = useBillingStore((s) => s.loaded);
-  const showBillingTab = showBillingFeatures || (billingLoaded && isMeteredBillingTier(billingTier));
+  const showBillingTab =
+    showBillingFeatures
+    || (billingLoaded && isMeteredBillingTier(billingTier))
+    || isDemo
+    || isDemoActive()
+    || (pathname?.includes(DEMO_PROJECT_ID) ?? false);
   const {
     workspaces,
     activeWorkspace,
@@ -992,7 +1088,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               </>
             ) : activeSettingsTab === 'billing' ? (
               <>
-                {showBillingTab && <PlanBillingSection />}
+                {showBillingTab && <PlanBillingSection onClose={onClose} />}
               </>
             ) : activeSettingsTab === 'help' ? (
               <>

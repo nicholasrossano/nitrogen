@@ -11,6 +11,7 @@ import { clearSwrCache } from '@/lib/swrCache';
 import {
   DEMO_PROJECT_ID,
   beginDemoEntry,
+  beginLeavingDemoForAuth,
   endDemoEntry,
   enterDemo,
   exitDemo,
@@ -101,4 +102,21 @@ export function leaveDemoSession(): void {
   }
   exitDemo();
   resetClientStateForDemoBoundary();
+}
+
+/**
+ * Leave demo and open signup.
+ *
+ * Clearing the demo flag while still on `/projects/demo-*` races ProtectedRoute
+ * / the project page, which otherwise re-bootstrap via `/demo`. Mark leaving
+ * first, then hard-navigate so soft client routing cannot win that race.
+ */
+export function leaveDemoForSignup(
+  navigate: (url: string) => void = (url) => {
+    window.location.assign(url);
+  },
+): void {
+  beginLeavingDemoForAuth();
+  leaveDemoSession();
+  navigate('/login?mode=signup');
 }

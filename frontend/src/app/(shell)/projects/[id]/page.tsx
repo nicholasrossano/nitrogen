@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ProjectWorkbench } from '@/components/chat-shell/ProjectWorkbench';
 import { PageLoader } from '@/components/ui/PageLoader';
-import { DEMO_PROJECT_ID, isDemoActive } from '@/lib/demo/demoSession';
+import { DEMO_PROJECT_ID, isDemoActive, isLeavingDemoForAuth } from '@/lib/demo/demoSession';
 
 function ProjectPageContent() {
   const params = useParams();
@@ -21,7 +21,10 @@ function ProjectPageContent() {
       setDemoSessionOk(false);
       // Re-enter through /demo so the session flag is set; do not bounce to
       // / → /chat → /login (that looked like "/demo went to login").
-      router.replace('/demo');
+      // Skip while Sign up is navigating to /login on purpose.
+      if (!isLeavingDemoForAuth()) {
+        router.replace('/demo');
+      }
       return;
     }
     setDemoSessionOk(true);

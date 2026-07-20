@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
-import { DEMO_SESSION_EVENT, isDemoActive, isDemoProjectPath } from '@/lib/demo/demoSession';
+import { DEMO_SESSION_EVENT, isDemoActive, isDemoProjectPath, isLeavingDemoForAuth } from '@/lib/demo/demoSession';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -35,7 +35,8 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     if (!user && !demoActive) {
       // Orphaned / shared demo project URLs must re-bootstrap via /demo —
       // never send visitors to login when they asked for the sample project.
-      if (isDemoProjectPath(pathname)) {
+      // Skip while Sign up is intentionally leaving demo for /login.
+      if (isDemoProjectPath(pathname) && !isLeavingDemoForAuth()) {
         router.replace('/demo');
         return;
       }

@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader2, Mail, Lock, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
-import { buildDemoProjectPath, DEMO_PROJECT_ID } from '@/lib/demo/demoSession';
+import { buildDemoProjectPath, DEMO_PROJECT_ID, clearLeavingDemoForAuth } from '@/lib/demo/demoSession';
 import { startDemoSession } from '@/lib/demo/demoBoundary';
 import nitrogenIcon from '@/app/icon.png';
 
@@ -43,6 +43,11 @@ function LoginPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+
+  useEffect(() => {
+    // Arriving from demo Sign up — drop the leave-guard so a later /demo link works.
+    clearLeavingDemoForAuth();
+  }, []);
 
   useEffect(() => {
     if (!loading && user) {
@@ -168,20 +173,18 @@ function LoginPageContent() {
           {/* Card */}
           <div className="bg-surface rounded-lg shadow-workspace p-8">
             <div className="text-center mb-8">
-              <h2 className="text-2xl font-display font-semibold text-text-primary mb-2">
+              <h2 className="text-2xl font-display font-semibold text-text-primary">
                 {mode === 'reset' 
                   ? 'Reset Password' 
                   : mode === 'signup' 
                     ? 'Create Account' 
                     : 'Welcome Back'}
               </h2>
-              <p className="text-text-secondary text-sm">
-                {mode === 'reset'
-                  ? 'Enter your email to receive a reset link'
-                  : mode === 'signup'
-                    ? 'Sign up to start diligence research'
-                    : 'Sign in to continue to Nitrogen AI'}
-              </p>
+              {mode === 'reset' && (
+                <p className="text-text-secondary text-sm mt-2">
+                  Enter your email to receive a reset link
+                </p>
+              )}
             </div>
 
             {/* Error message */}
