@@ -35,18 +35,6 @@ import { leaveDemoForSignup } from '@/lib/demo/demoBoundary';
 import { DEMO_PROJECT_ID, isDemoActive } from '@/lib/demo/demoSession';
 
 const DEMO_BILLING_CONTACT_EMAIL = 'nicholas.rossano@gmail.com';
-/** Used for mailto fallback only. Never render this string in the UI. */
-const FEEDBACK_MAILTO_ADDRESS = DEMO_BILLING_CONTACT_EMAIL;
-
-function openFeedbackMailto(title: string, message: string, replyEmail?: string | null) {
-  const subject = encodeURIComponent(title);
-  const bodyLines = [message];
-  if (replyEmail) {
-    bodyLines.push('', `Reply-to: ${replyEmail}`);
-  }
-  const body = encodeURIComponent(bodyLines.join('\n'));
-  window.location.href = `mailto:${FEEDBACK_MAILTO_ADDRESS}?subject=${subject}&body=${body}`;
-}
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -193,14 +181,12 @@ function DemoBillingSection({ onClose }: { onClose: () => void }) {
 }
 
 function FeedbackFormSection() {
-  const { user } = useAuth();
   const [expanded, setExpanded] = useState(false);
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
-  const [sentViaMailto, setSentViaMailto] = useState(false);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -211,34 +197,12 @@ function FeedbackFormSection() {
     setSending(true);
     setError('');
     try {
-      const status = await api.getFeedbackStatus();
-      if (status.email_configured) {
-        await api.submitFeedback(trimmedMessage, trimmedTitle);
-        setSentViaMailto(false);
-      } else {
-        openFeedbackMailto(trimmedTitle, trimmedMessage, user?.email);
-        setSentViaMailto(true);
-      }
+      await api.submitFeedback(trimmedMessage, trimmedTitle);
       setSent(true);
       setTitle('');
       setMessage('');
     } catch (err) {
-      // Server email misconfigured or provider down: fall back to the user's mail client.
-      const detail = err instanceof Error ? err.message : '';
-      if (
-        detail.includes('not configured')
-        || detail.includes('Could not send feedback')
-        || detail.includes('HTTP 502')
-        || detail.includes('HTTP 503')
-      ) {
-        openFeedbackMailto(trimmedTitle, trimmedMessage, user?.email);
-        setSentViaMailto(true);
-        setSent(true);
-        setTitle('');
-        setMessage('');
-      } else {
-        setError(detail || 'Could not send feedback. Please try again.');
-      }
+      setError(err instanceof Error ? err.message : 'Could not send feedback. Please try again.');
     } finally {
       setSending(false);
     }
@@ -271,16 +235,11 @@ function FeedbackFormSection() {
           {sent ? (
             <div className="rounded-lg border border-stroke-subtle bg-surface-subtle/60 px-3 py-2.5 space-y-2 mt-3">
               <p className="text-xs text-text-secondary leading-relaxed">
-                {sentViaMailto
-                  ? 'Your email app should open with the message ready to send. This is a community-run project, so responses may take a bit.'
-                  : 'Thanks. Your note was sent. This is a community-run project, so responses may take a bit.'}
+                Thanks. Your note was sent. This is a community-run project, so responses may take a bit.
               </p>
               <button
                 type="button"
-                onClick={() => {
-                  setSent(false);
-                  setSentViaMailto(false);
-                }}
+                onClick={() => setSent(false)}
                 className="text-[11px] text-accent hover:underline"
               >
                 Send another

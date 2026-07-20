@@ -1,5 +1,6 @@
 """Tests for POST /api/v1/feedback email delivery."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -27,8 +28,8 @@ def _request() -> Request:
             "path": "/api/v1/feedback",
             "raw_path": b"/api/v1/feedback",
             "query_string": b"",
-            "headers": [],
-            "client": ("127.0.0.1", 12345),
+            "headers": [(b"user-agent", b"TestAgent/1.0")],
+            "client": ("203.0.113.10", 12345),
             "server": ("test", 80),
         }
     )
@@ -48,6 +49,17 @@ def _mock_http_client(response: _FakeResponse) -> AsyncMock:
     return mock_client
 
 
+def _fake_db(*, display_name: str | None = "Ada", tier: str = "trial", sub_status: str = "active"):
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=SimpleNamespace(display_name=display_name))
+    db.execute = AsyncMock(
+        return_value=SimpleNamespace(
+            scalar_one_or_none=lambda: SimpleNamespace(tier=tier, status=sub_status)
+        )
+    )
+    return db
+
+
 @pytest.mark.asyncio
 async def test_submit_feedback_uses_resend_when_configured():
     settings = MagicMock(
@@ -62,12 +74,14 @@ async def test_submit_feedback_uses_resend_when_configured():
 
     with (
         patch.object(feedback_api, "get_settings", return_value=settings),
+        patch.object(feedback_api, "ensure_user_exists", new_callable=AsyncMock),
         patch.object(feedback_api.httpx, "AsyncClient", return_value=mock_client),
     ):
         result = await submit_feedback(
             request=_request(),
             body=feedback_api.FeedbackRequest(message="  Hello there  ", subject="Hello"),
             user=_user(),
+            db=_fake_db(),
         )
 
     assert result.ok is True
@@ -76,8 +90,16 @@ async def test_submit_feedback_uses_resend_when_configured():
     assert args[0] == feedback_api.RESEND_API_URL
     assert kwargs["json"]["to"] == ["maintainer@example.com"]
     assert kwargs["json"]["reply_to"] == "user@example.com"
-    assert "Hello there" in kwargs["json"]["text"]
-    assert "maintainer@example.com" not in kwargs["json"]["text"]
+    assert kwargs["json"]["subject"] == "[Nitrogen AI] Hello"
+    text = kwargs["json"]["text"]
+    assert "Hello there" in text
+    assert "uid-1" in text
+    assert "user@example.com" in text
+    assert "Ada" in text
+    assert "trial" in text
+    assert "203.0.113.10" in text
+    assert "TestAgent/1.0" in text
+    assert "maintainer@example.com" not in text
 
 
 @pytest.mark.asyncio
@@ -95,18 +117,20 @@ async def test_submit_feedback_uses_smtp_when_resend_missing():
 
     with (
         patch.object(feedback_api, "get_settings", return_value=settings),
+        patch.object(feedback_api, "ensure_user_exists", new_callable=AsyncMock),
         patch.object(feedback_api, "_send_via_smtp") as send_smtp,
     ):
         result = await submit_feedback(
             request=_request(),
             body=feedback_api.FeedbackRequest(message="Idea", subject="Feature"),
             user=_user(),
+            db=_fake_db(),
         )
 
     assert result.ok is True
     send_smtp.assert_called_once()
     assert send_smtp.call_args.kwargs["to_email"] == "maintainer@example.com"
-    assert send_smtp.call_args.kwargs["subject"] == "Feature"
+    assert send_smtp.call_args.kwargs["subject"] == "[Nitrogen AI] Feature"
 
 
 @pytest.mark.asyncio
@@ -124,25 +148,7 @@ async def test_submit_feedback_rejects_blank_after_strip():
                 request=_request(),
                 body=feedback_api.FeedbackRequest(message="   ", subject="Title"),
                 user=_user(),
-            )
-    assert exc.value.status_code == 400
-
-
-@pytest.mark.asyncio
-async def test_submit_feedback_rejects_blank_subject():
-    settings = MagicMock(
-        feedback_to_email="maintainer@example.com",
-        resend_api_key="re_test",
-        smtp_host="",
-        smtp_user="",
-        smtp_password="",
-    )
-    with patch.object(feedback_api, "get_settings", return_value=settings):
-        with pytest.raises(HTTPException) as exc:
-            await submit_feedback(
-                request=_request(),
-                body=feedback_api.FeedbackRequest(message="Hi", subject="   "),
-                user=_user(),
+                db=_fake_db(),
             )
     assert exc.value.status_code == 400
 
@@ -162,6 +168,7 @@ async def test_submit_feedback_requires_provider():
                 request=_request(),
                 body=feedback_api.FeedbackRequest(message="Hi", subject="Title"),
                 user=_user(),
+                db=_fake_db(),
             )
     assert exc.value.status_code == 503
 
@@ -180,6 +187,7 @@ async def test_submit_feedback_surfaces_provider_errors():
 
     with (
         patch.object(feedback_api, "get_settings", return_value=settings),
+        patch.object(feedback_api, "ensure_user_exists", new_callable=AsyncMock),
         patch.object(feedback_api.httpx, "AsyncClient", return_value=mock_client),
     ):
         with pytest.raises(HTTPException) as exc:
@@ -187,19 +195,6 @@ async def test_submit_feedback_surfaces_provider_errors():
                 request=_request(),
                 body=feedback_api.FeedbackRequest(message="Hi", subject="Title"),
                 user=_user(),
+                db=_fake_db(),
             )
     assert exc.value.status_code == 502
-
-
-@pytest.mark.asyncio
-async def test_feedback_status_hides_address():
-    settings = MagicMock(
-        feedback_to_email="maintainer@example.com",
-        resend_api_key="",
-        smtp_host="",
-        smtp_user="",
-        smtp_password="",
-    )
-    with patch.object(feedback_api, "get_settings", return_value=settings):
-        status = await feedback_api.feedback_status(user=_user())
-    assert status.email_configured is False
