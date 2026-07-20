@@ -12,6 +12,8 @@ export const CHAT_EDITOR_PANEL_MIN_WIDTH_PX = 480;
 export const CHAT_EDITOR_PANEL_MAX_WIDTH_PX = 760;
 export const CHAT_EDITOR_PANEL_DEFAULT_WIDTH_PX = 544;
 export const CHAT_EDITOR_PANEL_WIDTH_STORAGE_KEY = 'nitrogen-chat-editor-panel-width';
+/** Docked float may grow to this share of the workbench (floor + float) before fullscreen. */
+export const CHAT_EDITOR_PANEL_MAX_CONTENT_RATIO = 0.6;
 
 /**
  * Extra width reserved when AssessmentWorkspace hosts a companion column
@@ -23,7 +25,10 @@ export const CHAT_EDITOR_PANEL_WITH_COMPANION_MIN_WIDTH_PX =
 export const CHAT_EDITOR_PANEL_WITH_COMPANION_MAX_WIDTH_PX = 1100;
 
 type ClampChatEditorPanelWidthOptions = {
+  /** @deprecated Prefer contentWidth (workbench / floor+float stage). */
   viewportWidth?: number;
+  /** Workbench content width (floor + float). Falls back to viewportWidth / window. */
+  contentWidth?: number;
   companionOpen?: boolean;
 };
 
@@ -36,15 +41,19 @@ export function clampChatEditorPanelWidth(
       ? { viewportWidth: viewportWidthOrOptions }
       : (viewportWidthOrOptions ?? {});
   const companionOpen = Boolean(opts.companionOpen);
-  const vw = opts.viewportWidth ?? (typeof window !== 'undefined' ? window.innerWidth : 1280);
+  const contentWidth = opts.contentWidth
+    ?? opts.viewportWidth
+    ?? (typeof window !== 'undefined' ? window.innerWidth : 1280);
   const min = companionOpen
     ? CHAT_EDITOR_PANEL_WITH_COMPANION_MIN_WIDTH_PX
     : CHAT_EDITOR_PANEL_MIN_WIDTH_PX;
+  const maxByContent = Math.floor(
+    contentWidth * (companionOpen ? 0.82 : CHAT_EDITOR_PANEL_MAX_CONTENT_RATIO),
+  );
   const hardMax = companionOpen
     ? CHAT_EDITOR_PANEL_WITH_COMPANION_MAX_WIDTH_PX
-    : CHAT_EDITOR_PANEL_MAX_WIDTH_PX;
-  const maxByViewport = Math.floor(vw * (companionOpen ? 0.82 : 0.58));
-  const max = Math.min(hardMax, maxByViewport);
+    : Number.POSITIVE_INFINITY;
+  const max = Math.max(min, Math.min(hardMax, maxByContent));
   return Math.min(max, Math.max(min, Math.round(widthPx)));
 }
 
