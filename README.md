@@ -121,4 +121,4 @@ bash scripts/github_post_public_setup.sh
 
 ## License
 
-Code: [GNU Affero General Public License v3.0](LICENSE). Forks and self-hosting are welcome — see [forking](docs/forking.md). The Nitrogen AI name is reserved separately — see [brand and naming](TRADEMARKS.md). Organizations that need terms outside the AGPLv3 may optionally discuss a [commercial license](COMMERCIAL_LICENSE.md).
+Code: [GNU Affero General Public License v3.0](LICENSE). Forks and self-hosting: [forking](docs/forking.md). Name/branding: [TRADEMARKS.md](TRADEMARKS.md). Other terms: [commercial license](COMMERCIAL_LICENSE.md).
