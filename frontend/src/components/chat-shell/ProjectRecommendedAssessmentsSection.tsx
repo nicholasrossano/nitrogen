@@ -71,11 +71,11 @@ export function ProjectRecommendedAssessmentsSection({
       if (selectedTools && selectedTools.length > 0) {
         setRecommendedAssessmentIds(Array.from(new Set(selectedTools)));
       } else if (recommendedTools?.recommendations?.length) {
+        // Only use explicitly recommended IDs — never fall back to the full catalog.
         const recommendedIds = recommendedTools.recommendations
-          .filter((recommendation) => recommendation.recommended !== false)
+          .filter((recommendation) => recommendation.recommended)
           .map((recommendation) => recommendation.tool.id);
-        const fallbackIds = recommendedTools.recommendations.map((recommendation) => recommendation.tool.id);
-        setRecommendedAssessmentIds(Array.from(new Set(recommendedIds.length > 0 ? recommendedIds : fallbackIds)));
+        setRecommendedAssessmentIds(Array.from(new Set(recommendedIds)));
       } else if (instanceData.length > 0) {
         setRecommendedAssessmentIds(Array.from(new Set(instanceData.map((instance) => instance.assessment_id))));
       } else {

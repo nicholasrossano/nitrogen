@@ -111,51 +111,63 @@ class AssessmentRegistry:
         return [m.definition for m in self._assessments.values()]
     
     def recommend_assessments(
-        self, 
+        self,
         project_description: str,
         project_type: str | None = None,
     ) -> list[tuple["BaseAssessment", float]]:
         """
-        Recommend tools based on project description and type.
-        Returns list of (tool, confidence_score) tuples for ALL tools, sorted by relevance.
+        Score tools for a project description/type.
+
+        Returns (tool, confidence) for ALL tools, sorted by relevance. Confidence
+        reflects absolute evidence (not max-normalized), so a no-signal project
+        does not collapse every tool to 1.0.
         """
         self._load_assessments()
-        
-        description_lower = project_description.lower() if project_description else ""
-        
-        from app.domain.registry import get_first_party_catalog
 
-        keyword_scores = get_first_party_catalog().recommendation_keywords
-        
-        # Calculate scores for each tool
-        assessment_scores: dict[str, float] = {}
-        
-        # Initialize all tools with base score
-        for tool_id in self._assessments.keys():
-            assessment_scores[tool_id] = 0.2  # Base score for all tools
-        
-        # Boost scores based on keyword matches
-        for keyword, tool_ids in keyword_scores.items():
-            if keyword in description_lower:
-                for tool_id in tool_ids:
-                    if tool_id in assessment_scores:
-                        assessment_scores[tool_id] += 1.0
-        
-        # Build recommendations for ALL tools
-        recommendations = []
-        max_score = max(assessment_scores.values()) if assessment_scores else 1
-        
-        for tool_id, score in assessment_scores.items():
-            tool = self._assessments.get(tool_id)
-            if tool:
-                # Normalize to 0-1
-                confidence = min(score / max_score, 1.0)
-                recommendations.append((tool, confidence))
-        
-        # Sort by confidence descending
-        recommendations.sort(key=lambda x: x[1], reverse=True)
-        
-        return recommendations
+        from app.assessments.recommendation import (
+            build_recommendation_rows,
+            score_assessments,
+            select_recommended_ids,
+        )
+
+        scores = score_assessments(
+            project_description=project_description or "",
+            project_type=project_type,
+            assessment_ids=set(self._assessments.keys()),
+        )
+        recommended_ids = select_recommended_ids(scores)
+        rows = build_recommendation_rows(
+            assessments=list(self._assessments.values()),
+            scores=scores,
+            recommended_ids=recommended_ids,
+        )
+        return [(tool, confidence) for tool, confidence, _recommended in rows]
+
+    def recommend_assessments_with_flags(
+        self,
+        project_description: str,
+        project_type: str | None = None,
+    ) -> list[tuple["BaseAssessment", float, bool]]:
+        """Like recommend_assessments, but also returns the recommended flag."""
+        self._load_assessments()
+
+        from app.assessments.recommendation import (
+            build_recommendation_rows,
+            score_assessments,
+            select_recommended_ids,
+        )
+
+        scores = score_assessments(
+            project_description=project_description or "",
+            project_type=project_type,
+            assessment_ids=set(self._assessments.keys()),
+        )
+        recommended_ids = select_recommended_ids(scores)
+        return build_recommendation_rows(
+            assessments=list(self._assessments.values()),
+            scores=scores,
+            recommended_ids=recommended_ids,
+        )
     
     def classify_project_type(self, description: str) -> str:
         """Classify project type from description."""

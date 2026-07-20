@@ -92,4 +92,54 @@ describe('AssessmentChecklistWidget', () => {
       expect(replace).toHaveBeenCalledWith('/projects/initiative-123?panel=assessments');
     });
   });
+
+  it('does not fall back to selecting the full catalog when nothing is recommended', async () => {
+    const selectTools = jest.fn();
+
+    useProjectStore.setState({
+      project: { id: 'initiative-123', selected_tools: null } as any,
+      projectPlan: null,
+      error: null,
+      selectTools,
+    });
+
+    render(
+      <AssessmentChecklistWidget
+        projectId="initiative-123"
+        isActive
+        data={{
+          title: 'Recommended Framework Assessments',
+          recommendations: [
+            {
+              tool: {
+                id: 'landscape_mapping',
+                name: 'Landscape Mapping',
+                description: 'Map the ecosystem of actors and initiatives',
+                icon: 'Map',
+                output_type: 'analysis',
+                category: 'opportunity',
+              },
+              confidence: 0.1,
+              recommended: false,
+            },
+            {
+              tool: {
+                id: 'lcoe_model',
+                name: 'LCOE Model',
+                description: 'Calculate levelized cost of energy',
+                icon: 'Calculator',
+                output_type: 'analysis',
+                category: 'feasibility',
+              },
+              confidence: 0.1,
+              recommended: false,
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.queryByText('Landscape Mapping')).not.toBeInTheDocument();
+    expect(screen.queryByText('LCOE Model')).not.toBeInTheDocument();
+  });
 });

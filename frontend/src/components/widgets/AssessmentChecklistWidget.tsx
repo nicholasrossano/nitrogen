@@ -55,11 +55,10 @@ export function AssessmentChecklistWidget({ data, projectId, isActive = true }: 
   ), [showBetaAssessments, assessmentMetaById, recommendations]);
 
   const initialSelectedIds = useMemo(() => {
-    const explicit = visibleRecommendations
+    // Only pre-select explicitly recommended items — never fall back to the full catalog.
+    return visibleRecommendations
       .filter((recommendation) => recommendation.recommended)
       .map((recommendation) => recommendation.tool.id);
-    const fallback = visibleRecommendations.map((recommendation) => recommendation.tool.id);
-    return explicit.length > 0 ? explicit : fallback;
   }, [visibleRecommendations]);
   const initialSelectedKey = initialSelectedIds.join('|');
 

@@ -5,8 +5,26 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assessments import get_assessment_registry
+from app.assessments.recommendation import load_materials_preview, recommend_for_project
 from app.plans.base import BasePlanHandler, PlanDefinition
 from app.services.project_plan import ProjectPlanService
+
+
+def _chat_summary(chat_history: list | None, *, max_messages: int = 6) -> str | None:
+    if not chat_history:
+        return None
+    lines: list[str] = []
+    for message in chat_history[-max_messages:]:
+        if isinstance(message, dict):
+            role = str(message.get("role") or "user").strip()
+            content = str(message.get("content") or "").strip()
+        else:
+            role = str(getattr(message, "role", "user") or "user").strip()
+            content = str(getattr(message, "content", "") or "").strip()
+        if not content:
+            continue
+        lines.append(f"{role}: {content[:400]}")
+    return "\n".join(lines) if lines else None
 
 
 class ProjectPlanHandler(BasePlanHandler):
@@ -52,27 +70,34 @@ class ProjectPlanHandler(BasePlanHandler):
             if selected:
                 return selected
 
-        # Conditional gate: when the user uploaded any files, wait for at least
-        # one doc to pass the lightweight-extraction milestone before running
-        # recommendations so the signal reflects what's actually in the docs.
-        # When no files exist (typed-context-only case), this returns
-        # immediately.
+        # When the user uploaded files, wait for lightweight extraction so
+        # materials previews can inform relevance (not just timing).
         from app.services.evidence_processor import await_lightweight_readiness
 
         await await_lightweight_readiness(initiative.id)
 
-        recommendations = registry.recommend_assessments(
-            project_description=initiative.project_description or initiative.title or "",
+        materials_preview = await load_materials_preview(self.db, initiative.id)
+        rows = await recommend_for_project(
+            assessments=registry.get_all_assessments(),
+            project_title=initiative.title or "",
+            project_description=initiative.project_description or "",
             project_type=initiative.project_type,
+            materials_preview=materials_preview,
+            chat_summary=_chat_summary(chat_history),
+            user_id=self.user_id,
+            db=self.db,
+            use_llm=True,
         )
 
+        # Checklist shows only the relevance-gated proposals (not the full catalog).
         return [
             {
                 "tool": assessment.definition.to_dict(),
                 "confidence": confidence,
-                "recommended": confidence >= 0.35,
+                "recommended": True,
             }
-            for assessment, confidence in recommendations
+            for assessment, confidence, recommended in rows
+            if recommended
         ]
 
     async def generate_plan(

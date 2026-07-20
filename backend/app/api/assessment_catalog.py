@@ -138,19 +138,27 @@ async def get_recommended_tools(
 ):
     """Get tool recommendations for an initiative based on its description."""
     initiative = await require_project_viewer(db, project_id, user)
-    if not initiative.project_description:
+    if not (initiative.project_description or "").strip():
         return AssessmentRecommendationsResponse(
             recommendations=[],
             project_type=initiative.project_type,
         )
 
-    # Get recommendations
+    from app.assessments.recommendation import load_materials_preview, recommend_for_project
+
     registry = get_assessment_registry()
-    recommendations = registry.recommend_assessments(
-        project_description=initiative.project_description,
+    materials_preview = await load_materials_preview(db, initiative.id)
+    rows = await recommend_for_project(
+        assessments=registry.get_all_assessments(),
+        project_title=initiative.title or "",
+        project_description=initiative.project_description or "",
         project_type=initiative.project_type,
+        materials_preview=materials_preview,
+        user_id=user.uid,
+        db=db,
+        use_llm=True,
     )
-    
+
     return AssessmentRecommendationsResponse(
         recommendations=[
             RecommendedAssessment(
@@ -163,9 +171,9 @@ async def get_recommended_tools(
                     category=tool.definition.category,
                 ),
                 confidence=confidence,
-                recommended=confidence > 0.3,
+                recommended=recommended,
             )
-            for tool, confidence in recommendations
+            for tool, confidence, recommended in rows
         ],
         project_type=initiative.project_type,
     )
