@@ -34,9 +34,9 @@ From the built-in demo (`/demo`) — a sample diligence workspace for **Rift Val
 <p align="center"><em>Chat-first diligence with an LCOE assessment float</em></p>
 
 <p align="center">
-  <img src="docs/images/demo-project-chat.png" alt="Project chat with proposed CAPEX value" width="900" />
+  <img src="docs/images/demo-assessment.png" alt="Full-screen LCOE assessment results" width="900" />
 </p>
-<p align="center"><em>Cited answers and proposed variable updates in project chat</em></p>
+<p align="center"><em>Full-screen assessment — LCOE results with cost breakdown</em></p>
 
 <p align="center">
   <img src="docs/images/demo-overview.png" alt="Project overview status rubric" width="900" />
