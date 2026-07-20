@@ -9,8 +9,7 @@ import {
   parseContextPanelParam,
   type ChatContextExpandedWidget,
 } from '@/components/chat-shell/chatContextStackMotion';
-import { api, type Project } from '@/lib/api';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
+import type { Project } from '@/lib/api';
 import { isDemoActive, DEMO_PROJECT_ID } from '@/lib/demo/demoSession';
 
 const LAST_PROJECT_KEY = 'nitrogen-last-project-id';
@@ -83,7 +82,6 @@ export function ChatShellProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { activeWorkspace } = useWorkspaceStore();
   const [activeChatId, setActiveChatId] = useState<string | null>(searchParams.get('chat'));
   const [drawerRefreshKey, setDrawerRefreshKey] = useState(0);
   const [activeContextWidget, setActiveContextWidget] = useState<ChatContextExpandedWidget | null>(null);
@@ -157,17 +155,16 @@ export function ChatShellProvider({ children }: { children: ReactNode }) {
     setDrawerRefreshKey((k) => k + 1);
   }, []);
 
+  /**
+   * "New Project" doesn't touch the backend at all — it just navigates to a
+   * plain client-side onboarding route. Nothing is created until the user
+   * actually sends their first message there, so there is no draft to
+   * discard, no orphan to clean up, and Back is just... back.
+   */
   const handleNewProject = useCallback(async () => {
     if (isDemoActive()) return;
-    if (!activeWorkspace?.id) return;
-
-    const project = await api.createProject('New Project', activeWorkspace.id);
-    setActiveChatId(null);
-    setActiveContextWidget(null);
-    writeLastProjectId(project.id);
-    refreshDrawer();
-    router.replace(buildProjectWorkbenchPath(project.id));
-  }, [activeWorkspace?.id, refreshDrawer, router]);
+    router.push('/projects/new');
+  }, [router]);
 
   const openProjectContextPanel = useCallback((projectId: string, widget: ChatContextExpandedWidget) => {
     writeLastProjectId(projectId);

@@ -67,6 +67,13 @@ interface ProjectChatSurfaceProps {
   useLandingWhenEmpty?: boolean;
   /** Restore latest existing chat for this initiative on initial mount */
   restoreLatestChatOnMount?: boolean;
+  /**
+   * One-time message to send automatically on mount when this project has no
+   * history yet (e.g. the description typed on the /projects/new page before
+   * this project existed). Sent exactly once via the normal send pipeline.
+   */
+  autoSendOnMount?: string | null;
+  onAutoSendOnMountHandled?: () => void;
   /** Optional override for sends initiated from the landing composer */
   onLandingSend?: (content: string, toolHint?: string) => void;
   initialChatId?: string | null;
@@ -74,6 +81,8 @@ interface ProjectChatSurfaceProps {
   onMessageSent?: () => void;
   /** Called whenever the set of editor widgets in local messages changes */
   onFloatWidgetsChange?: (widgets: FloatWidget[]) => void;
+  /** Open/focus a single float tab for a new chat artifact (preferred over full-history sync). */
+  onOpenFloatWidget?: (widget: FloatWidget) => void;
   /** Called when user opens an internal citation document */
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   /** Called when the active chat metadata changes */
@@ -98,7 +107,7 @@ interface ProjectChatSurfaceProps {
   activeEditorContext?: ActiveEditorContext | null;
   /** Variable pinned to this chat tab (if any). */
   focusedVariableId?: string | null;
-  /** Automatically send a message into this chat view when it becomes active */
+  /** Populate the composer (not send) with a draft when this view becomes active, e.g. from an Investigate click */
   pendingAutoSend?: {
     requestId: string;
     content: string;
@@ -170,11 +179,14 @@ export function ProjectChatSurface({
   allowInitialProjectOnboarding = false,
   useLandingWhenEmpty = true,
   restoreLatestChatOnMount = false,
+  autoSendOnMount = null,
+  onAutoSendOnMountHandled,
   onLandingSend,
   initialChatId = null,
   initialTitle = null,
   onMessageSent,
   onFloatWidgetsChange,
+  onOpenFloatWidget,
   onOpenDocument,
   onChatMetaChange,
   onLandingStateChange,
@@ -225,7 +237,6 @@ export function ProjectChatSurface({
   const lastLoadedChatIdRef = useRef<string | null>(null);
   /** Blocks URL→loadChat while Back is clearing ?chat= (avoids bounce-back). */
   const suppressChatReloadRef = useRef(false);
-  const lastAutoSendRequestIdRef = useRef<string | null>(null);
   const hasAttemptedAutoRestoreRef = useRef(false);
 
   const project = useProjectStore((s) => s.project);
@@ -417,20 +428,47 @@ export function ProjectChatSurface({
     void refreshChatAssessments(currentChatId);
   }, [currentChatId, localMessages, refreshChatAssessments]);
 
-  // Notify parent about editor widgets whenever local messages change
+  // Open/focus float tabs for new chat artifacts (do not dump full history into the session).
+  const lastOpenedFloatMessageIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!onFloatWidgetsChange) return;
-    const raw: FloatWidget[] = localMessages
-      .filter(
-        (m) =>
-          m.widget_type &&
-          m.widget_data &&
-          (FLOAT_WIDGET_TYPES as readonly string[]).includes(m.widget_type),
-      )
-      .map((m) => ({ type: m.widget_type!, data: m.widget_data!, messageId: m.id }));
+    lastOpenedFloatMessageIdRef.current = null;
+  }, [currentChatId]);
+  useEffect(() => {
+    if (!onOpenFloatWidget && !onFloatWidgetsChange) return;
 
-    onFloatWidgetsChange(raw);
-  }, [localMessages, onFloatWidgetsChange]);
+    const floatMessages = localMessages.filter(
+      (m) =>
+        m.widget_type
+        && m.widget_data
+        && (FLOAT_WIDGET_TYPES as readonly string[]).includes(m.widget_type),
+    );
+
+    if (onFloatWidgetsChange) {
+      onFloatWidgetsChange(
+        floatMessages.map((m) => ({
+          type: m.widget_type!,
+          data: m.widget_data!,
+          messageId: m.id,
+        })),
+      );
+    }
+
+    if (!onOpenFloatWidget) return;
+    const latest = floatMessages[floatMessages.length - 1];
+    if (!latest) return;
+    // Seed on first sync for this chat — don't auto-open historical widgets.
+    if (lastOpenedFloatMessageIdRef.current === null) {
+      lastOpenedFloatMessageIdRef.current = latest.id;
+      return;
+    }
+    if (lastOpenedFloatMessageIdRef.current === latest.id) return;
+    lastOpenedFloatMessageIdRef.current = latest.id;
+    onOpenFloatWidget({
+      type: latest.widget_type!,
+      data: latest.widget_data!,
+      messageId: latest.id,
+    });
+  }, [currentChatId, localMessages, onFloatWidgetsChange, onOpenFloatWidget]);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -714,9 +752,13 @@ export function ProjectChatSurface({
       onBeforeSendMessage?.();
       onMessageSent?.();
 
-      const isFirst = localMessages.length === 0;
+      const isFirst = localMessages.filter((m) => m.role === 'user').length === 0;
+      const skipTitleMessages = new Set([
+        "I've uploaded my documents.",
+        "I don't have any documents to upload.",
+      ]);
 
-      if (isFirst) {
+      if (isFirst && !skipTitleMessages.has(content)) {
         api
           .generateChatTitle(content)
           .then(({ title }) => {
@@ -785,19 +827,28 @@ export function ProjectChatSurface({
     ],
   );
 
+  // One-time auto-send for the description typed on /projects/new before this
+  // project existed — fires exactly once for a brand-new, history-less thread.
+  const autoSendHandledRef = useRef(false);
   useEffect(() => {
-    if (!pendingAutoSend?.requestId) return;
-    if (lastAutoSendRequestIdRef.current === pendingAutoSend.requestId) return;
-    lastAutoSendRequestIdRef.current = pendingAutoSend.requestId;
-    void handleSend(
-      pendingAutoSend.content,
-      pendingAutoSend.toolHint,
-      pendingAutoSend.fieldContext ?? null,
-      pendingAutoSend.modelInputsContext ?? null,
-      pendingAutoSend.variableId ?? null,
-    );
-    onPendingAutoSendHandled?.();
-  }, [handleSend, onPendingAutoSendHandled, pendingAutoSend]);
+    if (!autoSendOnMount) return;
+    if (autoSendHandledRef.current) return;
+    if (loadingChat) return;
+    if (initialChatId || currentChatId) return;
+    if (localMessages.length > 0) return;
+
+    autoSendHandledRef.current = true;
+    onAutoSendOnMountHandled?.();
+    void handleSend(autoSendOnMount);
+  }, [
+    autoSendOnMount,
+    currentChatId,
+    handleSend,
+    initialChatId,
+    loadingChat,
+    localMessages.length,
+    onAutoSendOnMountHandled,
+  ]);
 
   const handleEditMessage = useCallback(
     async (messageId: string, newContent: string) => {
@@ -1208,6 +1259,8 @@ export function ProjectChatSurface({
           showAttachments={!isDemo && !allowInitialProjectOnboarding}
           historyLoading={loadingChat}
           sendDisabled={isDemo}
+          pendingDraft={pendingAutoSend}
+          onPendingDraftHandled={onPendingAutoSendHandled}
         />
       </div>
     </div>

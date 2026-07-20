@@ -77,6 +77,16 @@ export interface ConversationViewProps {
   historyLoading?: boolean;
   /** Keep send disabled even when the field has text (e.g. demo mode) */
   sendDisabled?: boolean;
+  /** Populate the composer with a draft (e.g. from an Investigate click) without sending it. */
+  pendingDraft?: {
+    requestId: string;
+    content: string;
+    toolHint?: string;
+    fieldContext?: FieldContext | null;
+    modelInputsContext?: string | null;
+  } | null;
+  /** Called once a pendingDraft has been applied to the composer. */
+  onPendingDraftHandled?: () => void;
 }
 
 export function ConversationView({
@@ -105,6 +115,8 @@ export function ConversationView({
   showAttachments = true,
   historyLoading = false,
   sendDisabled = false,
+  pendingDraft = null,
+  onPendingDraftHandled,
 }: ConversationViewProps) {
 
   const [input, setInput] = useState('');
@@ -119,6 +131,7 @@ export function ConversationView({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevCount = useRef(0);
   const wasStreaming = useRef(false);
+  const lastPendingDraftRequestIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (messages.length > prevCount.current) {
@@ -145,7 +158,8 @@ export function ConversationView({
         modelInputsContext?: string | null;
         _investigateAutoSend?: boolean;
       } | null;
-      // Workbench auto-sends investigate drafts; skip filling the composer.
+      // Workbench routes investigate drafts through the pendingDraft prop instead
+      // (so they survive the chat floor/tab mounting); skip filling twice here.
       if (detail?._investigateAutoSend) return;
       const text = detail?.text;
       const label = detail?.label ?? null;
@@ -167,6 +181,21 @@ export function ConversationView({
     window.addEventListener('nitrogen:draft', handler);
     return () => window.removeEventListener('nitrogen:draft', handler);
   }, []);
+
+  // Investigate clicks route through this prop (rather than the window event) so the
+  // draft still lands once the chat floor/tab finishes mounting. It only fills the
+  // composer for the user to review and send - it never sends automatically.
+  useEffect(() => {
+    if (!pendingDraft?.requestId) return;
+    if (lastPendingDraftRequestIdRef.current === pendingDraft.requestId) return;
+    lastPendingDraftRequestIdRef.current = pendingDraft.requestId;
+    setInput(pendingDraft.content);
+    setDraftTag(pendingDraft.fieldContext?.label ?? null);
+    setDraftFieldContext(pendingDraft.fieldContext ?? null);
+    setDraftModelInputsContext(pendingDraft.modelInputsContext ?? null);
+    setTimeout(() => textareaRef.current?.focus(), 0);
+    onPendingDraftHandled?.();
+  }, [pendingDraft, onPendingDraftHandled]);
 
   const adjustHeight = useCallback(() => {
     const ta = textareaRef.current;

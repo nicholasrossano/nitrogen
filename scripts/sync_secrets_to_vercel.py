@@ -22,11 +22,19 @@ from pathlib import Path
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-VERCEL_PROJECT_ID = os.environ.get("VERCEL_PROJECT_ID", "prj_0qyILtox5YYn4hdOPHGVntyGAMp8")
+# No hardcoded default: a committed maintainer project id would let anyone with a
+# stray VERCEL_TOKEN in their env push secrets into the maintainer's Vercel project
+# (cross-tenant leak). Both must be provided explicitly by the operator.
+VERCEL_PROJECT_ID = os.environ.get("VERCEL_PROJECT_ID", "")
 VERCEL_TOKEN = os.environ.get("VERCEL_TOKEN", "")
 
 if not VERCEL_TOKEN:
     print("⚠  VERCEL_TOKEN not set — skipping Vercel sync (not yet injected this session)")
+    sys.exit(0)
+
+if not VERCEL_PROJECT_ID:
+    print("⚠  VERCEL_PROJECT_ID not set — refusing to sync (no default target). "
+          "Set VERCEL_PROJECT_ID to your own Vercel project id.")
     sys.exit(0)
 
 BASE = f"https://api.vercel.com/v9/projects/{VERCEL_PROJECT_ID}/env"
@@ -53,11 +61,26 @@ SECRET_DEFS = [
     # Stripe frontend — Price id only; $20/$19.00 labels come from GET /billing/catalog
     ("NEXT_PUBLIC_BILLING_ENABLED",             ALL_ENVS, "plain"),
     ("NEXT_PUBLIC_STRIPE_PRICE_ID",             ALL_ENVS, "plain"),
+    ("NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY",      ALL_ENVS, "plain"),
     # OpenRouter (future routing plan)
     ("OPENROUTER_API_KEY",              PROD_PREVIEW, "sensitive"),
     # OpenAI
     ("OPENAI_API_KEY",                  PROD_PREVIEW, "sensitive"),
 ]
+
+# Repo-scoped Cursor Secrets take precedence over legacy unsuffixed/shared
+# ones of the same purpose — see cursor_secrets_manifest.txt. Map them onto
+# the plain names above (what Vercel/the app actually expect) before sync.
+_NITROGEN_ALIASES = {
+    "STRIPE_SECRET_KEY_NITROGEN": "STRIPE_SECRET_KEY",
+    "STRIPE_PUBLISHABLE_KEY_NITROGEN": "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY",
+    # STRIPE_RESTRICTED_KEY_NITROGEN is intentionally not aliased here — the
+    # app doesn't yet use a restricted key; add an alias once one is wired in.
+}
+for _src, _dest in _NITROGEN_ALIASES.items():
+    _val = os.environ.get(_src)
+    if _val:
+        os.environ[_dest] = _val
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

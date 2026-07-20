@@ -2,13 +2,6 @@
 
 import { FileUp, Map, MessageSquare } from 'lucide-react';
 
-import type { Project } from '@/lib/api';
-
-interface ProjectOnboardingHeaderProps {
-  project: Project;
-  filesUploaded: number;
-}
-
 function StepRow({
   title,
   detail,
@@ -31,10 +24,7 @@ function StepRow({
   );
 }
 
-export function ProjectOnboardingHeader({
-  project,
-  filesUploaded,
-}: ProjectOnboardingHeaderProps) {
+export function ProjectOnboardingHeader() {
   return (
     <div className="w-full">
       <div className="pt-10">

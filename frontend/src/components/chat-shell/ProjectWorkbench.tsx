@@ -24,6 +24,7 @@ import {
   type ExpandedWidgetChangeOptions,
 } from '@/components/chat-shell/chatContextStackMotion';
 import { FloatLayer, type AssessmentLogContext, type FloatWidget } from '@/components/editor/FloatLayer';
+import { FloatTabBar } from '@/components/editor/FloatTabBar';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import {
   floatWidgetForAssessmentReport,
@@ -31,6 +32,18 @@ import {
   floatWidgetForProjectMaterial,
   floatWidgetForVariable,
 } from '@/lib/openProjectFileInEditor';
+import {
+  clearPersistedFloatSession,
+  closeFloatTabInSession,
+  findFloatTabIndex,
+  floatTabDedupeKey,
+  floatTabKeepAliveIds,
+  openFloatTabInSession,
+  readPersistedFloatSession,
+  replaceFloatTabInSession,
+  touchFloatTabRecentOrder,
+  writePersistedFloatSession,
+} from '@/lib/floatTabSession';
 import { activeEditorContextFromWidget } from '@/lib/activeEditorContext';
 import { api, type AssessmentInstance, type FieldContext, type ProjectMaterial, type Variable } from '@/lib/api';
 import { projectDisplayName } from '@/lib/projectDisplayName';
@@ -48,16 +61,25 @@ import {
   writeChatEditorPanelWidth,
 } from '@/components/ui/chatSidebarLayout';
 
-/** Right-anchored float chrome. Width is always explicit so docked↔companion can animate. */
-const FLOATING_PANEL_CLASS = `absolute right-3 top-3 bottom-3 flex flex-col min-h-0 overflow-hidden ${CHAT_FLOATING_PANEL_CHROME}`;
+/**
+ * Outer float stack (tab bar + card). Width is always explicit so docked↔companion can
+ * animate. Top inset is set inline (not top-3) — see floatDockedTopInset — because it
+ * must vary with what's docked beside it: FloorLayer overlays (Overview/Variables/Files/
+ * Assessments) sit inset-y-3, but Chat itself renders flush at the very top of the
+ * workbench with no inset. Hardcoding top-3 here would only line up the float card's
+ * top edge with a FloorLayer's header divider, not Chat's.
+ */
+const FLOATING_STACK_CLASS = 'absolute right-3 bottom-3 flex flex-col min-h-0';
 /** Bare-landing solo: fill the stage with insets (no measured width required). */
-const SOLO_FLOAT_PANEL_CLASS = `absolute z-30 inset-y-3 left-0 right-3 flex flex-col min-h-0 overflow-hidden ${CHAT_FLOATING_PANEL_CHROME}`;
+const SOLO_FLOAT_STACK_CLASS = 'absolute z-30 inset-y-3 left-0 right-3 flex flex-col min-h-0';
+const FLOAT_CARD_CLASS = `flex min-h-0 flex-1 flex-col overflow-hidden ${CHAT_FLOATING_PANEL_CHROME}`;
 const RIGHT_MARGIN_PX = 12;
 
 /** Docked = companion beside an active floor (Chat / Overview / Variables / Files / Assessments). Solo = float owns the stage. */
 type FloatLayout = 'docked' | 'solo';
 
-type PendingInvestigateAutoSend = {
+/** A draft to populate into the chat composer (e.g. from an Investigate click) - never auto-sent. */
+type PendingInvestigateDraft = {
   requestId: string;
   content: string;
   toolHint?: string;
@@ -66,14 +88,33 @@ type PendingInvestigateAutoSend = {
   variableId?: string | null;
 };
 
-function floatWidgetsAreEqual(a: FloatWidget[], b: FloatWidget[]): boolean {
-  if (a === b) return true;
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i += 1) {
-    if (a[i].messageId !== b[i].messageId || a[i].type !== b[i].type) return false;
-    if (a[i].data !== b[i].data) return false;
+function isAssessmentLinkedFloat(widget: FloatWidget): boolean {
+  return (
+    widget.type === 'assessment_workspace'
+    || widget.type === 'decision_log'
+    || widget.type === 'activity_log'
+    || (widget.type === 'document_viewer' && Boolean(widget.data?.instance_id))
+  );
+}
+
+function cleanupEphemeralForWidget(
+  widget: FloatWidget | null | undefined,
+  projectId: string,
+  sessions: Map<string, { projectId: string; engaged: boolean }>,
+) {
+  if (
+    widget?.type !== 'assessment_workspace'
+    || typeof widget.data?.instance_id !== 'string'
+    || !projectId
+  ) {
+    return;
   }
-  return true;
+  const instanceId = widget.data.instance_id;
+  const session = sessions.get(instanceId);
+  if (session && !session.engaged) {
+    void discardEphemeralAssessmentInstance(session.projectId, instanceId);
+  }
+  sessions.delete(instanceId);
 }
 
 export function ProjectWorkbench({ projectId }: { projectId: string }) {
@@ -82,19 +123,27 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   const chatShell = useChatShell();
 
   const [hasMessages, setHasMessages] = useState(false);
-  const [floatWidgets, setFloatWidgets] = useState<FloatWidget[]>([]);
-  const [pinnedFloatWidgets, setPinnedFloatWidgets] = useState<FloatWidget[] | null>(null);
+  /** Browser-like float session — open adds/focuses a tab; nested nav replaces the active tab. */
+  const [floatTabs, setFloatTabs] = useState<FloatWidget[]>([]);
+  const [activeFloatTabId, setActiveFloatTabId] = useState<string | null>(null);
+  /** Oldest → newest tab ids for LRU eviction / keep-alive. */
+  const [floatTabRecentOrder, setFloatTabRecentOrder] = useState<string[]>([]);
+  /** Header X hides the float window without discarding tabs; open / Open Editor reveals it. */
+  const [floatLayerHidden, setFloatLayerHidden] = useState(false);
   const [contextRefreshKey, setContextRefreshKey] = useState(0);
   const [expandedContextWidget, setExpandedContextWidget] = useState<ChatContextExpandedWidget | null>(null);
   const [expandMotionMode, setExpandMotionMode] = useState<ContextPanelExpandMotion>('stack');
   const [focusedVariableId, setFocusedVariableId] = useState<string | null>(null);
-  const [pendingInvestigateAutoSend, setPendingInvestigateAutoSend] = useState<PendingInvestigateAutoSend | null>(null);
+  const [pendingInvestigateDraft, setPendingInvestigateDraft] = useState<PendingInvestigateDraft | null>(null);
   const [floatPanelWidthPx, setFloatPanelWidthPx] = useState(readChatEditorPanelWidth);
   const [floatCompanionOpen, setFloatCompanionOpen] = useState(false);
   /** User-driven stage cover (Full screen button). Separate from assessment companion columns. */
   const [floatStageExpanded, setFloatStageExpanded] = useState(false);
-  /** Last float closed this session — floor-only "Open Editor" reopens it. */
-  const [lastFloatWidgets, setLastFloatWidgets] = useState<FloatWidget[] | null>(null);
+  /** Last float session closed this session — floor-only "Open Editor" reopens it. */
+  const [lastFloatSession, setLastFloatSession] = useState<{
+    tabs: FloatWidget[];
+    activeTabId: string | null;
+  } | null>(null);
   const [isResizingFloatPanel, setIsResizingFloatPanel] = useState(false);
   const [floatLayout, setFloatLayout] = useState<FloatLayout>('docked');
   const [workbenchWidthPx, setWorkbenchWidthPx] = useState(0);
@@ -110,30 +159,46 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   const panelParam = parseContextPanelParam(searchParams.get(CONTEXT_PANEL_SEARCH_PARAM));
   const assessmentParam = parseAssessmentParam(searchParams.get(ASSESSMENT_SEARCH_PARAM));
   const variableParam = parseVariableParam(searchParams.get(VARIABLE_SEARCH_PARAM));
+  // First-message handoff from /projects/new — sent once, then stripped from the URL.
+  const seedParam = searchParams.get('seed');
+  const handleSeedHandled = useCallback(() => {
+    router.replace(buildProjectWorkbenchPath(projectId));
+  }, [projectId, router]);
+  /** Guards against re-entrant fetch+open for the same in-flight ?assessment= restore. */
   const restoringAssessmentRef = useRef<string | null>(null);
-  /** Blocks ?assessment= restore while a close/dismiss clears the URL (router lag). */
-  const suppressAssessmentRestoreRef = useRef(false);
+
+  // router.replace is async and next/navigation's searchParams only catches up once it
+  // resolves. Two calls issued close together (e.g. switching floors, then opening an
+  // assessment a moment later) would otherwise each branch off the same stale rendered
+  // searchParams, so the second call's URL silently drops whatever the first one just
+  // changed — reverting a floor switch, resurrecting a just-cleared ?chat=, etc. Chaining
+  // every write off the previous call's OWN result (instead of off the last render) makes
+  // back-to-back writes compose instead of clobbering each other.
+  const pendingSearchParamsRef = useRef<URLSearchParams | null>(null);
+
+  useEffect(() => {
+    // Real navigation landed (ours or external/back-forward) — searchParams is now the
+    // freshest ground truth; drop any optimistic base so the next write re-branches off it.
+    pendingSearchParamsRef.current = null;
+  }, [searchParams]);
+
+  const getLatestSearchParams = useCallback(
+    () => pendingSearchParamsRef.current ?? searchParams,
+    [searchParams],
+  );
 
   const replaceWorkbenchSearchParams = useCallback((mutate: (params: URLSearchParams) => void) => {
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(getLatestSearchParams().toString());
     params.delete('project');
     params.delete('view');
     mutate(params);
+    pendingSearchParamsRef.current = params;
     const chat = params.get('chat');
     const panel = parseContextPanelParam(params.get(CONTEXT_PANEL_SEARCH_PARAM));
     const assessment = parseAssessmentParam(params.get(ASSESSMENT_SEARCH_PARAM));
     const variable = parseVariableParam(params.get(VARIABLE_SEARCH_PARAM));
     router.replace(buildProjectWorkbenchPath(projectId, { chat, panel, assessment, variable }));
-  }, [projectId, router, searchParams]);
-
-  /** Clear ?assessment= and stop the restore effect from reopening a float we just closed. */
-  const dismissAssessmentDeepLink = useCallback(() => {
-    suppressAssessmentRestoreRef.current = true;
-    restoringAssessmentRef.current = null;
-    replaceWorkbenchSearchParams((params) => {
-      params.delete(ASSESSMENT_SEARCH_PARAM);
-    });
-  }, [replaceWorkbenchSearchParams]);
+  }, [getLatestSearchParams, projectId, router]);
 
   const clearContextPanelParam = useCallback(() => {
     replaceWorkbenchSearchParams((params) => {
@@ -143,10 +208,121 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   }, [replaceWorkbenchSearchParams]);
 
   const dismissContextPanelParam = useCallback(() => {
-    const current = parseContextPanelParam(searchParams.get(CONTEXT_PANEL_SEARCH_PARAM));
+    const current = parseContextPanelParam(getLatestSearchParams().get(CONTEXT_PANEL_SEARCH_PARAM));
     if (current) dismissingPanelRef.current = current;
     clearContextPanelParam();
-  }, [clearContextPanelParam, searchParams]);
+  }, [clearContextPanelParam, getLatestSearchParams]);
+
+  const floatSessionRef = useRef({
+    tabs: floatTabs,
+    activeTabId: activeFloatTabId,
+    recentOrder: floatTabRecentOrder,
+  });
+  floatSessionRef.current = {
+    tabs: floatTabs,
+    activeTabId: activeFloatTabId,
+    recentOrder: floatTabRecentOrder,
+  };
+
+  /**
+   * Tracks the assessment id we last intended for ?assessment= — synchronously, from
+   * commitFloatSession's own bookkeeping, never from the (async, occasionally
+   * out-of-order-resolving) URL itself. Used only to skip redundant writes; never to
+   * decide whether to reactivate a tab, so it can't race with router.replace timing.
+   */
+  const lastCommittedAssessmentIdRef = useRef<string | null>(null);
+
+  /**
+   * commitFloatSession is the single place tabs/active-tab state changes. It also owns
+   * ?assessment= sync, mirroring only the ACTIVE tab (real browser address bars ignore
+   * background tabs). This is a pure one-way write: nothing reactively reads ?assessment=
+   * to re-derive the active tab (see the mount/popstate-only restore below), so there is
+   * no feedback loop for router.replace's async, occasionally out-of-order resolution to
+   * race against — which was the root cause of both the two-tab flicker and tab switches
+   * silently snapping back to a previously-active assessment.
+   *
+   * Also persists the session to sessionStorage so a hard refresh restores every open
+   * tab, not just whichever one happens to be mirrored in ?assessment=/?variable=.
+   */
+  const commitFloatSession = useCallback((
+    tabs: FloatWidget[],
+    activeTabId: string | null,
+    recentOrder: string[],
+    evicted?: FloatWidget | null,
+  ) => {
+    if (evicted) {
+      cleanupEphemeralForWidget(evicted, projectId, ephemeralAssessmentSessionsRef.current);
+    }
+    setFloatTabs(tabs);
+    setActiveFloatTabId(activeTabId);
+    setFloatTabRecentOrder(recentOrder);
+    floatSessionRef.current = { tabs, activeTabId, recentOrder };
+    writePersistedFloatSession(projectId, { tabs, activeTabId, recentOrder });
+    // Any session mutation that leaves tabs visible should reveal a hidden layer.
+    if (tabs.length > 0) {
+      setFloatLayerHidden(false);
+    }
+
+    const active = activeTabId
+      ? tabs.find((tab) => floatTabDedupeKey(tab) === activeTabId)
+      : tabs[tabs.length - 1];
+    const nextAssessmentId =
+      active && isAssessmentLinkedFloat(active) && typeof active.data?.instance_id === 'string'
+        ? (active.data.instance_id as string)
+        : null;
+
+    if (nextAssessmentId === lastCommittedAssessmentIdRef.current) return;
+    lastCommittedAssessmentIdRef.current = nextAssessmentId;
+
+    if (nextAssessmentId) {
+      replaceWorkbenchSearchParams((params) => {
+        params.set(ASSESSMENT_SEARCH_PARAM, nextAssessmentId);
+      });
+    } else {
+      replaceWorkbenchSearchParams((params) => {
+        params.delete(ASSESSMENT_SEARCH_PARAM);
+      });
+    }
+  }, [projectId, replaceWorkbenchSearchParams]);
+
+  const openFloatTab = useCallback((widget: FloatWidget) => {
+    const { tabs, activeTabId, recentOrder } = floatSessionRef.current;
+    const result = openFloatTabInSession(tabs, activeTabId, widget, recentOrder);
+    const nextRecent = touchFloatTabRecentOrder(
+      result.evicted
+        ? recentOrder.filter((id) => floatTabDedupeKey(result.evicted!) !== id)
+        : recentOrder,
+      result.activeTabId,
+    );
+    commitFloatSession(result.tabs, result.activeTabId, nextRecent, result.evicted);
+  }, [commitFloatSession]);
+
+  const activateFloatTab = useCallback((tabId: string) => {
+    const { tabs, recentOrder } = floatSessionRef.current;
+    if (findFloatTabIndex(tabs, tabId) < 0) return;
+    commitFloatSession(tabs, tabId, touchFloatTabRecentOrder(recentOrder, tabId));
+  }, [commitFloatSession]);
+
+  const replaceActiveFloatTab = useCallback((widget: FloatWidget) => {
+    const { tabs, activeTabId, recentOrder } = floatSessionRef.current;
+    const result = replaceFloatTabInSession(tabs, activeTabId, widget);
+    commitFloatSession(
+      result.tabs,
+      result.activeTabId,
+      touchFloatTabRecentOrder(recentOrder, result.activeTabId),
+    );
+  }, [commitFloatSession]);
+
+  const clearFloatSession = useCallback(() => {
+    const { tabs } = floatSessionRef.current;
+    for (const tab of tabs) {
+      cleanupEphemeralForWidget(tab, projectId, ephemeralAssessmentSessionsRef.current);
+    }
+    commitFloatSession([], null, []);
+    setFloatLayerHidden(false);
+    // Explicit close/reset should not resurrect the session on the next refresh.
+    clearPersistedFloatSession(projectId);
+  }, [commitFloatSession, projectId]);
 
   useEffect(() => {
     void useProjectStore.getState().loadProject(projectId);
@@ -182,15 +358,30 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   }, [projectId, contextRefreshKey]);
 
   useEffect(() => {
-    setPinnedFloatWidgets(null);
-    setFloatWidgets([]);
-    setLastFloatWidgets(null);
+    setFloatLayerHidden(false);
+    setLastFloatSession(null);
     setFloatLayout('docked');
     setFloatCompanionOpen(false);
     setFloatStageExpanded(false);
     restoringAssessmentRef.current = null;
+    lastCommittedAssessmentIdRef.current = null;
     setFocusedVariableId(null);
-    setPendingInvestigateAutoSend(null);
+    setPendingInvestigateDraft(null);
+
+    // Restore a float session left over from before a hard refresh (or a prior visit
+    // to this project this browser tab) rather than always wiping it — refreshing
+    // should not silently close every tab except whatever ?assessment=/?variable=
+    // happens to name. commitFloatSession updates lastCommittedAssessmentIdRef itself,
+    // so this must run after the refs above are cleared, not before.
+    const restored = readPersistedFloatSession(projectId);
+    if (restored) {
+      commitFloatSession(restored.tabs, restored.activeTabId, restored.recentOrder);
+    } else {
+      setFloatTabs([]);
+      setActiveFloatTabId(null);
+      setFloatTabRecentOrder([]);
+      floatSessionRef.current = { tabs: [], activeTabId: null, recentOrder: [] };
+    }
     // Keep URL-driven floors across project switches; only reset expansions
     // that aren't backed by ?panel=.
     if (!panelParam) {
@@ -206,112 +397,67 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     // Selecting a chat from history clears ?panel= in the URL, but this effect used
     // to early-return on activeChatId and leave expandedContextWidget set — Overview
     // (etc.) stayed covering Chat. Dismiss the floor whenever a chat is active.
-    if (activeChatId) {
+    //
+    // activeChatId/panelParam come from next/navigation's searchParams, which only
+    // catches up once a pending router.replace actually resolves. Immediately after a
+    // floor switch (which deletes ?chat= and sets ?panel=) this effect re-runs (because
+    // expandedContextWidget just changed) while those values are still momentarily
+    // stale — so it would see the OLD ?chat= and revert the floor switch it's reacting
+    // to. Prefer our own in-flight intent (pendingSearchParamsRef) when there is one.
+    const pending = pendingSearchParamsRef.current;
+    const effectiveActiveChatId = pending ? pending.get('chat') : activeChatId;
+    const effectivePanelParam = pending
+      ? parseContextPanelParam(pending.get(CONTEXT_PANEL_SEARCH_PARAM))
+      : panelParam;
+
+    if (effectiveActiveChatId) {
       if (expandedContextWidget) {
         setExpandedContextWidget(null);
         setExpandMotionMode('stack');
         chatShell?.setActiveContextWidget(null);
       }
-      if (panelParam) {
+      if (effectivePanelParam) {
         dismissContextPanelParam();
       }
       return;
     }
 
-    if (!panelParam) {
+    if (!effectivePanelParam) {
       dismissingPanelRef.current = null;
       // Floors are URL-backed via ?panel= — tear down when the param is absent.
+      // Float tabs are a browser-like session independent of which floor is showing;
+      // they are only removed by an explicit tab/session close, never by floor nav.
       if (expandedContextWidget) {
         setExpandedContextWidget(null);
         chatShell?.setActiveContextWidget(null);
         setExpandMotionMode('stack');
       }
-      // Variable detail floats are scoped to the Variables floor.
-      setPinnedFloatWidgets((prev) => {
-        if (!prev?.some((widget) => widget.type === 'variable_detail' || widget.type === 'variables_workspace')) {
-          return prev;
-        }
-        const rest = prev.filter(
-          (widget) => widget.type !== 'variable_detail' && widget.type !== 'variables_workspace',
-        );
-        return rest.length > 0 ? rest : null;
-      });
-      setFloatCompanionOpen(false);
-      setFloatStageExpanded(false);
       return;
     }
 
     // Stale ?panel= still present while Back/dismiss is clearing the URL.
     // Capsule clicks set activeContextWidget first — honor that as a fresh open.
-    if (dismissingPanelRef.current === panelParam) {
-      if (chatShell?.activeContextWidget !== panelParam) return;
+    if (dismissingPanelRef.current === effectivePanelParam) {
+      if (chatShell?.activeContextWidget !== effectivePanelParam) return;
       dismissingPanelRef.current = null;
     }
 
-    if (expandedContextWidget === panelParam) return;
+    if (expandedContextWidget === effectivePanelParam) return;
 
     // Honor capsule / deep-link opens even when a stack floor is already up.
-    // Keep an assessment float when restoring both ?panel= and ?assessment=.
-    // Variable detail is reopened by the ?variable= restore effect below.
-    if (!assessmentParam) {
-      setPinnedFloatWidgets(null);
-      setFloatWidgets([]);
-      setFloatLayout('docked');
-      setFloatCompanionOpen(false);
-      setFloatStageExpanded(false);
-    }
+    setFloatLayout('docked');
+    setFloatCompanionOpen(false);
+    setFloatStageExpanded(false);
     setHasMessages(false);
     setExpandMotionMode('center');
-    setExpandedContextWidget(panelParam);
-    chatShell?.setActiveContextWidget(panelParam);
+    setExpandedContextWidget(effectivePanelParam);
+    chatShell?.setActiveContextWidget(effectivePanelParam);
   }, [
     activeChatId,
-    assessmentParam,
     chatShell,
     dismissContextPanelParam,
     expandedContextWidget,
     panelParam,
-  ]);
-
-  // Restore selected-variable float beside the Variables floor from ?variable=.
-  useEffect(() => {
-    if (panelParam !== 'variables' || !variableParam) return;
-    if (expandedContextWidget !== 'variables') return;
-
-    const alreadyOpen = (pinnedFloatWidgets ?? floatWidgets).some((widget) => {
-      if (widget.type !== 'variable_detail') return false;
-      const id =
-        (typeof widget.data?.variable?.id === 'string' && widget.data.variable.id)
-        || (typeof widget.data?.assumption?.id === 'string' && widget.data.assumption.id)
-        || null;
-      return id === variableParam || widget.messageId === `variable-${variableParam}`;
-    });
-    if (alreadyOpen) return;
-
-    let cancelled = false;
-    void api.getVariable(variableParam)
-      .then((variable) => {
-        if (cancelled) return;
-        setFloatLayout('docked');
-        setPinnedFloatWidgets([floatWidgetForVariable(variable)]);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        replaceWorkbenchSearchParams((params) => {
-          params.delete(VARIABLE_SEARCH_PARAM);
-        });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    expandedContextWidget,
-    floatWidgets,
-    panelParam,
-    pinnedFloatWidgets,
-    replaceWorkbenchSearchParams,
-    variableParam,
   ]);
 
   useEffect(() => {
@@ -342,107 +488,113 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     return !hasFrameworkSelection;
   }, [projectId, project, projectPlan]);
 
-  const effectiveFloatWidgets = pinnedFloatWidgets ?? floatWidgets;
-  const showFloatLayer = effectiveFloatWidgets.length > 0;
+  const showFloatLayer = floatTabs.length > 0 && !floatLayerHidden;
+  const activeFloatWidget = useMemo(() => {
+    if (!floatTabs.length) return null;
+    if (activeFloatTabId) {
+      const match = floatTabs.find((tab) => floatTabDedupeKey(tab) === activeFloatTabId);
+      if (match) return match;
+    }
+    return floatTabs[floatTabs.length - 1];
+  }, [activeFloatTabId, floatTabs]);
+
+  const floatKeepAliveTabIds = useMemo(
+    () => floatTabKeepAliveIds(floatTabRecentOrder, activeFloatTabId),
+    [activeFloatTabId, floatTabRecentOrder],
+  );
 
   // Remember the latest open float so floor-only "Open Editor" can restore it.
   useEffect(() => {
-    if (effectiveFloatWidgets.length === 0) return;
-    setLastFloatWidgets(effectiveFloatWidgets);
-  }, [effectiveFloatWidgets]);
+    if (floatTabs.length === 0) return;
+    setLastFloatSession({ tabs: floatTabs, activeTabId: activeFloatTabId });
+  }, [activeFloatTabId, floatTabs]);
+
   const activeEditorContext = useMemo(
-    () => activeEditorContextFromWidget(effectiveFloatWidgets[effectiveFloatWidgets.length - 1]),
-    [effectiveFloatWidgets],
+    () => activeEditorContextFromWidget(activeFloatWidget),
+    [activeFloatWidget],
   );
   const activeAssessmentContext = useMemo(() => {
-    for (let index = effectiveFloatWidgets.length - 1; index >= 0; index -= 1) {
-      const widget = effectiveFloatWidgets[index];
-      if (
-        (widget.type === 'assessment_workspace'
-          || widget.type === 'decision_log'
-          || widget.type === 'activity_log')
-        && typeof widget.data?.instance_id === 'string'
-        && typeof widget.data?.assessment_id === 'string'
-      ) {
-        return {
-          instanceId: widget.data.instance_id,
-          assessmentId: widget.data.assessment_id,
-          title: typeof widget.data.title === 'string' ? widget.data.title : null,
-        };
+    if (!activeFloatWidget) {
+      // Prefer any open assessment-linked tab if the active tab is a plain doc.
+      for (let index = floatTabs.length - 1; index >= 0; index -= 1) {
+        const widget = floatTabs[index];
+        if (
+          (widget.type === 'assessment_workspace'
+            || widget.type === 'decision_log'
+            || widget.type === 'activity_log')
+          && typeof widget.data?.instance_id === 'string'
+          && typeof widget.data?.assessment_id === 'string'
+        ) {
+          return {
+            instanceId: widget.data.instance_id,
+            assessmentId: widget.data.assessment_id,
+            title: typeof widget.data.title === 'string' ? widget.data.title : null,
+          };
+        }
       }
+      return null;
+    }
+    if (
+      (activeFloatWidget.type === 'assessment_workspace'
+        || activeFloatWidget.type === 'decision_log'
+        || activeFloatWidget.type === 'activity_log')
+      && typeof activeFloatWidget.data?.instance_id === 'string'
+      && typeof activeFloatWidget.data?.assessment_id === 'string'
+    ) {
+      return {
+        instanceId: activeFloatWidget.data.instance_id,
+        assessmentId: activeFloatWidget.data.assessment_id,
+        title: typeof activeFloatWidget.data.title === 'string' ? activeFloatWidget.data.title : null,
+      };
     }
     return null;
-  }, [effectiveFloatWidgets]);
+  }, [activeFloatWidget, floatTabs]);
 
   const urlAssessmentInstanceId = useMemo(() => {
-    for (let index = effectiveFloatWidgets.length - 1; index >= 0; index -= 1) {
-      const widget = effectiveFloatWidgets[index];
-      if (
-        (widget.type === 'assessment_workspace'
-          || widget.type === 'decision_log'
-          || widget.type === 'activity_log'
-          // Reports keep ?assessment= so refresh/back stay tied to the module.
-          || widget.type === 'document_viewer')
-        && typeof widget.data?.instance_id === 'string'
-        && widget.data.instance_id
-      ) {
+    const source = activeFloatWidget && isAssessmentLinkedFloat(activeFloatWidget)
+      ? activeFloatWidget
+      : null;
+    if (source && typeof source.data?.instance_id === 'string' && source.data.instance_id) {
+      return source.data.instance_id as string;
+    }
+    for (let index = floatTabs.length - 1; index >= 0; index -= 1) {
+      const widget = floatTabs[index];
+      if (isAssessmentLinkedFloat(widget) && typeof widget.data?.instance_id === 'string' && widget.data.instance_id) {
         return widget.data.instance_id as string;
       }
     }
     return null;
-  }, [effectiveFloatWidgets]);
+  }, [activeFloatWidget, floatTabs]);
 
-  // Keep ?assessment= in sync with the open assessment float (refresh / share).
-  useEffect(() => {
-    if (urlAssessmentInstanceId) {
-      if (assessmentParam === urlAssessmentInstanceId) return;
-      replaceWorkbenchSearchParams((params) => {
-        params.set(ASSESSMENT_SEARCH_PARAM, urlAssessmentInstanceId);
-      });
-      return;
-    }
-    if (!assessmentParam) return;
-    // Don't clear a deep-link while restore is in flight.
-    if (restoringAssessmentRef.current === assessmentParam) return;
-    replaceWorkbenchSearchParams((params) => {
-      params.delete(ASSESSMENT_SEARCH_PARAM);
-    });
-  }, [assessmentParam, replaceWorkbenchSearchParams, urlAssessmentInstanceId]);
+  /**
+   * Restore/activate an assessment float from a given ?assessment= id. Called ONLY from
+   * genuinely external triggers (initial mount / project switch, browser back/forward) —
+   * never reactively from assessmentParam changing, which is what used to race against
+   * commitFloatSession's own writes (router.replace can resolve out of call order) and
+   * cause tab switches to silently snap back to a previously-active assessment.
+   */
+  const reconcileAssessmentFromUrl = useCallback((targetAssessmentId: string) => {
+    if (restoringAssessmentRef.current === targetAssessmentId) return;
 
-  // Restore assessment float from ?assessment= after refresh.
-  useEffect(() => {
-    if (!assessmentParam) {
-      restoringAssessmentRef.current = null;
-      suppressAssessmentRestoreRef.current = false;
-      return;
-    }
-    if (suppressAssessmentRestoreRef.current) {
-      return;
-    }
-    // Decision/agent logs and assessment reports keep the same ?assessment=
-    // deep-link — do not yank them back to the workspace float.
-    const alreadyOpen = (pinnedFloatWidgets ?? floatWidgets).some(
+    const { tabs, activeTabId } = floatSessionRef.current;
+    const alreadyOpen = tabs.some(
       (widget) =>
-        (
-          widget.type === 'assessment_workspace'
-          || widget.type === 'decision_log'
-          || widget.type === 'activity_log'
-          || widget.type === 'document_viewer'
-        )
-        && widget.data?.instance_id === assessmentParam,
+        isAssessmentLinkedFloat(widget)
+        && widget.data?.instance_id === targetAssessmentId,
     );
     if (alreadyOpen) {
-      restoringAssessmentRef.current = assessmentParam;
+      restoringAssessmentRef.current = targetAssessmentId;
+      const tabId = `assessment:${targetAssessmentId}`;
+      if (activeTabId !== tabId) {
+        activateFloatTab(tabId);
+      }
       return;
     }
 
-    let cancelled = false;
-    restoringAssessmentRef.current = assessmentParam;
-
+    restoringAssessmentRef.current = targetAssessmentId;
     void api.listAssessmentInstances(projectId)
       .then((instances) => {
-        if (cancelled) return;
-        const instance = instances.find((item) => item.id === assessmentParam);
+        const instance = instances.find((item) => item.id === targetAssessmentId);
         if (!instance) {
           restoringAssessmentRef.current = null;
           replaceWorkbenchSearchParams((params) => {
@@ -455,45 +607,139 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
         if (layout === 'solo') {
           setHasMessages(true);
         }
-        setPinnedFloatWidgets([
-          {
-            type: 'assessment_workspace',
-            data: {
-              instance_id: instance.id,
-              assessment_id: instance.assessment_id,
-              title:
-                instance.display_name
-                || instance.title
-                || instance.assessment_id.replace(/_/g, ' '),
-            },
-            messageId: `workspace-${instance.id}`,
+        openFloatTab({
+          type: 'assessment_workspace',
+          data: {
+            instance_id: instance.id,
+            assessment_id: instance.assessment_id,
+            title:
+              instance.display_name
+              || instance.title
+              || instance.assessment_id.replace(/_/g, ' '),
           },
-        ]);
+          messageId: `workspace-${instance.id}`,
+        });
       })
       .catch(() => {
-        if (cancelled) return;
         restoringAssessmentRef.current = null;
         replaceWorkbenchSearchParams((params) => {
           params.delete(ASSESSMENT_SEARCH_PARAM);
         });
       });
+  }, [activeChatId, activateFloatTab, openFloatTab, panelParam, projectId, replaceWorkbenchSearchParams]);
 
-    return () => {
-      cancelled = true;
+  // Restore from whatever ?assessment= is in the URL at mount / project switch (hard
+  // refresh, deep link). Reads window.location directly rather than the assessmentParam
+  // state, since this must fire exactly once per project regardless of later URL writes.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const initial = parseAssessmentParam(
+      new URLSearchParams(window.location.search).get(ASSESSMENT_SEARCH_PARAM),
+    );
+    if (initial) {
+      reconcileAssessmentFromUrl(initial);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
+  // Genuine browser back/forward (never triggered by our own replaceWorkbenchSearchParams
+  // calls) — re-sync the active tab from whatever the URL now shows.
+  useEffect(() => {
+    const onPopState = () => {
+      if (typeof window === 'undefined') return;
+      restoringAssessmentRef.current = null;
+      const current = parseAssessmentParam(
+        new URLSearchParams(window.location.search).get(ASSESSMENT_SEARCH_PARAM),
+      );
+      if (current) {
+        reconcileAssessmentFromUrl(current);
+      }
+      // No ?assessment= after navigating back/forward — tabs persist regardless
+      // (browser-tab semantics); nothing to reconcile.
     };
-  }, [
-    activeChatId,
-    assessmentParam,
-    floatWidgets,
-    panelParam,
-    pinnedFloatWidgets,
-    projectId,
-    replaceWorkbenchSearchParams,
-  ]);
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [reconcileAssessmentFromUrl]);
+
+  /** Guards against re-entrant fetch+open for the same in-flight ?variable= restore. */
+  const restoringVariableRef = useRef<string | null>(null);
+
+  /**
+   * Restore/activate the Variables floor's selected-variable float from a given
+   * ?variable= id. Called ONLY from genuinely external triggers (mount/project switch,
+   * browser back/forward) — same reasoning as reconcileAssessmentFromUrl. This used to
+   * be a reactive effect keyed on variableParam/panelParam, which meant ANY unrelated
+   * commitFloatSession-triggered URL write (e.g. opening/activating an assessment tab
+   * while ?variable= was still in the URL) churned activateFloatTab/openFloatTab's
+   * identities, re-ran the effect, and forced the variable tab back into focus — you
+   * simply couldn't switch away from it while on the Variables floor.
+   */
+  const reconcileVariableFromUrl = useCallback((targetVariableId: string) => {
+    if (restoringVariableRef.current === targetVariableId) return;
+
+    const alreadyOpen = floatSessionRef.current.tabs.some((widget) => {
+      if (widget.type !== 'variable_detail') return false;
+      const id =
+        (typeof widget.data?.variable?.id === 'string' && widget.data.variable.id)
+        || (typeof widget.data?.assumption?.id === 'string' && widget.data.assumption.id)
+        || null;
+      return id === targetVariableId || widget.messageId === `variable-${targetVariableId}`;
+    });
+    if (alreadyOpen) {
+      restoringVariableRef.current = targetVariableId;
+      activateFloatTab(`variable:${targetVariableId}`);
+      return;
+    }
+
+    restoringVariableRef.current = targetVariableId;
+    void api.getVariable(targetVariableId)
+      .then((variable) => {
+        setFloatLayout('docked');
+        openFloatTab(floatWidgetForVariable(variable));
+      })
+      .catch(() => {
+        restoringVariableRef.current = null;
+        replaceWorkbenchSearchParams((params) => {
+          params.delete(VARIABLE_SEARCH_PARAM);
+        });
+      });
+  }, [activateFloatTab, openFloatTab, replaceWorkbenchSearchParams]);
+
+  // Restore from whatever ?panel=variables&variable= is in the URL at mount / project
+  // switch (hard refresh, deep link).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const initialPanel = parseContextPanelParam(params.get(CONTEXT_PANEL_SEARCH_PARAM));
+    const initialVariable = parseVariableParam(params.get(VARIABLE_SEARCH_PARAM));
+    if (initialPanel === 'variables' && initialVariable) {
+      reconcileVariableFromUrl(initialVariable);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
+  // Genuine browser back/forward.
+  useEffect(() => {
+    const onPopState = () => {
+      if (typeof window === 'undefined') return;
+      restoringVariableRef.current = null;
+      const params = new URLSearchParams(window.location.search);
+      const currentPanel = parseContextPanelParam(params.get(CONTEXT_PANEL_SEARCH_PARAM));
+      const currentVariable = parseVariableParam(params.get(VARIABLE_SEARCH_PARAM));
+      if (currentPanel === 'variables' && currentVariable) {
+        reconcileVariableFromUrl(currentVariable);
+      }
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [reconcileVariableFromUrl]);
 
   // A FloorLayer overlay stays up when a companion float docks beside it.
   // The mini launcher stack only shows when no float or expanded floor owns the stage.
+  // During onboarding (no framework confirmed yet) treat this as a plain active thread —
+  // no context rail/mini floats until the project graduates out of onboarding.
   const showContextStack = Boolean(projectId)
+    && !isOnboarding
     && (expandedContextWidget != null || (!showFloatLayer && (!hasMessages || panelParam != null)));
   // Companion side panels promote a docked float to full-stage, covering the floor;
   // side nav lives outside this workbench and is unaffected.
@@ -518,6 +764,12 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
         : undefined;
   // Overlay floors shrink to leave room for a docked FloatLayer.
   const floorRightInset = floatIsDocked ? chatEditorPanelGutter(floatPanelWidthPx) : '0.75rem';
+  // A docked float's card top must line up with whatever it's sitting beside: a
+  // FloorLayer overlay (Overview/Variables/Files/Assessments) is inset-y-3, so the
+  // float mirrors that 0.75rem top gap; Chat itself renders flush with no inset, so
+  // the float sits flush too — otherwise the tab bar height pushes the card's top
+  // edge below the floor header's divider (or, without the tab bar, above it).
+  const floatDockedTopInset = expandedContextWidget != null ? '0.75rem' : '0px';
 
   useLayoutEffect(() => {
     const el = workbenchRef.current;
@@ -657,62 +909,92 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   }, [floatCompanionOpen, isResizingFloatPanel, workbenchWidthPx]);
 
   const cleanupActiveEphemeralAssessment = useCallback((widgets: FloatWidget[]) => {
-    const activeWidget = widgets[widgets.length - 1];
-    if (
-      activeWidget?.type !== 'assessment_workspace'
-      || typeof activeWidget.data?.instance_id !== 'string'
-      || !projectId
-    ) {
+    for (const widget of widgets) {
+      cleanupEphemeralForWidget(widget, projectId, ephemeralAssessmentSessionsRef.current);
+    }
+  }, [projectId]);
+
+  const handleCloseFloatTab = useCallback((tabId: string) => {
+    const { tabs, activeTabId, recentOrder } = floatSessionRef.current;
+    const result = closeFloatTabInSession(tabs, activeTabId, tabId);
+    if (!result.closed) return;
+
+    cleanupEphemeralForWidget(result.closed, projectId, ephemeralAssessmentSessionsRef.current);
+
+    // commitFloatSession derives ?assessment= from the resulting active tab, so no
+    // separate assessment-link bookkeeping is needed here — only the variable URL
+    // param (which isn't tab-active-derived) needs an explicit check.
+    const closingVariableDetail = result.closed.type === 'variable_detail';
+    if (closingVariableDetail && variableParam) {
+      const stillHasVariable = result.tabs.some((tab) => tab.type === 'variable_detail');
+      if (!stillHasVariable) {
+        replaceWorkbenchSearchParams((params) => {
+          params.delete(VARIABLE_SEARCH_PARAM);
+        });
+      }
+    }
+
+    if (result.tabs.length === 0) {
+      commitFloatSession([], null, []);
+      setFloatLayerHidden(false);
+      setFloatLayout('docked');
+      setFloatCompanionOpen(false);
+      setFloatStageExpanded(false);
+      if (!activeChatId && !expandedContextWidget) {
+        setHasMessages(false);
+      }
       return;
     }
 
-    const instanceId = activeWidget.data.instance_id;
-    const session = ephemeralAssessmentSessionsRef.current.get(instanceId);
-    if (session && !session.engaged) {
-      void discardEphemeralAssessmentInstance(session.projectId, instanceId);
-    }
-    ephemeralAssessmentSessionsRef.current.delete(instanceId);
-  }, [projectId]);
+    commitFloatSession(
+      result.tabs,
+      result.activeTabId,
+      recentOrder.filter((id) => id !== tabId),
+    );
+  }, [
+    activeChatId,
+    commitFloatSession,
+    expandedContextWidget,
+    projectId,
+    replaceWorkbenchSearchParams,
+    variableParam,
+  ]);
 
+  /** Hide the float window; keep tabs so a later open can restore the session (browser minimize). */
+  const handleHideFloatLayer = useCallback(() => {
+    if (floatSessionRef.current.tabs.length === 0) return;
+    setLastFloatSession({
+      tabs: floatSessionRef.current.tabs,
+      activeTabId: floatSessionRef.current.activeTabId,
+    });
+    setFloatLayerHidden(true);
+    setFloatCompanionOpen(false);
+    setFloatStageExpanded(false);
+  }, []);
+
+  /** Discard the entire float session (landing reset / tour / last-tab close). */
   const handleCloseFloatLayer = useCallback(() => {
-    cleanupActiveEphemeralAssessment(pinnedFloatWidgets ?? floatWidgets);
-    const closingVariableDetail = (pinnedFloatWidgets ?? floatWidgets).some(
-      (widget) => widget.type === 'variable_detail',
-    );
-    const closingAssessment = (pinnedFloatWidgets ?? floatWidgets).some(
-      (widget) =>
-        widget.type === 'assessment_workspace'
-        || widget.type === 'decision_log'
-        || widget.type === 'activity_log'
-        || (widget.type === 'document_viewer' && Boolean(widget.data?.instance_id)),
-    );
-    // Drop ?assessment= before/with widget clear so the restore effect cannot remount.
-    if (closingAssessment || assessmentParam) {
-      dismissAssessmentDeepLink();
-    }
-    setPinnedFloatWidgets(null);
-    setFloatWidgets([]);
+    const { tabs } = floatSessionRef.current;
+    cleanupActiveEphemeralAssessment(tabs);
+    const closingVariableDetail = tabs.some((widget) => widget.type === 'variable_detail');
+    commitFloatSession([], null, []);
+    setFloatLayerHidden(false);
     setFloatLayout('docked');
     setFloatCompanionOpen(false);
     setFloatStageExpanded(false);
-    // Keep the Variables floor; only clear the selected-variable deep link.
     if (closingVariableDetail && variableParam) {
       replaceWorkbenchSearchParams((params) => {
         params.delete(VARIABLE_SEARCH_PARAM);
       });
     }
-    // If a context panel is still the floor, chat stays hidden behind it.
     if (!activeChatId && !expandedContextWidget) {
       setHasMessages(false);
     }
   }, [
     activeChatId,
-    assessmentParam,
     cleanupActiveEphemeralAssessment,
-    dismissAssessmentDeepLink,
+    commitFloatSession,
     expandedContextWidget,
-    floatWidgets,
-    pinnedFloatWidgets,
     replaceWorkbenchSearchParams,
     variableParam,
   ]);
@@ -724,15 +1006,6 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     }
   }, []);
 
-  const handleFloatWidgetsChange = useCallback((widgets: FloatWidget[]) => {
-    // Keep pinned floats (assessments opened from the stack / URL). Chat message
-    // widget sync used to clear pinned state, which unmounted the assessment and
-    // then ?assessment= restored it — a full remount that felt like random reloads.
-    setFloatWidgets((prev) => (
-      floatWidgetsAreEqual(prev, widgets) ? prev : widgets
-    ));
-  }, []);
-
   const resolveFloatLayoutForOpen = useCallback((): FloatLayout => {
     // Dock beside whichever floor is already active — an overlay FloorLayer
     // (Variables/Files/Overview/Assessments), or Chat (messages on stage). Only a bare
@@ -741,28 +1014,8 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     return 'solo';
   }, [expandedContextWidget, hasMessages]);
 
-  const openPinnedFloat = useCallback((widgets: FloatWidget[], layout: FloatLayout) => {
-    const assessmentInstanceId = widgets.find((widget) => (
-      (
-        widget.type === 'assessment_workspace'
-        || widget.type === 'decision_log'
-        || widget.type === 'activity_log'
-        || widget.type === 'document_viewer'
-      )
-      && typeof widget.data?.instance_id === 'string'
-      && widget.data.instance_id
-    ))?.data?.instance_id as string | undefined;
-
-    if (assessmentInstanceId) {
-      // Allow ?assessment= sync/restore for assessment-linked floats.
-      suppressAssessmentRestoreRef.current = false;
-    } else {
-      // Plain docs/files must clear the deep-link or restore will replace this float.
-      dismissAssessmentDeepLink();
-    }
-
+  const prepareFloatLayoutForOpen = useCallback((layout: FloatLayout) => {
     if (layout === 'solo') {
-      // Bare landing — float owns the stage; dismiss any stale overlay floor.
       setExpandedContextWidget(null);
       setExpandMotionMode('stack');
       chatShell?.setActiveContextWidget(null);
@@ -772,92 +1025,94 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     setFloatLayout(layout);
     setFloatCompanionOpen(false);
     setFloatStageExpanded(false);
-    setPinnedFloatWidgets(widgets);
-  }, [chatShell, dismissAssessmentDeepLink, dismissContextPanelParam]);
+    setFloatLayerHidden(false);
+  }, [chatShell, dismissContextPanelParam]);
 
-  /** Open Variables floor (if needed) and dock the selected variable as a float. */
-  const handleOpenVariableDetail = useCallback((variable: Variable) => {
-    cleanupActiveEphemeralAssessment(pinnedFloatWidgets ?? floatWidgets);
-    if (
-      assessmentParam
-      || (pinnedFloatWidgets ?? floatWidgets).some(
-        (w) =>
-          w.type === 'assessment_workspace'
-          || w.type === 'decision_log'
-          || w.type === 'activity_log',
-      )
-    ) {
-      dismissAssessmentDeepLink();
+  /** Chat artifact: open/focus a single new widget without wiping the session. */
+  const handleOpenFloatWidget = useCallback((widget: FloatWidget) => {
+    prepareFloatLayoutForOpen(resolveFloatLayoutForOpen());
+    openFloatTab(widget);
+  }, [openFloatTab, prepareFloatLayoutForOpen, resolveFloatLayoutForOpen]);
+
+  const openPinnedFloat = useCallback((widgets: FloatWidget[], layout: FloatLayout) => {
+    const primary = widgets[widgets.length - 1];
+    if (!primary) return;
+
+    prepareFloatLayoutForOpen(layout);
+    // Opening a batch (e.g. reopen last session) restores each tab, activating the last.
+    // ?assessment= sync for the resulting active tab happens inside commitFloatSession.
+    if (widgets.length === 1) {
+      openFloatTab(primary);
+      return;
     }
-    setFloatWidgets([]);
+    let tabs: FloatWidget[] = [];
+    let activeTabId: string | null = null;
+    let recentOrder: string[] = [];
+    for (const widget of widgets) {
+      const result = openFloatTabInSession(tabs, activeTabId, widget, recentOrder);
+      if (result.evicted) {
+        cleanupEphemeralForWidget(result.evicted, projectId, ephemeralAssessmentSessionsRef.current);
+        recentOrder = recentOrder.filter((id) => floatTabDedupeKey(result.evicted!) !== id);
+      }
+      tabs = result.tabs;
+      activeTabId = result.activeTabId;
+      recentOrder = touchFloatTabRecentOrder(recentOrder, result.activeTabId);
+    }
+    commitFloatSession(tabs, activeTabId, recentOrder);
+  }, [commitFloatSession, openFloatTab, prepareFloatLayoutForOpen, projectId]);
+
+  /** Open Variables floor (if needed) and dock the selected variable as a float tab. */
+  const handleOpenVariableDetail = useCallback((variable: Variable) => {
     setExpandedContextWidget('variables');
     setExpandMotionMode('stack');
     chatShell?.setActiveContextWidget('variables');
     setFloatLayout('docked');
     setFloatCompanionOpen(false);
     setFloatStageExpanded(false);
-    setPinnedFloatWidgets([floatWidgetForVariable(variable)]);
+    // Making the variable tab active clears any stale ?assessment= via commitFloatSession.
+    openFloatTab(floatWidgetForVariable(variable));
     replaceWorkbenchSearchParams((params) => {
       params.delete('chat');
       params.set(CONTEXT_PANEL_SEARCH_PARAM, 'variables');
       params.set(VARIABLE_SEARCH_PARAM, variable.id);
     });
-  }, [
-    assessmentParam,
-    chatShell,
-    cleanupActiveEphemeralAssessment,
-    dismissAssessmentDeepLink,
-    floatWidgets,
-    pinnedFloatWidgets,
-    replaceWorkbenchSearchParams,
-  ]);
-
-  /** Swap float contents in place (assessment → decision/agent log) without changing dock layout. */
-  const replaceFloatContent = useCallback((widgets: FloatWidget[]) => {
-    setPinnedFloatWidgets(widgets);
-  }, []);
+  }, [chatShell, openFloatTab, replaceWorkbenchSearchParams]);
 
   const handleOpenDecisionLog = useCallback((context: AssessmentLogContext) => {
-    replaceFloatContent([
-      {
-        type: 'decision_log',
-        data: {
-          instance_id: context.instanceId,
-          assessment_id: context.assessmentId,
-          title: `[History] ${context.title}`,
-        },
-        messageId: `decision-log-${context.instanceId}`,
+    replaceActiveFloatTab({
+      type: 'decision_log',
+      data: {
+        instance_id: context.instanceId,
+        assessment_id: context.assessmentId,
+        title: `[History] ${context.title}`,
       },
-    ]);
-  }, [replaceFloatContent]);
+      messageId: `decision-log-${context.instanceId}`,
+    });
+  }, [replaceActiveFloatTab]);
 
   const handleOpenActivityLog = useCallback((context: AssessmentLogContext) => {
-    replaceFloatContent([
-      {
-        type: 'activity_log',
-        data: {
-          instance_id: context.instanceId,
-          assessment_id: context.assessmentId,
-          title: context.title,
-        },
-        messageId: `activity-log-${context.instanceId}`,
+    replaceActiveFloatTab({
+      type: 'activity_log',
+      data: {
+        instance_id: context.instanceId,
+        assessment_id: context.assessmentId,
+        title: context.title,
       },
-    ]);
-  }, [replaceFloatContent]);
+      messageId: `activity-log-${context.instanceId}`,
+    });
+  }, [replaceActiveFloatTab]);
 
   const handleReopenAssessmentFromLog = useCallback((context: AssessmentLogContext) => {
-    replaceFloatContent([
-      {
-        type: 'assessment_workspace',
-        data: {
-          instance_id: context.instanceId,
-          assessment_id: context.assessmentId,
-          title: context.title,
-        },
-        messageId: `workspace-${context.instanceId}`,
+    replaceActiveFloatTab({
+      type: 'assessment_workspace',
+      data: {
+        instance_id: context.instanceId,
+        assessment_id: context.assessmentId,
+        title: context.title,
       },
-    ]);
-  }, [replaceFloatContent]);
+      messageId: `workspace-${context.instanceId}`,
+    });
+  }, [replaceActiveFloatTab]);
 
   const handleOpenAssessmentReport = useCallback((payload: {
     instanceId: string;
@@ -865,8 +1120,8 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     title: string;
     material: ProjectMaterial;
   }) => {
-    replaceFloatContent([floatWidgetForAssessmentReport(payload)]);
-  }, [replaceFloatContent]);
+    replaceActiveFloatTab(floatWidgetForAssessmentReport(payload));
+  }, [replaceActiveFloatTab]);
 
   const handleOpenDocument = useCallback((citation: ResearchPanelCitation) => {
     openPinnedFloat([floatWidgetForCitation(citation)], resolveFloatLayoutForOpen());
@@ -965,8 +1220,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
         if (widget.data?.instance_id !== instanceId) return widget;
         return { ...widget, data: { ...widget.data, title } };
       });
-    setFloatWidgets((prev) => syncWidgetTitles(prev));
-    setPinnedFloatWidgets((prev) => (prev ? syncWidgetTitles(prev) : prev));
+    setFloatTabs((prev) => syncWidgetTitles(prev));
   }, []);
 
   const handleOpenProjectFile = useCallback((file: ProjectMaterial) => {
@@ -996,13 +1250,9 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
       didReset = true;
     }
 
-    if (pinnedFloatWidgets?.length || floatWidgets.length) {
-      cleanupActiveEphemeralAssessment(pinnedFloatWidgets ?? floatWidgets);
-      if (assessmentParam) {
-        dismissAssessmentDeepLink();
-      }
-      setPinnedFloatWidgets(null);
-      setFloatWidgets([]);
+    if (floatSessionRef.current.tabs.length) {
+      // clearFloatSession clears ?assessment= via commitFloatSession's own sync.
+      clearFloatSession();
       setFloatLayout('docked');
       setFloatCompanionOpen(false);
       setFloatStageExpanded(false);
@@ -1016,14 +1266,10 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     return didReset;
   }, [
     activeChatId,
-    assessmentParam,
     chatShell,
-    cleanupActiveEphemeralAssessment,
-    dismissAssessmentDeepLink,
-    floatWidgets.length,
+    clearFloatSession,
     expandedContextWidget,
     panelParam,
-    pinnedFloatWidgets,
     dismissContextPanelParam,
   ]);
 
@@ -1035,21 +1281,8 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   ) => {
     const motion = options?.motion ?? (widget ? 'stack' : undefined);
 
-    // A docked float is scoped to whichever floor is active; clear it on any floor
-    // change, including closing the floor (e.g. Back on Files → Chat).
-    cleanupActiveEphemeralAssessment(pinnedFloatWidgets ?? floatWidgets);
-    if (assessmentParam || (pinnedFloatWidgets ?? floatWidgets).some(
-      (w) => w.type === 'assessment_workspace' || w.type === 'decision_log' || w.type === 'activity_log',
-    )) {
-      dismissAssessmentDeepLink();
-    }
-    setPinnedFloatWidgets(null);
-    setFloatLayout('docked');
-    setFloatCompanionOpen(false);
-    setFloatStageExpanded(false);
-    if (widget) {
-      setFloatWidgets([]);
-    }
+    // Floor changes no longer wipe the whole float session. Variable detail tabs
+    // are removed when leaving the Variables floor (URL / panel effect).
 
     if (widget && motion === 'stack') {
       setExpandMotionMode('stack');
@@ -1061,6 +1294,9 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
 
     setExpandedContextWidget(widget);
     chatShell?.setActiveContextWidget(widget);
+    setFloatLayout('docked');
+    setFloatCompanionOpen(false);
+    setFloatStageExpanded(false);
 
     if (widget) {
       // Persist floor in the URL for refresh / deep-link (stack and sidebar).
@@ -1076,13 +1312,8 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
       dismissContextPanelParam();
     }
   }, [
-    assessmentParam,
     chatShell,
-    cleanupActiveEphemeralAssessment,
-    dismissAssessmentDeepLink,
     dismissContextPanelParam,
-    floatWidgets,
-    pinnedFloatWidgets,
     replaceWorkbenchSearchParams,
     searchParams,
   ]);
@@ -1109,15 +1340,14 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
       chatShell?.setActiveContextWidget(null);
       dismissContextPanelParam();
       setHasMessages(false);
-      setFloatWidgets([]);
-      setPinnedFloatWidgets(null);
+      clearFloatSession();
       setFloatLayout('docked');
       setFloatCompanionOpen(false);
       setFloatStageExpanded(false);
     };
     window.addEventListener('nitrogen:tour-replay', onReplay);
     return () => window.removeEventListener('nitrogen:tour-replay', onReplay);
-  }, [chatShell, dismissContextPanelParam]);
+  }, [chatShell, clearFloatSession, dismissContextPanelParam]);
 
   /**
    * Reveal the chat floor beside the float (dock solo / collapse companion / dismiss panel).
@@ -1152,11 +1382,26 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     setFloatStageExpanded(true);
   }, []);
 
-  /** Reopen the last float from a floor-only stage. */
+  /** Reopen a hidden float session from a floor-only stage. */
   const handleOpenEditorFromFloor = useCallback(() => {
-    if (!lastFloatWidgets?.length) return;
-    openPinnedFloat(lastFloatWidgets, resolveFloatLayoutForOpen());
-  }, [lastFloatWidgets, openPinnedFloat, resolveFloatLayoutForOpen]);
+    const existing = floatSessionRef.current.tabs;
+    if (existing.length > 0) {
+      prepareFloatLayoutForOpen(resolveFloatLayoutForOpen());
+      setFloatLayerHidden(false);
+      return;
+    }
+    if (!lastFloatSession?.tabs.length) return;
+    openPinnedFloat(lastFloatSession.tabs, resolveFloatLayoutForOpen());
+    if (lastFloatSession.activeTabId) {
+      activateFloatTab(lastFloatSession.activeTabId);
+    }
+  }, [
+    activateFloatTab,
+    lastFloatSession,
+    openPinnedFloat,
+    prepareFloatLayoutForOpen,
+    resolveFloatLayoutForOpen,
+  ]);
   const handleOpenChatFromFloat = useCallback(() => {
     revealChatFloorFromFloat();
 
@@ -1205,11 +1450,12 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     setHasMessages(true);
   }, [revealChatFloorFromFloat]);
 
-  // Investigate from assessment inputs: auto-send into the chat floor with field context.
+  // Investigate from assessment inputs: reveal the chat floor and drop a draft (with field
+  // context) into the composer for the user to review and send themselves - never auto-sent.
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const queueInvestigateSend = (detail: {
+    const queueInvestigateDraft = (detail: {
       text?: string | null;
       toolHint?: string | null;
       fieldContext?: FieldContext | null;
@@ -1227,7 +1473,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
       if (variableId) {
         setFocusedVariableId(variableId);
       }
-      setPendingInvestigateAutoSend({
+      setPendingInvestigateDraft({
         requestId: `investigate-${fieldContext?.field_name ?? 'field'}-${Date.now()}`,
         content: text,
         toolHint: detail.toolHint ?? fieldContext?.assessment_id ?? undefined,
@@ -1247,7 +1493,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
         modelInputsContext?: string | null;
       } | null;
       if (!detail?.variableId) return;
-      queueInvestigateSend({
+      queueInvestigateDraft({
         text: detail.text,
         toolHint: detail.toolHint,
         fieldContext: detail.fieldContext ?? null,
@@ -1265,12 +1511,13 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
         _investigateAutoSend?: boolean;
         _workspaceForwarded?: boolean;
       } | null;
-      // Only auto-send investigate drafts that carry field context. Plain drafts
-      // still flow to ConversationView to populate the composer.
+      // Only claim investigate drafts that carry field context (routed through the
+      // pendingDraft prop below so they survive the chat floor/tab mounting). Plain
+      // drafts without field context still flow straight to ConversationView.
       if (!detail?.fieldContext?.field_name || !detail.text) return;
       if (detail._workspaceForwarded || detail._investigateAutoSend) return;
       detail._investigateAutoSend = true;
-      queueInvestigateSend({
+      queueInvestigateDraft({
         text: detail.text,
         toolHint: detail.toolHint,
         fieldContext: detail.fieldContext,
@@ -1280,7 +1527,8 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     };
 
     window.addEventListener('nitrogen:open-variable-chat', onOpenVariableChat);
-    // Capture so we mark investigate drafts before ConversationView fills the composer.
+    // Capture so we claim investigate drafts before ConversationView's own listener
+    // would otherwise fill the composer directly from the raw window event.
     window.addEventListener('nitrogen:draft', onDraft, true);
     return () => {
       window.removeEventListener('nitrogen:open-variable-chat', onOpenVariableChat);
@@ -1310,6 +1558,8 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
             hideTiles
             allowInitialProjectOnboarding={isOnboarding}
             restoreLatestChatOnMount={isOnboarding}
+            autoSendOnMount={seedParam}
+            onAutoSendOnMountHandled={handleSeedHandled}
             landingLayoutMode="default"
             landingComposerTitle={
               isOnboarding || !selectedProject
@@ -1330,12 +1580,12 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
               }
               wasOnLandingRef.current = onLanding;
             }}
-            onFloatWidgetsChange={handleFloatWidgetsChange}
+            onOpenFloatWidget={handleOpenFloatWidget}
             activeAssessmentContext={activeAssessmentContext}
             activeEditorContext={activeEditorContext}
             focusedVariableId={focusedVariableId}
-            pendingAutoSend={pendingInvestigateAutoSend}
-            onPendingAutoSendHandled={() => setPendingInvestigateAutoSend(null)}
+            pendingAutoSend={pendingInvestigateDraft}
+            onPendingAutoSendHandled={() => setPendingInvestigateDraft(null)}
             onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
             onOpenDocument={handleOpenDocument}
             onChatMetaChange={({ chatId }) => {
@@ -1349,8 +1599,8 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
 
       {/* Landing uses the mini context stack instead of Open Editor. */}
       {!showFloatLayer
-        && lastFloatWidgets
-        && lastFloatWidgets.length > 0
+        && lastFloatSession
+        && lastFloatSession.tabs.length > 0
         && (hasMessages || Boolean(activeChatId) || expandedContextWidget != null) ? (
         <div
           className="absolute bottom-4 z-30 transition-[right] duration-300 ease-in-out"
@@ -1401,58 +1651,68 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
         <aside
           className={
             floatLayoutSolo
-              ? SOLO_FLOAT_PANEL_CLASS
-              : `${FLOATING_PANEL_CLASS} ${(companionExpanded || stageExpanded) ? 'z-30' : 'z-20'} ${isResizingFloatPanel ? '' : 'transition-[width] duration-300 ease-in-out'}`
+              ? SOLO_FLOAT_STACK_CLASS
+              : `${FLOATING_STACK_CLASS} ${(companionExpanded || stageExpanded) ? 'z-30' : 'z-20'} ${isResizingFloatPanel ? '' : 'transition-[width,top] duration-300 ease-in-out'}`
           }
-          style={floatLayoutSolo ? undefined : { width: floatDisplayWidthPx }}
+          style={floatLayoutSolo ? undefined : { width: floatDisplayWidthPx, top: floatDockedTopInset }}
         >
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize float panel"
-            onMouseDown={handleFloatResizeStart}
-            className="absolute left-0 top-0 bottom-0 z-10 w-2 cursor-col-resize group"
-          >
-            <div
-              className={`absolute left-0 top-0 h-full w-px transition-colors ${isResizingFloatPanel ? 'bg-accent/60' : 'bg-divider group-hover:bg-accent/40'}`}
-            />
-          </div>
-          <FloatLayer
-            widgets={effectiveFloatWidgets}
-            projectId={projectId}
-            onClose={handleCloseFloatLayer}
-            onAssessmentEngaged={handleAssessmentEngaged}
-            onOpenDecisionLog={handleOpenDecisionLog}
-            onOpenActivityLog={handleOpenActivityLog}
-            onOpenAssessmentReport={handleOpenAssessmentReport}
-            onOpenAssessment={handleReopenAssessmentFromLog}
-            onAssessmentTitleChange={handleAssessmentTitleChange}
-            onCompanionSidePanelOpenChange={setFloatCompanionOpen}
-            onOpenDocument={handleOpenDocument}
-            onOpenFile={handleOpenProjectFile}
+          <FloatTabBar
+            tabs={floatTabs}
+            activeTabId={activeFloatTabId}
+            onActivate={activateFloatTab}
+            onClose={handleCloseFloatTab}
           />
-          <div className="absolute bottom-4 left-4 z-40">
-            {floatIsSolo ? (
-              <button
-                type="button"
-                className="flex h-8 items-center gap-1.5 rounded-md border border-stroke-subtle bg-white px-2.5 text-[11px] font-medium leading-none text-text-secondary shadow-floating-panel transition-colors hover:bg-black/[0.04] hover:text-text-primary"
-                onClick={handleOpenChatFromFloat}
-                aria-label="Open Chat"
-              >
-                <MessageCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                Open Chat
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="flex h-8 w-8 items-center justify-center rounded-md border border-stroke-subtle bg-white text-text-secondary shadow-floating-panel transition-colors hover:bg-black/[0.04] hover:text-text-primary"
-                onClick={expandFloatToStage}
-                aria-label="Full screen"
-                title="Full screen"
-              >
-                <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
-            )}
+          <div className={`relative ${FLOAT_CARD_CLASS}`}>
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize float panel"
+              onMouseDown={handleFloatResizeStart}
+              className="absolute left-0 top-0 bottom-0 z-10 w-2 cursor-col-resize group"
+            >
+              <div
+                className={`absolute left-0 top-0 h-full w-px transition-colors ${isResizingFloatPanel ? 'bg-accent/60' : 'bg-divider group-hover:bg-accent/40'}`}
+              />
+            </div>
+            <FloatLayer
+              widgets={floatTabs}
+              activeTabId={activeFloatTabId}
+              keepAliveTabIds={floatKeepAliveTabIds}
+              projectId={projectId}
+              onClose={handleHideFloatLayer}
+              onAssessmentEngaged={handleAssessmentEngaged}
+              onOpenDecisionLog={handleOpenDecisionLog}
+              onOpenActivityLog={handleOpenActivityLog}
+              onOpenAssessmentReport={handleOpenAssessmentReport}
+              onOpenAssessment={handleReopenAssessmentFromLog}
+              onAssessmentTitleChange={handleAssessmentTitleChange}
+              onCompanionSidePanelOpenChange={setFloatCompanionOpen}
+              onOpenDocument={handleOpenDocument}
+              onOpenFile={handleOpenProjectFile}
+            />
+            <div className="absolute bottom-4 left-4 z-40">
+              {floatIsSolo ? (
+                <button
+                  type="button"
+                  className="flex h-8 items-center gap-1.5 rounded-md border border-stroke-subtle bg-white px-2.5 text-[11px] font-medium leading-none text-text-secondary shadow-floating-panel transition-colors hover:bg-black/[0.04] hover:text-text-primary"
+                  onClick={handleOpenChatFromFloat}
+                  aria-label="Open Chat"
+                >
+                  <MessageCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  Open Chat
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-md border border-stroke-subtle bg-white text-text-secondary shadow-floating-panel transition-colors hover:bg-black/[0.04] hover:text-text-primary"
+                  onClick={expandFloatToStage}
+                  aria-label="Full screen"
+                  title="Full screen"
+                >
+                  <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              )}
+            </div>
           </div>
         </aside>
       )}
