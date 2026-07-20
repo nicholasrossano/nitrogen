@@ -33,14 +33,9 @@ Cloud agent VMs are fresh every session. They cannot read your local `.env` or y
 
 ### One-time setup in Cursor → Cloud Agents → Secrets
 
-> ⚠ **Scope every secret to this repo only — never "All Repositories".**
-> If your Cursor account also has other projects (each with their own
-> Stripe/Vercel/DB credentials under the same variable names), an
-> "All Repositories" scope injects *this* repo's values into *their* cloud
-> agent sessions too, and vice versa — e.g. a checkout session or webhook
-> created against the wrong Stripe account. Reusing the same variable name
-> (`STRIPE_SECRET_KEY`, etc.) across repos is fine; reusing "All
-> Repositories" scope across repos with different credentials is not.
+> ⚠ **Scope every secret to this repository only — never "All Repositories".**
+> Always use the `_NITROGEN`-suffixed Stripe names from
+> `scripts/cursor_secrets_manifest.txt` (`STRIPE_SECRET_KEY_NITROGEN`, etc.).
 
 **Option A — Vercel pull (recommended if frontend is on Vercel)**
 
@@ -61,7 +56,9 @@ Then also add the backend-only vars that live in Railway (not Vercel):
 
 `materialize_dev_env.sh` auto-runs `vercel env pull` and gets all the frontend vars from Vercel, then writes the backend vars alongside them.
 
-**Stripe secrets specifically use a `_NITROGEN` suffix** (`STRIPE_SECRET_KEY_NITROGEN`, `STRIPE_PUBLISHABLE_KEY_NITROGEN`, `STRIPE_RESTRICTED_KEY_NITROGEN`) instead of the plain `.env.example` names, because Stripe keys are the highest-blast-radius secret to accidentally share across repos — `materialize_dev_env.sh` and `sync_secrets_to_vercel.py` alias the suffixed names onto the plain ones (`STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`) that the app actually reads, so no app code needs to know about the suffix. `STRIPE_PRICE_ID` and `STRIPE_WEBHOOK_SECRET` are lower-risk (a price ID isn't even secret — it's already returned by the public `GET /billing/catalog`) and are still unsuffixed; give them the same `_NITROGEN` treatment too if another repo in your Cursor account ever defines its own.
+**Stripe secrets specifically use a `_NITROGEN` suffix** (`STRIPE_SECRET_KEY_NITROGEN`, `STRIPE_PUBLISHABLE_KEY_NITROGEN`, `STRIPE_RESTRICTED_KEY_NITROGEN`, `STRIPE_PRICE_ID_NITROGEN`, `STRIPE_WEBHOOK_SECRET_NITROGEN`) on Cursor Secrets and Railway. `materialize_dev_env.sh` and `sync_secrets_to_vercel.py` alias the suffixed names onto the plain ones (`STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, etc.) that the app reads via AliasChoices, so app code does not need to know about the suffix.
+
+**Local durable sync:** `scripts/sync_prod_secrets_to_local.sh` pulls live Stripe/billing vars from the linked Railway production service into root `.env` (both `_NITROGEN` and plain aliases). It runs on every `dev_daemon.sh start|restart` / `setup.sh` so a stale placeholder key cannot survive a restart. Run it manually anytime Manage/Subscribe 503s locally.
 
 **Option B — Mirror all vars individually**
 

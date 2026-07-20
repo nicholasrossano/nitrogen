@@ -98,6 +98,14 @@ python3 scripts/sync_secrets_to_vercel.py
 
 This reads secrets injected by Cursor Secrets, syncs them to Vercel, and writes the local `.env`. If `VERCEL_TOKEN` is not yet injected it skips Vercel sync gracefully and still writes `.env` from whatever is available.
 
+On a laptop with the Railway CLI linked, also keep local Stripe/billing in lockstep with production:
+
+```bash
+bash scripts/sync_prod_secrets_to_local.sh
+```
+
+`dev_daemon.sh start|restart` and `setup.sh` run this automatically so placeholder `sk_test_local` / `price_local_*` keys cannot stick in `.env` across restarts.
+
 ## Local emulator and cloud agents (auth)
 
 **Three dev paths — do not conflate them:**

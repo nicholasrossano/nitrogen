@@ -73,16 +73,55 @@ if [[ -n "$or_key" ]]; then
   esac
 fi
 
-# ── Stripe (optional) ─────────────────────────────────────────────────────────
-stripe_key="$(read_key STRIPE_SECRET_KEY)"
+# ── Stripe (optional locally, but NEVER allow placeholders to look "OK") ──────
+# Prefer repo-scoped _NITROGEN alias (Railway/Cursor convention), then plain.
+stripe_key="$(read_key STRIPE_SECRET_KEY_NITROGEN)"
+[[ -z "$stripe_key" ]] && stripe_key="$(read_key STRIPE_SECRET_KEY)"
+stripe_price="$(read_key STRIPE_PRICE_ID_NITROGEN)"
+[[ -z "$stripe_price" ]] && stripe_price="$(read_key STRIPE_PRICE_ID)"
+
+is_placeholder_stripe_secret() {
+  local v="$1"
+  [[ -z "$v" ]] && return 0
+  [[ "$v" == sk_test_local* || "$v" == sk_live_local* ]] && return 0
+  [[ "$v" == *placeholder* || "$v" == *changeme* ]] && return 0
+  [[ ${#v} -lt 80 ]] && return 0
+  [[ "$v" != sk_live_* && "$v" != sk_test_* && "$v" != rk_live_* && "$v" != rk_test_* ]] && return 0
+  return 1
+}
+
 if [[ -n "$stripe_key" ]]; then
-  code="$(curl -sS -m 20 -o /dev/null -w '%{http_code}' https://api.stripe.com/v1/balance \
-    -u "${stripe_key}:" 2>/dev/null)"
-  case "$code" in
-    200) echo "✅ STRIPE_SECRET_KEY : LIVE" ;;
-    401) echo "⚠  STRIPE_SECRET_KEY : INVALID (401) — checkout will fail (ok if unused locally)" ;;
-    *)   echo "⚠  STRIPE_SECRET_KEY : unexpected HTTP $code" ;;
-  esac
+  if is_placeholder_stripe_secret "$stripe_key"; then
+    echo "❌ STRIPE_SECRET_KEY : PLACEHOLDER/STALE (prefix=${stripe_key:0:10}… len=${#stripe_key})"
+    echo "   Run: bash scripts/sync_prod_secrets_to_local.sh"
+    fail=1
+  else
+    code="$(curl -sS -m 20 -o /dev/null -w '%{http_code}' https://api.stripe.com/v1/balance \
+      -u "${stripe_key}:" 2>/dev/null)"
+    case "$code" in
+      200)
+        if [[ "$stripe_key" == sk_live_* ]]; then
+          echo "✅ STRIPE_SECRET_KEY : LIVE (sk_live_…)"
+        else
+          echo "⚠  STRIPE_SECRET_KEY : VALID but TEST mode (sk_test_…) — prod Manage/Subscribe need sk_live_"
+        fi
+        ;;
+      401)
+        echo "❌ STRIPE_SECRET_KEY : INVALID / revoked (401) — run scripts/sync_prod_secrets_to_local.sh"
+        fail=1
+        ;;
+      *)
+        echo "⚠  STRIPE_SECRET_KEY : unexpected HTTP $code"
+        ;;
+    esac
+  fi
+fi
+
+if [[ -n "$stripe_price" ]]; then
+  if [[ "$stripe_price" == price_local* || ${#stripe_price} -lt 20 ]]; then
+    echo "❌ STRIPE_PRICE_ID : PLACEHOLDER ($stripe_price) — run scripts/sync_prod_secrets_to_local.sh"
+    fail=1
+  fi
 fi
 
 echo ""

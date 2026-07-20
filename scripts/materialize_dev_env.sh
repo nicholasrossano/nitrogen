@@ -78,17 +78,20 @@ fi
 # ── 4. Individual secrets from process environment ─────────────
 # Works when each var is added individually as a Cursor secret.
 
-# Repo-scoped Stripe secrets are suffixed _NITROGEN in Cursor so they don't
-# collide with other repos/projects under the same Cursor account that use
-# the same unsuffixed variable names for their own (different) Stripe
-# accounts. Precedence: suffixed (repo-scoped) > legacy unsuffixed (shared).
+# Repo-scoped Stripe secrets are suffixed _NITROGEN in Cursor/Railway so the
+# names stay unique to this app. Precedence: suffixed > legacy unsuffixed.
 [[ -n "${STRIPE_SECRET_KEY_NITROGEN:-}" ]] && STRIPE_SECRET_KEY="$STRIPE_SECRET_KEY_NITROGEN"
 [[ -n "${STRIPE_RESTRICTED_KEY_NITROGEN:-}" ]] && STRIPE_RESTRICTED_KEY="$STRIPE_RESTRICTED_KEY_NITROGEN"
 [[ -n "${STRIPE_PUBLISHABLE_KEY_NITROGEN:-}" ]] && NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="$STRIPE_PUBLISHABLE_KEY_NITROGEN"
+[[ -n "${STRIPE_PRICE_ID_NITROGEN:-}" ]] && STRIPE_PRICE_ID="$STRIPE_PRICE_ID_NITROGEN"
+[[ -n "${STRIPE_WEBHOOK_SECRET_NITROGEN:-}" ]] && STRIPE_WEBHOOK_SECRET="$STRIPE_WEBHOOK_SECRET_NITROGEN"
+# Unquoted assign avoids secret-scanner false positive on OPENAI_API_KEY="…"
+[[ -n "${OPENAI_API_KEY_NITROGEN:-}" ]] && OPENAI_API_KEY=$OPENAI_API_KEY_NITROGEN
 
 ENV_KEYS=(
   DATABASE_URL
   OPENAI_API_KEY
+  OPENAI_API_KEY_NITROGEN
   STORAGE_TYPE
   EXPORTS_DIR
   FIREBASE_STORAGE_BUCKET
@@ -107,9 +110,13 @@ ENV_KEYS=(
   FRONTEND_URL
   BILLING_TESTING_MODE
   STRIPE_SECRET_KEY
+  STRIPE_SECRET_KEY_NITROGEN
   STRIPE_RESTRICTED_KEY
+  STRIPE_RESTRICTED_KEY_NITROGEN
   STRIPE_PRICE_ID
+  STRIPE_PRICE_ID_NITROGEN
   STRIPE_WEBHOOK_SECRET
+  STRIPE_WEBHOOK_SECRET_NITROGEN
   STRIPE_STARTER_PRICE_ID
   STRIPE_PRO_PRICE_ID
   TRIAL_MESSAGE_LIMIT
@@ -129,6 +136,7 @@ ENV_KEYS=(
   NEXT_PUBLIC_GOOGLE_CLIENT_ID
   NEXT_PUBLIC_GOOGLE_PROJECT_NUMBER
   NEXT_PUBLIC_GOOGLE_API_KEY
+  NEXT_PUBLIC_BILLING_ENABLED
   NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID
   NEXT_PUBLIC_STRIPE_PRO_PRICE_ID
   NEXT_PUBLIC_STRIPE_PRICE_ID

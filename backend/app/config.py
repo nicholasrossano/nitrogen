@@ -12,11 +12,8 @@ class Settings(BaseSettings):
     # Database (no default -- app will fail fast if DATABASE_URL is not set)
     database_url: str
     
-    # OpenAI - Model separation for cost/capability optimization
-    # Shared infra (Railway/Cursor) scopes credentials per-repo with a
-    # _NITROGEN suffix to avoid colliding with other projects on the same
-    # team/account — see scripts/cursor_secrets_manifest.txt. The suffixed
-    # name takes precedence when both are present.
+    # OpenAI — prefer repo-scoped OPENAI_API_KEY_NITROGEN when set
+    # (see scripts/cursor_secrets_manifest.txt); fall back to OPENAI_API_KEY.
     openai_api_key: str = Field(
         default="", validation_alias=AliasChoices("OPENAI_API_KEY_NITROGEN", "OPENAI_API_KEY")
     )

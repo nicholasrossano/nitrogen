@@ -66,7 +66,10 @@ prepare_env() {
   mkdir -p "$LOG_DIR"
   bash "$ROOT/scripts/worktree_setup.sh" 2>/dev/null || true
 
+  # materialize only creates .env when missing; sync refreshes Stripe/billing
+  # from Railway production so placeholders can't stick across restarts.
   if bash "$ROOT/scripts/materialize_dev_env.sh" \
+     && bash "$ROOT/scripts/sync_prod_secrets_to_local.sh" \
      && bash "$ROOT/scripts/check_dev_env.sh" 2>/dev/null; then
     return 0   # full env — backend + frontend
   fi

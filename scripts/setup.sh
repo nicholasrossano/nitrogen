@@ -72,6 +72,10 @@ resolve_env() {
   bash "$ROOT/scripts/worktree_setup.sh" 2>/dev/null || true
   echo "→ Resolving .env…"
   bash "$ROOT/scripts/materialize_dev_env.sh" || true
+  # Always refresh billing-critical keys from Railway when CLI is linked —
+  # materialize leaves an existing .env alone, which is how placeholder Stripe
+  # keys used to survive forever.
+  bash "$ROOT/scripts/sync_prod_secrets_to_local.sh" || true
   load_env
 }
 
