@@ -646,6 +646,11 @@ export function ProjectChatSurface({
             onChatListDirty?.();
           }
 
+          // Onboarding extraction can rename the project / fill type & geography
+          // server-side on early turns; refetch so the header/sidebar don't keep
+          // showing the stale pre-extraction project record.
+          void useProjectStore.getState().loadProject(projectId);
+
           if (resolvedChatId && associatedAssessment) {
             const associationKey = `${resolvedChatId}:${associatedAssessment.instanceId}`;
             if (!associatedAssessmentKeysRef.current.has(associationKey)) {
