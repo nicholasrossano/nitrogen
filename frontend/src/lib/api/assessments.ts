@@ -6,6 +6,8 @@ import {
   parseContentDispositionFilename,
   workflowVersionHeaders,
 } from './client';
+import { DemoDisabledError } from '@/lib/demo/demoApi';
+import { isDemoActive } from '@/lib/demo/demoSession';
 import type {
   BuildItem,
   StageState,
@@ -191,6 +193,12 @@ export const assessmentsApi = {
       { method: 'DELETE', headers: workflowVersionHeaders(workflowVersion) }
     ),
   exportStagedAssessment: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
+    // Raw fetch bypasses fetchApi's demo short-circuit — guard explicitly.
+    if (isDemoActive()) {
+      throw new DemoDisabledError(
+        'Export is disabled in demo mode. Sign up to export your own assessments.',
+      );
+    }
     const token = await getAuthToken();
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;

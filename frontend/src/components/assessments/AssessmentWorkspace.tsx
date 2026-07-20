@@ -45,6 +45,10 @@ import {
 import { AssessmentActivityLogTab } from '@/components/core-chat/AssessmentActivityLogTab';
 import { AssessmentWorkspacePanelChrome } from './AssessmentWorkspacePanelChrome';
 import { assessmentHeaderTitle } from '@/lib/assessmentDisplay';
+import { DEMO_PROJECT_ID, isDemoActive } from '@/lib/demo/demoSession';
+
+const DEMO_EXPORT_DISABLED =
+  'Export is disabled in demo mode. Sign up to export your own assessments.';
 
 function stableStringify(value: unknown): string {
   if (value === null || value === undefined) return 'null';
@@ -715,8 +719,17 @@ export function AssessmentWorkspace({
 
   const handleExport = useCallback(async () => {
     if (isExporting) return;
+
+    // Demo has no auth token — short-circuit before any API call.
+    if (isDemoActive() || projectId === DEMO_PROJECT_ID) {
+      setExportToastSteps([]);
+      setExportToastPhase('disabled');
+      setExportToastError(DEMO_EXPORT_DISABLED);
+      setExportToastOpen(true);
+      return;
+    }
+
     setIsExporting(true);
-    setError(null);
 
     const exportFormat = state?.assessment_definition?.export_format;
     const isReport = exportFormat === 'docx';
@@ -774,7 +787,7 @@ export function AssessmentWorkspace({
       setExportToastSteps((prev) => markExportToastFailed(prev));
       setExportToastPhase('error');
       setExportToastError(message);
-      setError(message);
+      // Keep the workspace mounted — export toast already surfaces the failure.
     } finally {
       setIsExporting(false);
     }
