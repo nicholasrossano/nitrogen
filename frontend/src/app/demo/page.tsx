@@ -3,7 +3,12 @@
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
-import { buildDemoProjectPath } from '@/lib/demo/demoSession';
+import {
+  beginDemoEntry,
+  buildDemoProjectPath,
+  endDemoEntry,
+  enterDemo,
+} from '@/lib/demo/demoSession';
 import { startDemoSession } from '@/lib/demo/demoBoundary';
 import { UniversalLoadingIcon } from '@/components/ui/PageLoader';
 
@@ -17,16 +22,36 @@ export default function DemoEntryPage() {
   const startedRef = useRef(false);
 
   useEffect(() => {
-    if (loading || startedRef.current) return;
+    // Claim demo immediately — do not wait for Firebase. Otherwise a signed-in
+    // visitor can lose the race to ProtectedRoute and land on /login.
+    if (!startedRef.current) {
+      beginDemoEntry();
+      enterDemo();
+    }
+
+    if (loading) {
+      return () => {
+        if (!startedRef.current) endDemoEntry();
+      };
+    }
+
+    if (startedRef.current) return;
     startedRef.current = true;
 
+    let cancelled = false;
     void (async () => {
       await startDemoSession({
         hasUser: Boolean(user),
         signOut,
       });
-      router.replace(buildDemoProjectPath());
+      if (!cancelled) {
+        router.replace(buildDemoProjectPath());
+      }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [loading, user, signOut, router]);
 
   return (

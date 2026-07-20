@@ -50,9 +50,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuth(authInstance);
 
         unsubscribe = onAuthStateChanged(authInstance, (nextUser) => {
-          // Real auth always wins. Demo entry signs out first; if a Firebase
-          // user appears while the demo flag is still set, drop demo and wipe
-          // in-memory stores so fixtures never mix with account data.
+          // Real auth always wins — except while /demo is still bootstrapping
+          // (sign-out may emit a stale user once before null).
           if (nextUser && isDemoActive()) {
             leaveDemoSession();
           }
