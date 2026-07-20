@@ -681,8 +681,8 @@ export const demoChatMetas: DemoChatMeta[] = [
     id: DEMO_CHAT_STAKEHOLDER_ID,
     title: 'Community engagement sequencing',
     created_at: '2026-06-14T08:20:00.000Z',
-    updated_at: '2026-06-15T11:05:00.000Z',
-    message_count: 4,
+    updated_at: '2026-06-16T10:20:00.000Z',
+    message_count: 6,
     compare_project_ids: null,
     project_id: DEMO_PROJECT_ID,
     variable_id: null,
@@ -820,7 +820,7 @@ export const demoChatMessages: Record<string, ChatMessage[]> = {
       id: 'demo-msg-stk-a1',
       role: 'assistant',
       content:
-        'The ESIA prioritizes: (1) **county administration and NEMA**, (2) **adjacent community committees** along the access road, and (3) **KPLC interconnection stakeholders**. Livelihood impacts are concentrated near the northern boundary grazing corridor — schedule those meetings before fencing mobilization.\n\nI can draft a sequenced engagement calendar for the Implementation Plan when you are ready.',
+        'The ESIA prioritizes: (1) **county administration and NEMA**, (2) **adjacent community committees** along the access road, and (3) **KPLC interconnection stakeholders** [Evidence: ESIA Nakuru Solar Storage 2026, p0]. Livelihood impacts are concentrated near the northern boundary grazing corridor; schedule those meetings before fencing mobilization.\n\nI can draft a sequenced engagement calendar for the Implementation Plan when you are ready.',
       widget_type: null,
       widget_data: null,
       sources: [
@@ -829,9 +829,11 @@ export const demoChatMessages: Record<string, ChatMessage[]> = {
           source_title: 'ESIA Nakuru Solar Storage 2026',
           confidence: 0.93,
           evidence_doc_id: 'demo-mat-esia',
-          chunk_index: 40,
+          chunk_id: 'demo-mat-esia-chunk-0',
+          chunk_index: 0,
         },
       ],
+      thinking_lines: ['Opened ESIA stakeholder chapter', 'Ranked engagement by impact timing'],
       completion_meta: { latency_ms: 2200, citation_count: 1, tiers_used: ['evidence'] },
       created_at: '2026-06-14T08:23:00.000Z',
     },
@@ -847,7 +849,7 @@ export const demoChatMessages: Record<string, ChatMessage[]> = {
       id: 'demo-msg-stk-a2',
       role: 'assistant',
       content:
-        'Geotech notes localized expansive clays — foundation design absorbs this; it is **not** a resettlement driver. For community messaging, emphasize that earthworks stay within the leased footprint and that borrow pits (if any) will follow the ESIA reinstatement plan. No new land acquisition is implied by the foundation redesign.',
+        'Geotech notes localized expansive clays; foundation design absorbs this and it is **not** a resettlement driver [Evidence: Geotechnical Report Site A, p0]. For community messaging, emphasize that earthworks stay within the leased footprint and that borrow pits (if any) will follow the ESIA reinstatement plan [Evidence: ESIA Nakuru Solar Storage 2026, p0]. No new land acquisition is implied by the foundation redesign.',
       widget_type: null,
       widget_data: null,
       sources: [
@@ -856,18 +858,60 @@ export const demoChatMessages: Record<string, ChatMessage[]> = {
           source_title: 'Geotechnical Report Site A',
           confidence: 0.87,
           evidence_doc_id: 'demo-mat-geo',
-          chunk_index: 8,
+          chunk_id: 'demo-mat-geo-chunk-0',
+          chunk_index: 0,
         },
         {
           source_type: 'evidence',
           source_title: 'ESIA Nakuru Solar Storage 2026',
           confidence: 0.8,
           evidence_doc_id: 'demo-mat-esia',
-          chunk_index: 55,
+          chunk_id: 'demo-mat-esia-chunk-0',
+          chunk_index: 0,
         },
       ],
       completion_meta: { latency_ms: 1900, citation_count: 2, tiers_used: ['evidence'] },
       created_at: '2026-06-15T11:05:00.000Z',
+    },
+    {
+      id: 'demo-msg-stk-u3',
+      role: 'user',
+      content:
+        'Is there a World Bank Kenya precedent we can show IC for utility-scale storage and renewable integration?',
+      widget_type: null,
+      widget_data: null,
+      created_at: '2026-06-16T10:12:00.000Z',
+    },
+    {
+      id: 'demo-msg-stk-a3',
+      role: 'assistant',
+      // Real World Bank Search API hit (P180465); same connector as search_comparable_projects.
+      content:
+        'Yes. The closest in-country precedent is the **Kenya Green and Resilient Expansion of Energy (GREEN) Program Phase 2** (P180465), board-approved **27 Dec 2023** for about **USD 153.5M** [Comparable Project: Kenya Green and Resilient Expansion of Energy (GREEN) Program Phase 2 Project].\n\nIts objective is to raise Kenya Power System capacity for **energy trade and renewable energy integration**. Component 3 finances KenGen\'s first **BESS of up to 200 MWh** for renewable load-shifting and grid reserves, with related STATCOM and 400 kV Kimuka substation works. For IC, frame Rift Valley\'s 160 MWh BESS as aligned with that integration agenda, then keep local ESIA sequencing (county/NEMA → communities → KPLC) as the site-specific engagement plan.',
+      widget_type: null,
+      widget_data: null,
+      sources: [
+        {
+          source_type: 'worldbank_project',
+          source_title:
+            'Kenya Green and Resilient Expansion of Energy (GREEN) Program Phase 2 Project',
+          source_url:
+            'https://projects.worldbank.org/en/projects-operations/project-detail/P180465',
+          chunk_id: 'P180465',
+          confidence: 0.75,
+          publisher: 'World Bank Projects & Operations',
+        },
+      ],
+      thinking_lines: [
+        'Searched World Bank comparable projects',
+        'Matched Kenya GREEN Phase 2 (P180465) BESS component',
+      ],
+      completion_meta: {
+        latency_ms: 2800,
+        citation_count: 1,
+        tiers_used: ['worldbank_project'],
+      },
+      created_at: '2026-06-16T10:18:00.000Z',
     },
   ],
 };
