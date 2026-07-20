@@ -175,7 +175,23 @@ export const chatApi = {
 
     if (!response.ok || !response.body) {
       const err = await response.json().catch(() => ({ detail: 'Stream failed' }));
-      onError(err.detail?.message || err.detail || `HTTP ${response.status}`);
+      if (response.status === 402) {
+        // Dynamic import avoids a circular dependency (billingStore → api → chat).
+        void import('@/stores/billingStore').then(({ useBillingStore }) => {
+          const detail = err.detail;
+          const context =
+            detail && typeof detail === 'object'
+              ? (detail as Record<string, unknown>)
+              : { message: String(detail ?? 'Payment required') };
+          useBillingStore.getState().triggerPaywall(context);
+          void useBillingStore.getState().fetchBillingStatus();
+        });
+      }
+      const errorMessage =
+        typeof err.detail === 'object' && err.detail && 'message' in err.detail
+          ? String((err.detail as { message?: unknown }).message ?? `HTTP ${response.status}`)
+          : (err.detail || `HTTP ${response.status}`);
+      onError(typeof errorMessage === 'string' ? errorMessage : `HTTP ${response.status}`);
       return;
     }
 
@@ -205,6 +221,9 @@ export const chatApi = {
             break;
           case 'complete':
             onComplete(event);
+            void import('@/stores/billingStore').then(({ useBillingStore }) => {
+              void useBillingStore.getState().fetchBillingStatus();
+            });
             break;
           case 'error':
             onError(event.message);

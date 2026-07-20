@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.core.auth import AuthUser, get_current_user
 from app.core.database import get_db
 from app.core.llm_client import BYOK_SUPPORTED_PROVIDERS, encrypt_api_key, user_has_byok
+from app.core.permissions import ensure_user_exists
 from app.models.subscription import Subscription, UserApiKey
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,9 @@ async def store_api_key(
             status_code=503,
             detail="API-key storage is not configured on this server",
         )
+
+    # Brand-new accounts may not have a users row yet; BYOK keys FK to users.
+    await ensure_user_exists(db, user)
 
     encrypted = encrypt_api_key(body.api_key)
 

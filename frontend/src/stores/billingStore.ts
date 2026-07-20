@@ -36,7 +36,6 @@ export const useBillingStore = create<BillingState>()((set, get) => ({
   loaded: false,
 
   fetchBillingStatus: async () => {
-    if (get().loading) return;
     set({ loading: true });
     try {
       const data = await api.getBillingStatus();

@@ -9,6 +9,7 @@ import { useTourStore } from '@/stores/tourStore';
 import { useBillingStore } from '@/stores/billingStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
+import { isMeteredBillingTier } from '@/lib/billing/isMeteredBillingTier';
 import { api, type Project, type ProjectShare } from '@/lib/api';
 import { projectDisplayName } from '@/lib/projectDisplayName';
 import { ModalShell } from '@/components/ui/ModalShell';
@@ -173,6 +174,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const chatShell = useChatShell();
   const { devMode, setDevMode } = useSettingsStore();
   const showBillingFeatures = useFeatureFlag('billing_features');
+  const billingTier = useBillingStore((s) => s.tier);
+  const billingLoaded = useBillingStore((s) => s.loaded);
+  const showBillingTab = showBillingFeatures || (billingLoaded && isMeteredBillingTier(billingTier));
   const {
     workspaces,
     activeWorkspace,
@@ -313,10 +317,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   }, [projectSettingsLoadedForId, projects, settingsProjectId]);
 
   useEffect(() => {
-    if (!showBillingFeatures && activeSettingsTab === 'billing') {
+    if (!showBillingTab && activeSettingsTab === 'billing') {
       setActiveSettingsTab('workspace');
     }
-  }, [showBillingFeatures, activeSettingsTab]);
+  }, [showBillingTab, activeSettingsTab]);
 
   useEffect(() => {
     if (activeSettingsTab !== 'project' || !settingsProjectId) return;
@@ -614,7 +618,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           {([
             { id: 'workspace' as const, label: 'Workspace', disabled: false, disabledReason: '' },
             { id: 'project' as const, label: 'Project', disabled: false, disabledReason: '' },
-            ...(showBillingFeatures ? [{ id: 'billing' as const, label: 'Billing', disabled: false, disabledReason: '' }] : []),
+            ...(showBillingTab ? [{ id: 'billing' as const, label: 'Billing', disabled: false, disabledReason: '' }] : []),
             { id: 'help' as const, label: 'Help', disabled: false, disabledReason: '' },
             { id: 'developer' as const, label: 'Developer', disabled: false, disabledReason: '' },
           ]).map((item) => {
@@ -988,7 +992,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               </>
             ) : activeSettingsTab === 'billing' ? (
               <>
-                {showBillingFeatures && <PlanBillingSection />}
+                {showBillingTab && <PlanBillingSection />}
               </>
             ) : activeSettingsTab === 'help' ? (
               <>

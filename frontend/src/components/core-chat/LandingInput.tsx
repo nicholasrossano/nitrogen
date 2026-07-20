@@ -5,6 +5,7 @@ import { ArrowUp, Loader2, MessageSquare, Trash2, Paperclip, X } from 'lucide-re
 import type { ChatSession } from '@/types/chat';
 import { ALL_MODULES } from '@/components/chat/AssessmentPicker';
 import { TourAnchor } from '@/components/tour/TourAnchor';
+import { ChatTrialHint } from '@/components/ui/ChatTrialHint';
 import { useVisibleAssessments } from '@/hooks/useFeatureFlag';
 
 
@@ -281,6 +282,7 @@ export function LandingInput({
             </form>
           )}
         </TourAnchor>
+        <ChatTrialHint />
       </div>
     );
   };

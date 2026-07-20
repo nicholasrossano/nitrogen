@@ -29,6 +29,7 @@ import { SnippetCard } from './ResearchPanel';
 import type { ResearchPanelCitation } from './ResearchPanel';
 import { CitationChip } from '@/components/ui/CitationChip';
 import { TourAnchor } from '@/components/tour/TourAnchor';
+import { ChatTrialHint } from '@/components/ui/ChatTrialHint';
 
 export interface ConversationViewProps {
   messages: CoreChatMessage[];
@@ -395,6 +396,7 @@ export function ConversationView({
           ) : (
             composerForm
           )}
+          <ChatTrialHint />
         </div>
       </div>
     </div>

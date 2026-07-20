@@ -14,9 +14,6 @@ import { DuplicateFileDialog, DuplicateEntry } from './DuplicateFileDialog';
 import { ShellNavContext, useChatSidebar } from './ShellContext';
 import { useProjectStore } from '@/stores/projectStore';
 import { useGoogleDriveStore } from '@/stores/googleDriveStore';
-import { useBillingStore } from '@/stores/billingStore';
-import { getBarometerScale } from '@/lib/billing/usageBarometer';
-import { UsageBarometer } from '@/components/ui/UsageBarometer';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useAuth } from '@/lib/auth';
 import { api, type EvidenceDoc, type ProjectMaterial } from '@/lib/api';
@@ -24,8 +21,6 @@ import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_
 import { openGooglePicker } from '@/lib/googlePicker';
 import { UploadActionButton, UploadDropzone } from '@/components/upload/UploadControls';
 import { TourAnchor } from '@/components/tour/TourAnchor';
-import { useFeatureFlag } from '@/hooks/useFeatureFlag';
-import { useDemoMode } from '@/hooks/useDemoMode';
 import {
   CHAT_FLOATING_PANEL_CHROME,
   CHAT_SIDEBAR_COLLAPSED_WIDTH,
@@ -63,30 +58,6 @@ const PROJECT_ITEMS: NavItemConfig[] = [
 const PROJECT_RE = /^\/projects\/([^/]+)/;
 
 const NAV_LABEL_CLASS = 'whitespace-nowrap';
-
-function UsagePill() {
-  const showBillingFeatures = useFeatureFlag('billing_features');
-  const { isDemo } = useDemoMode();
-  const { tier, trialMessagesRemaining, usedUsd, limitUsd, loaded } = useBillingStore();
-  // Demo has no real metering; usage belongs under Billing for signed-in accounts.
-  if (isDemo || !showBillingFeatures || !loaded || tier === 'none' || !tier) return null;
-
-  if (tier === 'trial' && trialMessagesRemaining != null) {
-    return (
-      <div className="w-full px-1.5">
-        <div className="text-[9px] text-text-tertiary text-center whitespace-nowrap">
-          {trialMessagesRemaining} free msg{trialMessagesRemaining !== 1 ? 's' : ''} left
-        </div>
-      </div>
-    );
-  }
-
-  if (getBarometerScale(tier, usedUsd, limitUsd)) {
-    return <UsageBarometer compact />;
-  }
-
-  return null;
-}
 
 export function SideDrawer() {
   const pathname = usePathname();
@@ -739,8 +710,6 @@ export function SideDrawer() {
           <div className="absolute left-[10%] right-[10%] top-1/2 -translate-y-1/2 h-px bg-black/[0.16]" />
         </div>
       )}
-
-      <UsagePill />
 
       <TourAnchor id="welcome-help" as="div" className="w-full">
         <a
