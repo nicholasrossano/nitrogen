@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ProjectWorkbench } from '@/components/chat-shell/ProjectWorkbench';
@@ -11,15 +11,21 @@ function ProjectPageContent() {
   const params = useParams();
   const router = useRouter();
   const projectId = params.id as string;
+  const isDemoProject = projectId === DEMO_PROJECT_ID;
+  // sessionStorage is client-only — gate demo routes until after mount so SSR matches hydration.
+  const [demoSessionOk, setDemoSessionOk] = useState(false);
 
   useEffect(() => {
-    // After leaving demo, a stale /projects/demo-… URL must not keep painting fixtures.
-    if (projectId === DEMO_PROJECT_ID && !isDemoActive()) {
+    if (!isDemoProject) return;
+    if (!isDemoActive()) {
+      setDemoSessionOk(false);
       router.replace('/');
+      return;
     }
-  }, [projectId, router]);
+    setDemoSessionOk(true);
+  }, [isDemoProject, router]);
 
-  if (projectId === DEMO_PROJECT_ID && !isDemoActive()) {
+  if (isDemoProject && !demoSessionOk) {
     return (
       <div className="flex flex-1 items-center justify-center min-h-0 bg-surface">
         <PageLoader label="" />

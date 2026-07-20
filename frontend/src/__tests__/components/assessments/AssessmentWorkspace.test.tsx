@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { AssessmentWorkspace } from '@/components/assessments/AssessmentWorkspace';
 import { api } from '@/lib/api';
+import { isDemoActive } from '@/lib/demo/demoSession';
 
 jest.mock('@/lib/api', () => ({
   api: {
@@ -16,6 +17,11 @@ jest.mock('@/lib/api', () => ({
     publishAssessmentReport: jest.fn(),
     uploadProjectMaterial: jest.fn(),
   },
+}));
+
+jest.mock('@/lib/demo/demoSession', () => ({
+  DEMO_PROJECT_ID: 'demo-rift-valley-solar',
+  isDemoActive: jest.fn(() => false),
 }));
 
 jest.mock('@/components/assessments/stages/EditableTableStage', () => ({
@@ -39,6 +45,7 @@ jest.mock('@/lib/widgetRegistry', () => ({
 }));
 
 const mockedApi = api as jest.Mocked<typeof api>;
+const mockedIsDemoActive = isDemoActive as jest.MockedFunction<typeof isDemoActive>;
 
 function buildWorkflowState(overrides?: Partial<ReturnType<typeof baseWorkflowState>>) {
   return {
@@ -131,6 +138,7 @@ function baseWorkflowState() {
 describe('AssessmentWorkspace', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockedIsDemoActive.mockReturnValue(false);
     mockedApi.getAssessmentAgentStatus.mockResolvedValue({
       run_state: 'needs_review',
       current_stage_id: 'plan',
@@ -462,6 +470,42 @@ describe('AssessmentWorkspace', () => {
     expect(createObjectURL).toHaveBeenCalled();
     expect(screen.getByText('Export ready')).toBeInTheDocument();
     expect(screen.getByText('Assessment export')).toBeInTheDocument();
+  });
+
+  it('shows a demo-disabled toast instead of calling export', async () => {
+    mockedIsDemoActive.mockReturnValue(true);
+    mockedApi.getStagedAssessmentWorkflowState.mockResolvedValue(buildWorkflowState({
+      assessment_definition: {
+        ...buildWorkflowState().assessment_definition,
+        export_format: 'xlsx',
+      },
+      workflow_state: {
+        ...buildWorkflowState().workflow_state,
+        stages: {
+          ...buildWorkflowState().workflow_state.stages,
+          plan: {
+            status: 'confirmed',
+            confirmed_at: '2026-04-22T12:10:00Z',
+            confirmed_by: 'user-1',
+            confirmed_by_email: 'user@example.com',
+            data: { widget_data: { groups: [] } },
+          },
+        },
+      },
+    }) as any);
+
+    render(<AssessmentWorkspace instanceId="instance-1" assessmentId="implementation_plan" projectId="initiative-1" />);
+    await screen.findByText('Implementation plan widget');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Export disabled')).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Export is disabled in demo mode/i)).toBeInTheDocument();
+    expect(screen.queryByText('Export failed')).not.toBeInTheDocument();
+    expect(screen.getByText('Implementation plan widget')).toBeInTheDocument();
+    expect(mockedApi.exportStagedAssessment).not.toHaveBeenCalled();
   });
 
   it('reverts final approval to an approvable state', async () => {
