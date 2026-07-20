@@ -436,117 +436,125 @@ export function StatusOverviewTable({
     }
   };
 
+  const showAddCategory = !readOnly;
+  const showRefresh = !hideRefreshButton;
+  const showActions = showAddCategory || showRefresh;
+
   return (
     <>
-      <div className="mt-2 rounded-xl border border-divider bg-white">
-        {error ? <p className="px-4 pt-3 text-sm text-red-500">{error}</p> : null}
+      <div className="mt-2">
+        <div className="rounded-xl border border-divider bg-white">
+          {error ? <p className="px-4 pt-3 text-sm text-red-500">{error}</p> : null}
 
-        {isLoading ? (
-          <p className="px-4 py-4 text-sm text-text-tertiary">Loading status overview...</p>
-        ) : (
-          <div className="divide-y divide-divider">
-            {rows.map((row) => {
-              const meta = STATUS_META[row.effective_status];
-              const confidenceMeta = CONFIDENCE_META[row.confidence];
-              const sourceEntries = (row.retrieved_sources ?? [])
-                .filter((src): src is ProjectStatusSourceReference => Boolean(src?.source_title && src?.source_type))
-                .slice(0, 3);
-              const assessmentEntries = (row.relevant_assessments ?? []).slice(0, 3);
-              const infoSummary = (row.criteria_summary || '').trim();
-              return (
-                <div key={row.category_key} className="px-4 py-3">
-                  <div className="flex items-stretch gap-4">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1">
-                        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">
-                          {row.label}
-                        </p>
-                        <div className="flex items-center">
-                          {infoSummary ? (
-                            <Tooltip content={infoSummary} width={280}>
-                              <button
-                                type="button"
-                                className="rounded-lg p-1.5 text-text-tertiary hover:bg-surface-subtle hover:text-text-primary"
-                                aria-label={`About ${row.label}`}
-                              >
-                                <Info className="h-3.5 w-3.5" />
-                              </button>
-                            </Tooltip>
-                          ) : null}
-                          {!readOnly ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => void openEditEditor(row)}
-                                className="rounded-lg p-1.5 text-text-tertiary hover:bg-surface-subtle hover:text-text-primary"
-                                aria-label={`Edit ${row.label}`}
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setPendingDelete(row)}
-                                disabled={deletingKey === row.category_key}
-                                className="rounded-lg p-1.5 text-text-tertiary hover:bg-surface-subtle hover:text-red-600"
-                                aria-label={`Delete ${row.label}`}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </>
-                          ) : null}
+          {isLoading ? (
+            <p className="px-4 py-4 text-sm text-text-tertiary">Loading status overview...</p>
+          ) : (
+            <div className="divide-y divide-divider">
+              {rows.map((row) => {
+                const meta = STATUS_META[row.effective_status];
+                const confidenceMeta = CONFIDENCE_META[row.confidence];
+                const sourceEntries = (row.retrieved_sources ?? [])
+                  .filter((src): src is ProjectStatusSourceReference => Boolean(src?.source_title && src?.source_type))
+                  .slice(0, 3);
+                const assessmentEntries = (row.relevant_assessments ?? []).slice(0, 3);
+                const infoSummary = (row.criteria_summary || '').trim();
+                return (
+                  <div key={row.category_key} className="px-4 py-3">
+                    <div className="flex items-stretch gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1">
+                          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">
+                            {row.label}
+                          </p>
+                          <div className="flex items-center">
+                            {infoSummary ? (
+                              <Tooltip content={infoSummary} width={280}>
+                                <button
+                                  type="button"
+                                  className="rounded-lg p-1.5 text-text-tertiary hover:bg-surface-subtle hover:text-text-primary"
+                                  aria-label={`About ${row.label}`}
+                                >
+                                  <Info className="h-3.5 w-3.5" />
+                                </button>
+                              </Tooltip>
+                            ) : null}
+                            {!readOnly ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => void openEditEditor(row)}
+                                  className="rounded-lg p-1.5 text-text-tertiary hover:bg-surface-subtle hover:text-text-primary"
+                                  aria-label={`Edit ${row.label}`}
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setPendingDelete(row)}
+                                  disabled={deletingKey === row.category_key}
+                                  className="rounded-lg p-1.5 text-text-tertiary hover:bg-surface-subtle hover:text-red-600"
+                                  aria-label={`Delete ${row.label}`}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </>
+                            ) : null}
+                          </div>
                         </div>
+                        <DecisionSignalList
+                          signals={row.decision_signals}
+                          fallbackText={row.critical_insight || row.rationale}
+                        />
                       </div>
-                      <DecisionSignalList
-                        signals={row.decision_signals}
-                        fallbackText={row.critical_insight || row.rationale}
-                      />
-                    </div>
 
-                    <div className="flex shrink-0 flex-col items-end self-stretch">
-                      <div className="flex flex-col items-end gap-1.5 pt-0.5">
-                        <StatusCapsule size="md" className={meta.className}>{meta.label}</StatusCapsule>
-                        <StatusCapsule size="md" className={confidenceMeta.className}>{confidenceMeta.label}</StatusCapsule>
-                      </div>
-                      {(sourceEntries.length > 0 || assessmentEntries.length > 0) ? (
-                        <div className="mt-auto pt-2">
-                          <StatusSourcesMenu
-                            sources={sourceEntries}
-                            assessments={assessmentEntries}
-                            onOpenDocument={onOpenDocument}
-                            onOpenAssessment={onOpenWorkspaceAssessment}
-                          />
+                      <div className="flex shrink-0 flex-col items-end self-stretch">
+                        <div className="flex flex-col items-end gap-1.5 pt-0.5">
+                          <StatusCapsule size="md" className={meta.className}>{meta.label}</StatusCapsule>
+                          <StatusCapsule size="md" className={confidenceMeta.className}>{confidenceMeta.label}</StatusCapsule>
                         </div>
-                      ) : null}
+                        {(sourceEntries.length > 0 || assessmentEntries.length > 0) ? (
+                          <div className="mt-auto pt-2">
+                            <StatusSourcesMenu
+                              sources={sourceEntries}
+                              assessments={assessmentEntries}
+                              onOpenDocument={onOpenDocument}
+                              onOpenAssessment={onOpenWorkspaceAssessment}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        <div className="flex items-center justify-between gap-3 border-t border-divider px-4 py-3">
-          {!readOnly ? (
-            <button type="button" onClick={openCreateEditor} className="btn-compact-neutral">
-              <Plus className="h-3.5 w-3.5" />
-              Add category
-            </button>
-          ) : (
-            <span />
+                );
+              })}
+            </div>
           )}
-          {!hideRefreshButton ? (
-            <button
-              type="button"
-              onClick={() => void onRefresh()}
-              disabled={isRefreshing || readOnly}
-              className="btn-compact-neutral"
-              title={readOnly ? 'View-only access cannot refresh status overview' : 'Refresh status overview'}
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-              {isRefreshing ? 'Refreshing...' : 'Refresh'}
-            </button>
-          ) : null}
         </div>
+
+        {showActions ? (
+          <div className="mt-2 flex items-center justify-between gap-3">
+            {showAddCategory ? (
+              <button type="button" onClick={openCreateEditor} className="btn-compact-neutral">
+                <Plus className="h-3.5 w-3.5" />
+                Add category
+              </button>
+            ) : (
+              <span />
+            )}
+            {showRefresh ? (
+              <button
+                type="button"
+                onClick={() => void onRefresh()}
+                disabled={isRefreshing || readOnly}
+                className="btn-compact-neutral"
+                title={readOnly ? 'View-only access cannot refresh status overview' : 'Refresh status overview'}
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                {isRefreshing ? 'Refreshing...' : 'Refresh'}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {editorOpen ? (
