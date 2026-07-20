@@ -178,9 +178,15 @@ export function BillingOptionsPanel({ onByokSaved }: BillingOptionsPanelProps) {
           <p className="text-[11px] text-text-tertiary mb-3">
             Includes up to {usageCapLabel} of platform AI usage per billing period.
           </p>
+          {stripeMisconfigured && (
+            <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 mb-2">
+              Stripe isn&apos;t configured for this environment yet.
+            </p>
+          )}
           <button
             onClick={handleCheckout}
             disabled={checkoutLoading || !canCheckout}
+            title={stripeMisconfigured ? "Stripe isn't configured for this environment yet" : undefined}
             className="mt-auto w-full text-xs font-medium rounded-lg px-3 py-2 bg-accent text-white enabled:hover:bg-accent/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
           >
             {checkoutLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
