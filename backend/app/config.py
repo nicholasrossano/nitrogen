@@ -151,6 +151,22 @@ class Settings(BaseSettings):
     # Encryption key for BYOK API keys at rest (Fernet key)
     api_key_encryption_key: str = ""
 
+    # Product feedback (Help → Submit feedback). Recipient stays server-side only.
+    feedback_to_email: str = "nicholas.rossano@gmail.com"
+    # Prefer Resend when set; otherwise SMTP is used when configured.
+    resend_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("RESEND_API_KEY_NITROGEN", "RESEND_API_KEY"),
+    )
+    # Resend "from". onboarding@resend.dev works until a custom domain is verified.
+    feedback_from_email: str = "Nitrogen AI <onboarding@resend.dev>"
+    # Optional SMTP (e.g. Gmail app password) when Resend is not used.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_use_tls: bool = True
+
     @computed_field
     @property
     def billing_enabled(self) -> bool:

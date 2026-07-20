@@ -16,6 +16,7 @@ import { chatApi } from './chat';
 import { assessmentsApi } from './assessments';
 import { sharingApi } from './sharing';
 import { billingApi } from './billing';
+import { feedbackApi } from './feedback';
 
 export const api = {
   ...projectsApi,
@@ -25,5 +26,6 @@ export const api = {
   ...assessmentsApi,
   ...sharingApi,
   ...billingApi,
+  ...feedbackApi,
   triggerBlobDownload,
 };

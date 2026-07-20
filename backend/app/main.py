@@ -18,7 +18,7 @@ from app.config import get_settings  # noqa: E402
 from app.core.database import engine  # noqa: E402
 from app.core.log_sanitizer import sanitize_text, sanitize_exception  # noqa: E402
 import app.core.project_activity_listeners  # noqa: F401, E402  # registers ORM hooks for project sort
-from app.api import legacy_assumptions, legacy_initiatives, evidence, exports, assessment_catalog, chat, project_plan, project_materials, shares, users, google_drive, billing, api_keys, assessment_workflow, workspaces, variables, project_status, projects  # noqa: E402
+from app.api import legacy_assumptions, legacy_initiatives, evidence, exports, assessment_catalog, chat, project_plan, project_materials, shares, users, google_drive, billing, api_keys, assessment_workflow, workspaces, variables, project_status, projects, feedback  # noqa: E402
 from app.domain.energy.api import lcoe, carbon, pvwatts  # noqa: E402
 from app.mcp import get_mcp_http_app  # noqa: E402
 
@@ -208,6 +208,7 @@ app.include_router(pvwatts.router, prefix="/api/v1", tags=["pvwatts"])
 app.include_router(google_drive.router, prefix="/api/v1", tags=["google-drive"])
 app.include_router(billing.router, prefix="/api/v1", tags=["billing"])
 app.include_router(api_keys.router, prefix="/api/v1", tags=["api-keys"])
+app.include_router(feedback.router, prefix="/api/v1", tags=["feedback"])
 app.mount("/mcp", get_mcp_http_app())
 
 

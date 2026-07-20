@@ -1,8 +1,8 @@
 'use client';
 
-import { X, FlaskConical, CreditCard, Loader2, ExternalLink, UserPlus, Check, ChevronDown, CircleHelp, RotateCcw, Key, Server } from 'lucide-react';
+import { X, FlaskConical, CreditCard, Loader2, ExternalLink, UserPlus, Check, ChevronDown, CircleHelp, RotateCcw, Key, Server, MessageSquare } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -35,6 +35,18 @@ import { leaveDemoForSignup } from '@/lib/demo/demoBoundary';
 import { DEMO_PROJECT_ID, isDemoActive } from '@/lib/demo/demoSession';
 
 const DEMO_BILLING_CONTACT_EMAIL = 'nicholas.rossano@gmail.com';
+/** Used for mailto fallback only. Never render this string in the UI. */
+const FEEDBACK_MAILTO_ADDRESS = DEMO_BILLING_CONTACT_EMAIL;
+
+function openFeedbackMailto(title: string, message: string, replyEmail?: string | null) {
+  const subject = encodeURIComponent(title);
+  const bodyLines = [message];
+  if (replyEmail) {
+    bodyLines.push('', `Reply-to: ${replyEmail}`);
+  }
+  const body = encodeURIComponent(bodyLines.join('\n'));
+  window.location.href = `mailto:${FEEDBACK_MAILTO_ADDRESS}?subject=${subject}&body=${body}`;
+}
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -177,6 +189,141 @@ function DemoBillingSection({ onClose }: { onClose: () => void }) {
         </button>
       </div>
     </>
+  );
+}
+
+function FeedbackFormSection() {
+  const { user } = useAuth();
+  const [expanded, setExpanded] = useState(false);
+  const [title, setTitle] = useState('');
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
+  const [sent, setSent] = useState(false);
+  const [sentViaMailto, setSentViaMailto] = useState(false);
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    const trimmedTitle = title.trim();
+    const trimmedMessage = message.trim();
+    if (!trimmedTitle || !trimmedMessage || sending) return;
+
+    setSending(true);
+    setError('');
+    try {
+      const status = await api.getFeedbackStatus();
+      if (status.email_configured) {
+        await api.submitFeedback(trimmedMessage, trimmedTitle);
+        setSentViaMailto(false);
+      } else {
+        openFeedbackMailto(trimmedTitle, trimmedMessage, user?.email);
+        setSentViaMailto(true);
+      }
+      setSent(true);
+      setTitle('');
+      setMessage('');
+    } catch (err) {
+      // Server email misconfigured or provider down: fall back to the user's mail client.
+      const detail = err instanceof Error ? err.message : '';
+      if (
+        detail.includes('not configured')
+        || detail.includes('Could not send feedback')
+        || detail.includes('HTTP 502')
+        || detail.includes('HTTP 503')
+      ) {
+        openFeedbackMailto(trimmedTitle, trimmedMessage, user?.email);
+        setSentViaMailto(true);
+        setSent(true);
+        setTitle('');
+        setMessage('');
+      } else {
+        setError(detail || 'Could not send feedback. Please try again.');
+      }
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <SettingsSection title="Support">
+      <button
+        type="button"
+        onClick={() => setExpanded((prev) => !prev)}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-subtle/60 transition-colors"
+      >
+        <AccentIconBadge icon={MessageSquare} size="md" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-text-primary">Submit feedback or request support</p>
+          <p className="text-xs text-text-tertiary mt-0.5 leading-snug">
+            Nitrogen AI is a community-run project. I&apos;ll do my best to respond when I can.
+          </p>
+        </div>
+        <ChevronDown
+          className={`w-3.5 h-3.5 shrink-0 text-text-tertiary transition-transform ${
+            expanded ? 'rotate-180' : ''
+          }`}
+        />
+      </button>
+
+      {expanded && (
+        <div className="px-4 pb-3 pt-0 space-y-3 border-t border-stroke-subtle">
+          {sent ? (
+            <div className="rounded-lg border border-stroke-subtle bg-surface-subtle/60 px-3 py-2.5 space-y-2 mt-3">
+              <p className="text-xs text-text-secondary leading-relaxed">
+                {sentViaMailto
+                  ? 'Your email app should open with the message ready to send. This is a community-run project, so responses may take a bit.'
+                  : 'Thanks. Your note was sent. This is a community-run project, so responses may take a bit.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSent(false);
+                  setSentViaMailto(false);
+                }}
+                className="text-[11px] text-accent hover:underline"
+              >
+                Send another
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={(event) => void handleSubmit(event)} className="space-y-2 mt-3">
+              <input
+                type="text"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                maxLength={200}
+                placeholder="Title"
+                className="w-full rounded-lg border border-stroke-subtle bg-white px-3 py-2 text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-accent"
+                disabled={sending}
+                required
+              />
+              <textarea
+                value={message}
+                onChange={(event) => setMessage(event.target.value)}
+                rows={4}
+                maxLength={5000}
+                placeholder="Bugs, ideas, questions, whatever you want to share."
+                className="w-full resize-y rounded-lg border border-stroke-subtle bg-white px-3 py-2 text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-accent"
+                disabled={sending}
+                required
+              />
+              {error && <p className="text-[10px] text-red-500">{error}</p>}
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={sending || !title.trim() || !message.trim()}
+                  className="btn-primary !px-3 !py-1.5 !text-xs !rounded-lg inline-flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {sending && <Loader2 className="w-3 h-3 animate-spin" />}
+                  {sending ? 'Sending…' : 'Send feedback'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+    </SettingsSection>
   );
 }
 
@@ -1153,6 +1300,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     <ExternalLink className="w-3.5 h-3.5 shrink-0 text-text-tertiary" />
                   </a>
                 </SettingsSection>
+
+                <FeedbackFormSection />
 
                 <div className="space-y-1">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary px-1 pb-1">
