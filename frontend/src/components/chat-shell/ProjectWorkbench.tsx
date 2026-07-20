@@ -45,6 +45,7 @@ import {
   writePersistedFloatSession,
 } from '@/lib/floatTabSession';
 import { activeEditorContextFromWidget } from '@/lib/activeEditorContext';
+import { debugChatFlow } from '@/lib/chatDebug';
 import { api, type AssessmentInstance, type FieldContext, type ProjectMaterial, type Variable } from '@/lib/api';
 import { projectDisplayName } from '@/lib/projectDisplayName';
 import { discardEphemeralAssessmentInstance } from '@/lib/assessmentEngagement';
@@ -1469,6 +1470,11 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
         detail.variableId
         ?? fieldContext?.variable_id
         ?? null;
+      debugChatFlow('investigate-draft-queued', {
+        surface: 'project-workbench',
+        field_name: fieldContext?.field_name ?? null,
+        has_variable_id: Boolean(variableId),
+      });
       revealChatFloorForInvestigate();
       if (variableId) {
         setFocusedVariableId(variableId);
