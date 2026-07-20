@@ -193,6 +193,11 @@ export function ConversationView({
     setDraftTag(pendingDraft.fieldContext?.label ?? null);
     setDraftFieldContext(pendingDraft.fieldContext ?? null);
     setDraftModelInputsContext(pendingDraft.modelInputsContext ?? null);
+    debugChatFlow('pending-draft-applied', {
+      surface: 'conversation-view',
+      request_id: pendingDraft.requestId,
+      field_name: pendingDraft.fieldContext?.field_name ?? null,
+    });
     setTimeout(() => textareaRef.current?.focus(), 0);
     onPendingDraftHandled?.();
   }, [pendingDraft, onPendingDraftHandled]);
