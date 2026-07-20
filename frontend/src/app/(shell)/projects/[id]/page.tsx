@@ -19,7 +19,9 @@ function ProjectPageContent() {
     if (!isDemoProject) return;
     if (!isDemoActive()) {
       setDemoSessionOk(false);
-      router.replace('/');
+      // Re-enter through /demo so the session flag is set; do not bounce to
+      // / → /chat → /login (that looked like "/demo went to login").
+      router.replace('/demo');
       return;
     }
     setDemoSessionOk(true);

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
-import { DEMO_SESSION_EVENT, DEMO_PROJECT_ID, isDemoActive } from '@/lib/demo/demoSession';
+import { DEMO_SESSION_EVENT, isDemoActive, isDemoProjectPath } from '@/lib/demo/demoSession';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -33,11 +33,14 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   useEffect(() => {
     if (!demoChecked || loading) return;
     if (!user && !demoActive) {
-      // Leaving demo briefly clears the flag before /login navigation — never
-      // capture the demo project path as returnUrl or sign-in lands back on fixtures.
-      const isDemoPath = pathname?.includes(DEMO_PROJECT_ID);
+      // Orphaned / shared demo project URLs must re-bootstrap via /demo —
+      // never send visitors to login when they asked for the sample project.
+      if (isDemoProjectPath(pathname)) {
+        router.replace('/demo');
+        return;
+      }
       const returnUrl =
-        pathname && pathname !== '/' && !isDemoPath
+        pathname && pathname !== '/'
           ? `?returnUrl=${encodeURIComponent(pathname)}`
           : '';
       router.push(`/login${returnUrl}`);

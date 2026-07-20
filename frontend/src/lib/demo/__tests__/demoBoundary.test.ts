@@ -1,4 +1,12 @@
-import { enterDemo, exitDemo, isDemoActive } from '@/lib/demo/demoSession';
+import {
+  beginDemoEntry,
+  endDemoEntry,
+  enterDemo,
+  exitDemo,
+  isDemoActive,
+  isDemoEntryInProgress,
+  isDemoProjectPath,
+} from '@/lib/demo/demoSession';
 import {
   leaveDemoSession,
   resetClientStateForDemoBoundary,
@@ -10,18 +18,34 @@ import { useWorkspaceStore } from '@/stores/workspaceStore';
 describe('demoBoundary', () => {
   beforeEach(() => {
     exitDemo();
+    endDemoEntry();
     resetClientStateForDemoBoundary();
   });
 
   afterEach(() => {
     exitDemo();
+    endDemoEntry();
   });
 
-  it('startDemoSession sets the demo flag after optional sign-out', async () => {
-    const signOut = jest.fn().mockResolvedValue(undefined);
+  it('startDemoSession sets the demo flag before awaiting sign-out', async () => {
+    let sawDemoDuringSignOut = false;
+    const signOut = jest.fn().mockImplementation(async () => {
+      sawDemoDuringSignOut = isDemoActive();
+    });
     await startDemoSession({ hasUser: true, signOut });
     expect(signOut).toHaveBeenCalledTimes(1);
+    expect(sawDemoDuringSignOut).toBe(true);
     expect(isDemoActive()).toBe(true);
+    expect(isDemoEntryInProgress()).toBe(false);
+  });
+
+  it('leaveDemoSession is a no-op while demo entry is in progress', () => {
+    beginDemoEntry();
+    enterDemo();
+    leaveDemoSession();
+    expect(isDemoActive()).toBe(true);
+    expect(isDemoEntryInProgress()).toBe(true);
+    endDemoEntry();
   });
 
   it('leaveDemoSession clears demo flag and in-memory stores', async () => {
@@ -51,5 +75,12 @@ describe('demoBoundary', () => {
     const before = localStorage.getItem('nitrogen-active-workspace-id');
     enterDemo();
     expect(localStorage.getItem('nitrogen-active-workspace-id')).toBe(before);
+  });
+
+  it('isDemoProjectPath recognizes the fixture project route', () => {
+    expect(isDemoProjectPath('/projects/demo-rift-valley-solar')).toBe(true);
+    expect(isDemoProjectPath('/projects/demo-rift-valley-solar/')).toBe(true);
+    expect(isDemoProjectPath('/projects/other')).toBe(false);
+    expect(isDemoProjectPath('/demo')).toBe(false);
   });
 });
