@@ -70,7 +70,9 @@ export function UsageBarometer({
         />
       </div>
       {disclaimer && (
-        <p className="text-[10px] text-text-tertiary text-center pt-0.5">{disclaimer}</p>
+        <p className="mx-auto max-w-[22rem] text-center text-balance text-[10px] leading-snug text-text-tertiary pt-1">
+          {disclaimer}
+        </p>
       )}
     </div>
   );
