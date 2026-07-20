@@ -4,14 +4,14 @@ import { useEffect, useState } from 'react';
 import { ExternalLink, Loader2 } from 'lucide-react';
 import { api, type Variable } from '@/lib/api';
 import { CHAT_FLOATING_PANEL_CHROME } from '@/components/ui/chatSidebarLayout';
+import { formatVariableValue } from '@/lib/formatVariableValue';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import { getCached, swrFetch, swrKeys } from '@/lib/swrCache';
 import { VariableStatusCapsule } from '@/components/variables/VariableStatusCapsule';
 
-function formatValue(value: unknown, unit?: string | null): string {
+function formatValue(value: unknown, unit?: string | null, valueType?: Variable['value_type']): string {
   if (value === null || value === undefined || value === '') return '—';
-  const base = typeof value === 'object' ? JSON.stringify(value) : String(value);
-  return unit ? `${base} ${unit}` : base;
+  return formatVariableValue(value, unit, valueType);
 }
 
 interface ProjectVariablesPanelProps {
@@ -112,8 +112,8 @@ export function ProjectVariablesPanel({
                     <span className="text-xs font-medium text-text-primary leading-snug">{row.label}</span>
                     <VariableStatusCapsule status={row.status} className="shrink-0" />
                   </div>
-                  <p className="mt-1 text-[11px] text-text-secondary truncate" title={formatValue(row.value, row.unit)}>
-                    {formatValue(row.value, row.unit)}
+                  <p className="mt-1 text-[11px] text-text-secondary truncate" title={formatValue(row.value, row.unit, row.value_type)}>
+                    {formatValue(row.value, row.unit, row.value_type)}
                   </p>
                 </button>
               </li>

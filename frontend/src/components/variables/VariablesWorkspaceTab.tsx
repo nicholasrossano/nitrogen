@@ -10,6 +10,7 @@ import { CompanionSidePanel, COMPANION_SIDE_PANEL_WIDTH } from '@/components/ui/
 import { CustomDropdown } from '@/components/ui/CustomDropdown';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
+import { formatVariableValue } from '@/lib/formatVariableValue';
 import {
   api,
   type Variable,
@@ -50,29 +51,13 @@ const STATUS_OPTIONS: Array<{ value: '' | VariableStatus; label: string }> = [
   { value: 'missing', label: 'Missing' },
 ];
 
-function formatNumeric(value: number, valueType?: Variable['value_type']): string {
-  if (!Number.isFinite(value)) return String(value);
-  if (valueType === 'currency') {
-    return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
-  }
-  if (Number.isInteger(value)) {
-    return value.toLocaleString();
-  }
-  return value.toLocaleString(undefined, { maximumFractionDigits: 6 });
-}
-
 function isMissingValue(value: any): boolean {
   return value === null || value === undefined || value === '';
 }
 
+/** Re-export shared formatter — used by VariableDetailWidget and tests. */
 export function formatValue(value: any, unit?: string | null, valueType?: Variable['value_type']): string {
-  if (isMissingValue(value)) return '';
-  const formatted = typeof value === 'number'
-    ? formatNumeric(value, valueType)
-    : typeof value === 'object'
-      ? JSON.stringify(value)
-      : String(value);
-  return unit ? `${formatted} ${unit}` : formatted;
+  return formatVariableValue(value, unit, valueType);
 }
 
 function MissingValuePill() {

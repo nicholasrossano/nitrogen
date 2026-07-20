@@ -57,6 +57,7 @@ export const DEMO_VAR_DISCOUNT = 'demo-var-discount';
 export const DEMO_VAR_GRID_EF = 'demo-var-grid-ef';
 export const DEMO_VAR_PPA = 'demo-var-ppa-tariff';
 export const DEMO_VAR_BESS = 'demo-var-bess-hours';
+export const DEMO_VAR_BESS_ENERGY = 'demo-var-bess-mwh';
 
 export const demoWorkspace: Workspace = {
   id: DEMO_WORKSPACE_ID,
@@ -433,7 +434,8 @@ export const demoVariables: Variable[] = [
     DEMO_VAR_CAPACITY_FACTOR,
     'capacity_factor',
     'Capacity factor',
-    0.22,
+    // Percentage points (22%), matching extraction convention — not a 0–1 fraction.
+    22,
     '%',
     'percent',
     'validated',
@@ -444,32 +446,33 @@ export const demoVariables: Variable[] = [
   makeVariable(
     DEMO_VAR_CAPEX,
     'capex_per_kw',
-    'CAPEX per kW',
+    'All-in CAPEX per kW',
     1100,
     'USD/kW',
     'currency',
     'validated',
     ['lcoe_model'],
-    'All-in EPC + BESS package; excludes IDC.',
+    'Blended PV + 4h BESS package ($980/kW PV + ~$120/kW BESS-equivalent); excludes IDC.',
     'james.mwangi@riftvalley.energy',
   ),
   makeVariable(
     DEMO_VAR_OM,
     'annual_om',
-    'Annual O&M',
+    'Annual O&M (PV)',
     18,
     'USD/kW-yr',
     'currency',
     'extracted',
     ['lcoe_model'],
-    'Extracted from EPC O&M schedule appendix.',
+    'PV O&M from EPC schedule; BESS O&M / augmentation modeled separately.',
     DEMO_OWNER_EMAIL,
   ),
   makeVariable(
     DEMO_VAR_DISCOUNT,
     'discount_rate',
     'Discount rate (WACC)',
-    0.08,
+    // Percentage points (8%), matching extraction convention — not a 0–1 fraction.
+    8,
     '%',
     'percent',
     'assumed',
@@ -486,7 +489,7 @@ export const demoVariables: Variable[] = [
     'number',
     'validated',
     ['carbon_model'],
-    'Kenya grid EF (combined margin) for renewable displacement.',
+    'Kenya combined-margin grid EF (operating + build), ~2024 vintage for renewable displacement.',
     DEMO_OWNER_EMAIL,
   ),
   makeVariable(
@@ -498,7 +501,7 @@ export const demoVariables: Variable[] = [
     'currency',
     'extracted',
     ['lcoe_model'],
-    'Indicative level from KPLC term sheet draft.',
+    'Indicative level from KPLC term sheet draft (non-binding; escalation not yet in LCOE).',
     'james.mwangi@riftvalley.energy',
   ),
   makeVariable(
@@ -510,7 +513,19 @@ export const demoVariables: Variable[] = [
     'number',
     'validated',
     ['lcoe_model', 'solar_estimate'],
-    '40 MW / 160 MWh configuration.',
+    'Discharge duration at rated power for the 40 MW / 160 MWh block.',
+    DEMO_OWNER_EMAIL,
+  ),
+  makeVariable(
+    DEMO_VAR_BESS_ENERGY,
+    'bess_energy_mwh',
+    'BESS energy capacity',
+    160,
+    'MWh',
+    'number',
+    'validated',
+    ['lcoe_model', 'solar_estimate'],
+    'Nameplate storage energy; pairs with 40 MW / 4h duration.',
     DEMO_OWNER_EMAIL,
   ),
 ];
@@ -547,7 +562,7 @@ export const demoVariableComments: Record<string, VariableComment[]> = {
       id: 'demo-vc-cf-2',
       variable_id: DEMO_VAR_CAPACITY_FACTOR,
       project_id: DEMO_PROJECT_ID,
-      body: 'Luis asked for a P90 case at 0.20 — worth a sensitivity run before IC.',
+      body: 'Luis asked for a P90 case at 20% — worth a sensitivity run before IC.',
       created_by_email: 'priya.shah@climatepartners.org',
       created_at: WEEK_AGO,
     },
@@ -557,8 +572,18 @@ export const demoVariableComments: Record<string, VariableComment[]> = {
       id: 'demo-vc-capex-1',
       variable_id: DEMO_VAR_CAPEX,
       project_id: DEMO_PROJECT_ID,
-      body: 'EPC indicative at $980/kW PV + ~$120/kW-equivalent for BESS package. Holding $1,100/kW blended until binding bids.',
+      body: 'EPC indicative at $980/kW PV + ~$120/kW-equivalent for the 4h BESS. Holding $1,100/kW all-in blended until binding bids — not PV-only.',
       created_by_email: 'james.mwangi@riftvalley.energy',
+      created_at: WEEK_AGO,
+    },
+  ],
+  [DEMO_VAR_OM]: [
+    {
+      id: 'demo-vc-om-1',
+      variable_id: DEMO_VAR_OM,
+      project_id: DEMO_PROJECT_ID,
+      body: 'This line is PV O&M only. Battery augmentation / replacement sits in a separate opex schedule for IC.',
+      created_by_email: DEMO_OWNER_EMAIL,
       created_at: WEEK_AGO,
     },
   ],
@@ -585,9 +610,19 @@ export const demoVariableComments: Record<string, VariableComment[]> = {
       id: 'demo-vc-ppa-1',
       variable_id: DEMO_VAR_PPA,
       project_id: DEMO_PROJECT_ID,
-      body: 'Term sheet is non-binding. Escalation at CPI-US with a 2% floor — not yet modeled in LCOE.',
+      body: 'Term sheet is non-binding at $0.072/kWh. Escalation at CPI-US with a 2% floor — not yet modeled in LCOE.',
       created_by_email: 'james.mwangi@riftvalley.energy',
       created_at: '2026-06-13T10:15:00.000Z',
+    },
+  ],
+  [DEMO_VAR_GRID_EF]: [
+    {
+      id: 'demo-vc-ef-1',
+      variable_id: DEMO_VAR_GRID_EF,
+      project_id: DEMO_PROJECT_ID,
+      body: 'Using Kenya combined-margin EF (~0.48 tCO₂e/MWh, ~2024). Confirm OM vs BM weights before registering a carbon methodology.',
+      created_by_email: DEMO_OWNER_EMAIL,
+      created_at: WEEK_AGO,
     },
   ],
 };

@@ -5,32 +5,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ChatPanelWidgetShell } from '@/components/core-chat/ChatPanelWidgetShell';
 import { api, type Variable } from '@/lib/api';
+import { formatVariableValue } from '@/lib/formatVariableValue';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import { VariableCommentsThread } from './VariableCommentsThread';
 
 const VARIABLE_UPDATED_EVENT = 'nitrogen:variable-updated';
 const VARIABLE_DELETED_EVENT = 'nitrogen:variable-deleted';
 const variableCache = new Map<string, Variable>();
-
-function formatVariableValue(
-  value: any,
-  unit?: string | null,
-  valueType?: Variable['value_type'],
-): string {
-  if (value === null || value === undefined || value === '') return '';
-  const formatted = typeof value === 'number'
-    ? (
-        valueType === 'currency'
-          ? value.toLocaleString(undefined, { maximumFractionDigits: 2 })
-          : Number.isInteger(value)
-            ? value.toLocaleString()
-            : value.toLocaleString(undefined, { maximumFractionDigits: 6 })
-      )
-    : typeof value === 'object'
-      ? JSON.stringify(value)
-      : String(value);
-  return unit ? `${formatted} ${unit}` : formatted;
-}
 
 interface VariablesChatPanelProps {
   projectId: string;
