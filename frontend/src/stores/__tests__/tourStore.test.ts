@@ -12,6 +12,8 @@ describe('tourStore', () => {
         activeStepId: null,
         activeGroup: null,
         replayNonce: 0,
+        activeUid: 'user-a',
+        byUid: {},
       });
     });
   });
@@ -33,6 +35,31 @@ describe('tourStore', () => {
       'welcome-workspace',
     ]);
     expect(useTourStore.getState().completedStepIds).not.toContain('welcome-context-stack');
+    expect(useTourStore.getState().byUid['user-a']).toEqual({
+      completedStepIds: ['welcome-composer', 'welcome-workspace'],
+      welcomeCompleted: true,
+    });
+  });
+
+  it('keeps per-account prefs across bindAccount switches and logout', () => {
+    act(() => {
+      useTourStore.getState().finishWelcome(['welcome-composer']);
+      useTourStore.getState().bindAccount('user-b');
+    });
+    expect(useTourStore.getState().welcomeCompleted).toBe(false);
+    expect(useTourStore.getState().byUid['user-a']?.welcomeCompleted).toBe(true);
+
+    act(() => {
+      useTourStore.getState().bindAccount(null);
+    });
+    expect(useTourStore.getState().activeUid).toBeNull();
+    expect(useTourStore.getState().welcomeCompleted).toBe(false);
+
+    act(() => {
+      useTourStore.getState().bindAccount('user-a');
+    });
+    expect(useTourStore.getState().welcomeCompleted).toBe(true);
+    expect(useTourStore.getState().completedStepIds).toEqual(['welcome-composer']);
   });
 
   it('skip welcome only completes currently visible tips', () => {

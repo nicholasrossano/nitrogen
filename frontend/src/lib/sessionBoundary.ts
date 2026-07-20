@@ -1,10 +1,12 @@
 /**
  * Auth / account session boundary.
  *
- * Workspace, last-project, and tour prefs are browser-local and historically
- * not scoped by Firebase UID. Crossing accounts in the same browser must clear
- * them so a new user does not inherit another account's IDs (404 Workspace /
- * Project not found) or skip the welcome tour.
+ * Workspace and last-project prefs are browser-local and not scoped by Firebase
+ * UID. Crossing accounts in the same browser must clear them so a new user does
+ * not inherit another account's IDs (404 Workspace / Project not found).
+ *
+ * Tour completion is scoped per Firebase UID in `tourStore.byUid` and restored
+ * on bind — logout / account switch must not wipe another account's progress.
  */
 
 import { useProjectStore } from '@/stores/projectStore';
@@ -63,24 +65,6 @@ function clearRoutingPreferences(): void {
   }
 }
 
-function clearTourPreferences(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    // Drop persisted tour state so Zustand rehydrate cannot resurrect another
-    // account's welcomeCompleted and skip tips for a new signup.
-    localStorage.removeItem('nitrogen-tour');
-  } catch {
-    // ignore
-  }
-  useTourStore.setState({
-    completedStepIds: [],
-    welcomeCompleted: false,
-    welcomeActive: false,
-    activeStepId: null,
-    activeGroup: null,
-  });
-}
-
 function readStoredAuthUid(): string | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -102,13 +86,13 @@ function writeStoredAuthUid(uid: string | null): void {
 
 /**
  * Call on every Firebase auth emission.
- * - Same UID: no-op (preserves prefs across refresh / re-login).
+ * - Same UID: re-bind tour if sign-out cleared the active surface.
  * - First stamp (prevUid null): record uid + scrub orphan routing keys only.
- *   Do NOT wipe in-memory stores or tour — that blanked Overview / Home title
+ *   Do NOT wipe in-memory project stores — that blanked Overview / Home title
  *   on live projects that had already loaded for the signed-in user.
- * - UID change: clear stores, routing prefs, and tour (true account switch).
- * - Sign-out (null): clear in-memory stores only; keep stored UID so the same
- *   user can sign back in without losing prefs.
+ * - UID change: clear stores + routing prefs; bind that account's tour prefs.
+ * - Sign-out (null): clear in-memory stores + unbind tour; keep stored UID and
+ *   per-account tour map so the same user can sign back in without re-touring.
  */
 export function syncAuthSessionBoundary(nextUid: string | null): void {
   if (typeof window === 'undefined') return;
@@ -129,10 +113,18 @@ export function syncAuthSessionBoundary(nextUid: string | null): void {
     } catch {
       // ignore
     }
+    // Unbind active tour surface; byUid buckets stay so re-login restores them.
+    useTourStore.getState().bindAccount(null);
     return;
   }
 
-  if (prevUid === nextUid) return;
+  if (prevUid === nextUid) {
+    // Re-login after sign-out left activeUid null — restore this account's tour.
+    if (useTourStore.getState().activeUid !== nextUid) {
+      useTourStore.getState().bindAccount(nextUid);
+    }
+    return;
+  }
 
   if (prevUid === null) {
     // First stamp in this browser. Logout keeps AUTH_UID_KEY, so a later
@@ -140,12 +132,13 @@ export function syncAuthSessionBoundary(nextUid: string | null): void {
     // is what clears ghost workspace/project IDs, not first stamp.
     clearRoutingPreferences();
     writeStoredAuthUid(nextUid);
+    useTourStore.getState().bindAccount(nextUid);
     return;
   }
 
   // True account switch (different Firebase uid).
   resetClientStores();
   clearRoutingPreferences();
-  clearTourPreferences();
   writeStoredAuthUid(nextUid);
+  useTourStore.getState().bindAccount(nextUid);
 }

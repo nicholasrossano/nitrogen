@@ -22,10 +22,12 @@ describe('syncAuthSessionBoundary', () => {
       activeStepId: null,
       activeGroup: null,
       replayNonce: 0,
+      activeUid: null,
+      byUid: {},
     });
   });
 
-  it('stamps the first uid without wiping live project state or tour', () => {
+  it('stamps the first uid and binds tour without wiping live project state', () => {
     localStorage.setItem(LAST_PROJECT_KEY, 'proj-orphan');
     localStorage.setItem(ACTIVE_WORKSPACE_KEY, 'ws-orphan');
     useTourStore.setState({ welcomeCompleted: true, completedStepIds: ['welcome-workspace'] });
@@ -39,19 +41,29 @@ describe('syncAuthSessionBoundary', () => {
     expect(localStorage.getItem(AUTH_UID_KEY)).toBe('user-a');
     expect(localStorage.getItem(LAST_PROJECT_KEY)).toBeNull();
     expect(localStorage.getItem(ACTIVE_WORKSPACE_KEY)).toBeNull();
-    // Returning users must keep tour + already-loaded project Home chrome.
+    // Orphan pre-auth completion is claimed for this uid.
+    expect(useTourStore.getState().activeUid).toBe('user-a');
     expect(useTourStore.getState().welcomeCompleted).toBe(true);
     expect(useTourStore.getState().completedStepIds).toEqual(['welcome-workspace']);
+    expect(useTourStore.getState().byUid['user-a']?.welcomeCompleted).toBe(true);
     expect(useProjectStore.getState().project?.id).toBe('proj-live');
     expect(useProjectStore.getState().projectsById['proj-live']?.title).toBe('Live Project');
   });
 
-  it('clears cross-account prefs when the firebase uid changes', () => {
+  it('restores each account\'s tour prefs when the firebase uid changes', () => {
     localStorage.setItem(AUTH_UID_KEY, 'user-a');
     localStorage.setItem(LAST_PROJECT_KEY, 'proj-a');
     localStorage.setItem(ACTIVE_WORKSPACE_KEY, 'ws-a');
     localStorage.setItem(LAST_TOUCHED_WORKSPACE_KEY, 'ws-a');
-    useTourStore.setState({ welcomeCompleted: true, completedStepIds: ['welcome-workspace'] });
+    useTourStore.setState({
+      activeUid: 'user-a',
+      welcomeCompleted: true,
+      completedStepIds: ['welcome-workspace'],
+      byUid: {
+        'user-a': { welcomeCompleted: true, completedStepIds: ['welcome-workspace'] },
+        'user-b': { welcomeCompleted: false, completedStepIds: [] },
+      },
+    });
     useWorkspaceStore.setState({
       workspaces: [{ id: 'ws-a' } as any],
       activeWorkspace: { id: 'ws-a' } as any,
@@ -67,25 +79,50 @@ describe('syncAuthSessionBoundary', () => {
     expect(localStorage.getItem(LAST_PROJECT_KEY)).toBeNull();
     expect(localStorage.getItem(ACTIVE_WORKSPACE_KEY)).toBeNull();
     expect(localStorage.getItem(LAST_TOUCHED_WORKSPACE_KEY)).toBeNull();
+    expect(useTourStore.getState().activeUid).toBe('user-b');
     expect(useTourStore.getState().welcomeCompleted).toBe(false);
     expect(useTourStore.getState().completedStepIds).toEqual([]);
+    // User A's progress must survive the switch.
+    expect(useTourStore.getState().byUid['user-a']?.welcomeCompleted).toBe(true);
     expect(useWorkspaceStore.getState().activeWorkspace).toBeNull();
     expect(useProjectStore.getState().project).toBeNull();
     expect(useProjectStore.getState().projectsById).toEqual({});
+
+    syncAuthSessionBoundary('user-a');
+    expect(useTourStore.getState().activeUid).toBe('user-a');
+    expect(useTourStore.getState().welcomeCompleted).toBe(true);
+    expect(useTourStore.getState().completedStepIds).toEqual(['welcome-workspace']);
   });
 
   it('is a no-op for the same uid so refresh keeps prefs', () => {
     localStorage.setItem(AUTH_UID_KEY, 'user-a');
     localStorage.setItem(LAST_PROJECT_KEY, 'proj-a');
+    useTourStore.setState({
+      activeUid: 'user-a',
+      welcomeCompleted: true,
+      completedStepIds: ['welcome-workspace'],
+      byUid: {
+        'user-a': { welcomeCompleted: true, completedStepIds: ['welcome-workspace'] },
+      },
+    });
 
     syncAuthSessionBoundary('user-a');
 
     expect(localStorage.getItem(LAST_PROJECT_KEY)).toBe('proj-a');
+    expect(useTourStore.getState().welcomeCompleted).toBe(true);
   });
 
-  it('clears memory on sign-out but keeps the stored uid for same-user re-login', () => {
+  it('clears memory on sign-out but restores tour for the same user on re-login', () => {
     localStorage.setItem(AUTH_UID_KEY, 'user-a');
     localStorage.setItem(LAST_PROJECT_KEY, 'proj-a');
+    useTourStore.setState({
+      activeUid: 'user-a',
+      welcomeCompleted: true,
+      completedStepIds: ['welcome-workspace'],
+      byUid: {
+        'user-a': { welcomeCompleted: true, completedStepIds: ['welcome-workspace'] },
+      },
+    });
     useWorkspaceStore.setState({
       workspaces: [{ id: 'ws-a' } as any],
       activeWorkspace: { id: 'ws-a' } as any,
@@ -96,6 +133,14 @@ describe('syncAuthSessionBoundary', () => {
     expect(localStorage.getItem(AUTH_UID_KEY)).toBe('user-a');
     expect(localStorage.getItem(LAST_PROJECT_KEY)).toBe('proj-a');
     expect(useWorkspaceStore.getState().activeWorkspace).toBeNull();
+    expect(useTourStore.getState().activeUid).toBeNull();
+    expect(useTourStore.getState().welcomeCompleted).toBe(false);
+    expect(useTourStore.getState().byUid['user-a']?.welcomeCompleted).toBe(true);
+
+    syncAuthSessionBoundary('user-a');
+    expect(useTourStore.getState().activeUid).toBe('user-a');
+    expect(useTourStore.getState().welcomeCompleted).toBe(true);
+    expect(useTourStore.getState().completedStepIds).toEqual(['welcome-workspace']);
   });
 
   it('does not wipe client stores on signed-out auth while demo is active', async () => {
