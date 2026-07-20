@@ -31,6 +31,10 @@ logger = logging.getLogger(__name__)
 _price_usd: float | None = None
 _fetched_at: float | None = None
 _refresh_lock = asyncio.Lock()
+# Distinct from cache staleness: True only after Stripe itself rejects the
+# configured secret key (bad/placeholder key), so the catalog endpoint can
+# tell the frontend "misconfigured" apart from "just hasn't refreshed yet".
+_key_invalid: bool = False
 
 
 def _ttl_seconds(settings: Settings) -> float:
@@ -52,14 +56,25 @@ def is_cache_stale(settings: Settings | None = None) -> bool:
 
 def clear_price_cache() -> None:
     """Test helper."""
-    global _price_usd, _fetched_at
+    global _price_usd, _fetched_at, _key_invalid
     _price_usd = None
     _fetched_at = None
+    _key_invalid = False
+
+
+def is_key_invalid() -> bool:
+    """True once Stripe has explicitly rejected STRIPE_SECRET_KEY (401).
+
+    Stays False (unknown) for transient/network failures — only an actual
+    auth rejection means the deployment is misconfigured rather than
+    momentarily unreachable.
+    """
+    return _key_invalid
 
 
 async def refresh_stripe_price(*, force: bool = False, settings: Settings | None = None) -> bool:
     """Fetch the live Stripe Price for settings.stripe_price_id. Returns True on success."""
-    global _price_usd, _fetched_at
+    global _price_usd, _fetched_at, _key_invalid
 
     settings = settings or get_settings()
 
@@ -81,7 +96,17 @@ async def refresh_stripe_price(*, force: bool = False, settings: Settings | None
                 return False
             _price_usd = round(unit_amount / 100, 2)
             _fetched_at = time.monotonic()
+            _key_invalid = False
             return True
+        except stripe.AuthenticationError:
+            # Loud and specific: a placeholder/wrong STRIPE_SECRET_KEY is a
+            # config bug, not a transient blip — don't bury it as a generic warning.
+            _key_invalid = True
+            logger.error(
+                "STRIPE_SECRET_KEY was rejected by Stripe (401) — billing/checkout will fail "
+                "until a valid key is set. This deployment's env is misconfigured."
+            )
+            return False
         except Exception:
             logger.warning("Failed to refresh Stripe price; keeping prior cache/fallback", exc_info=True)
             return False

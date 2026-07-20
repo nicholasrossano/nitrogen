@@ -69,13 +69,20 @@ export function BillingOptionsPanel({ onByokSaved }: BillingOptionsPanelProps) {
       });
   }, []);
 
-  const canCheckout = Boolean(catalog?.billing_enabled && catalog.stripe_price_id);
+  const stripeMisconfigured = catalog?.stripe_key_valid === false;
+  const canCheckout = Boolean(
+    catalog?.billing_enabled && catalog.stripe_price_id && !stripeMisconfigured,
+  );
   const priceLabel = catalog ? formatUsd(catalog.subscription_price_usd) : '—';
   const usageCapLabel = catalog ? formatUsd(catalog.subscription_usage_limit_usd) : '—';
 
   const handleCheckout = async () => {
     if (!canCheckout) {
-      setError('Subscription is not configured on this deployment.');
+      setError(
+        stripeMisconfigured
+          ? 'Stripe is misconfigured on this deployment (invalid API key). Contact support.'
+          : 'Subscription is not configured on this deployment.',
+      );
       return;
     }
     setError(null);
@@ -87,8 +94,8 @@ export function BillingOptionsPanel({ onByokSaved }: BillingOptionsPanelProps) {
         catalog?.stripe_price_id ?? undefined,
       );
       window.location.href = url;
-    } catch {
-      setError('Could not start checkout. Please try again.');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not start checkout. Please try again.');
       setCheckoutLoading(false);
     }
   };
