@@ -282,6 +282,7 @@ function makeInstance(
   status: AssessmentInstance['status'],
   startedAt: string,
   isPlanComplete: boolean,
+  chatId: string | null = null,
 ): AssessmentInstance {
   return {
     id,
@@ -295,7 +296,7 @@ function makeInstance(
     started_by_email: DEMO_OWNER_EMAIL,
     started_at: startedAt,
     updated_at: NOW,
-    chat_id: null,
+    chat_id: chatId,
     deliverable: null,
     workflow_state: null,
     is_plan_complete: isPlanComplete,
@@ -303,10 +304,10 @@ function makeInstance(
 }
 
 export const demoAssessmentInstances: AssessmentInstance[] = [
-  makeInstance(DEMO_INSTANCE_LCOE, 'lcoe_model', 'LCOE Model', 'complete', TWO_WEEKS_AGO, true),
-  makeInstance(DEMO_INSTANCE_CARBON, 'carbon_model', 'Carbon Calculator', 'complete', TWO_WEEKS_AGO, true),
+  makeInstance(DEMO_INSTANCE_LCOE, 'lcoe_model', 'LCOE Model', 'complete', TWO_WEEKS_AGO, true, DEMO_CHAT_LCOE_ID),
+  makeInstance(DEMO_INSTANCE_CARBON, 'carbon_model', 'Carbon Calculator', 'complete', TWO_WEEKS_AGO, true, DEMO_CHAT_CARBON_ID),
   makeInstance(DEMO_INSTANCE_SOLAR, 'solar_estimate', 'Solar Production Estimate', 'complete', WEEK_AGO, true),
-  makeInstance(DEMO_INSTANCE_STAKEHOLDER, 'stakeholder_assessment', 'Stakeholder Assessment', 'complete', WEEK_AGO, true),
+  makeInstance(DEMO_INSTANCE_STAKEHOLDER, 'stakeholder_assessment', 'Stakeholder Assessment', 'complete', WEEK_AGO, true, DEMO_CHAT_STAKEHOLDER_ID),
   makeInstance(DEMO_INSTANCE_IMPL, 'implementation_plan', 'Implementation Plan', 'draft', NOW, false),
 ];
 
