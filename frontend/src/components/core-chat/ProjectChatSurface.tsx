@@ -22,6 +22,7 @@ import {
 } from '@/components/editor/EditorPanelHeader';
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
 import { projectDisplayName } from '@/lib/projectDisplayName';
+import { shouldFireOnboardingAutoSend } from '@/lib/onboardingAutoSend';
 import type { CoreChatMessage, ChatSummary } from '@/types/chat';
 import type { ProposedValueApplyRequest } from '@/components/widgets/ProposedValueWidget';
 import { debugChatFlow } from '@/lib/chatDebug';
@@ -858,17 +859,24 @@ export function ProjectChatSurface({
   // a normal research query.
   const autoSendHandledRef = useRef(false);
   useEffect(() => {
-    if (!autoSendOnMount) return;
-    if (autoSendHandledRef.current) return;
-    if (!restoreSettled) return;
-    if (!allowInitialProjectOnboarding) return;
-    if (loadingChat) return;
-    if (initialChatId || currentChatId) return;
-    if (localMessages.length > 0) return;
+    const seed = autoSendOnMount;
+    if (!seed) return;
+    if (!shouldFireOnboardingAutoSend({
+      autoSendOnMount: seed,
+      alreadyHandled: autoSendHandledRef.current,
+      restoreSettled,
+      allowInitialProjectOnboarding,
+      loadingChat,
+      initialChatId,
+      currentChatId,
+      localMessageCount: localMessages.length,
+    })) {
+      return;
+    }
 
     autoSendHandledRef.current = true;
     onAutoSendOnMountHandled?.();
-    void handleSend(autoSendOnMount);
+    void handleSend(seed);
   }, [
     allowInitialProjectOnboarding,
     autoSendOnMount,

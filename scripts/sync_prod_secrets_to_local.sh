@@ -46,31 +46,9 @@ get_nitrogen() {
   grep -E "^${1}=" "$TMP" | head -1 | cut -d= -f2- || true
 }
 
-is_placeholder_stripe_secret() {
-  local v="$1"
-  [[ -z "$v" ]] && return 0
-  [[ "$v" == sk_test_local* || "$v" == sk_live_local* ]] && return 0
-  [[ "$v" == *placeholder* || "$v" == *changeme* ]] && return 0
-  [[ ${#v} -lt 80 ]] && return 0
-  [[ "$v" != sk_live_* && "$v" != sk_test_* && "$v" != rk_live_* && "$v" != rk_test_* ]] && return 0
-  return 1
-}
-
-is_placeholder_price() {
-  local v="$1"
-  [[ -z "$v" ]] && return 0
-  [[ "$v" == price_local* ]] && return 0
-  [[ "$v" != price_* ]] && return 0
-  [[ ${#v} -lt 20 ]] && return 0
-  return 1
-}
-
-# Guardrail: refuse to proceed if Railway still has unsuffixed Stripe keys.
-PLAIN_STRIPE="$(grep -E '^STRIPE_(SECRET_KEY|PRICE_ID|WEBHOOK_SECRET|PUBLISHABLE_KEY|RESTRICTED_KEY)=' "$TMP" | cut -d= -f1 || true)"
-if [[ -n "$PLAIN_STRIPE" ]]; then
-  echo "❌ Railway has unsuffixed Stripe vars (use STRIPE_*_NITROGEN only):" >&2
-  echo "$PLAIN_STRIPE" | sed 's/^/   /' >&2
-  echo "   Delete them: railway variable delete <KEY> --service nitrogen" >&2
+# Guardrails (unsuffixed keys + placeholder secret/price) — shared with unit tests.
+if ! python3 "$ROOT/scripts/stripe_secret_guards.py" --check-kv "$TMP"; then
+  echo "   Delete unsuffixed keys: railway variable delete <KEY> --service nitrogen" >&2
   echo "   Keep only STRIPE_*_NITROGEN." >&2
   exit 1
 fi
@@ -98,15 +76,6 @@ if [[ -n "$WHSEC" ]]; then
   echo "  STRIPE_WEBHOOK_SECRET_NITROGEN prefix=${WHSEC:0:8}… len=${#WHSEC}"
 else
   echo "  STRIPE_WEBHOOK_SECRET_NITROGEN MISSING"
-fi
-
-if is_placeholder_stripe_secret "$SECRET"; then
-  echo "❌ Railway STRIPE_SECRET_KEY_NITROGEN missing/placeholder — refuse to sync" >&2
-  exit 1
-fi
-if is_placeholder_price "$PRICE"; then
-  echo "❌ Railway STRIPE_PRICE_ID_NITROGEN missing/placeholder — refuse to sync" >&2
-  exit 1
 fi
 
 if [[ "$CHECK_ONLY" == "1" ]]; then

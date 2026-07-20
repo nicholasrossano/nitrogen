@@ -10,6 +10,7 @@ import {
   resolveActiveProjectId,
   writeLastProjectId,
 } from '@/components/chat-shell/ChatShellProvider';
+import { decideChatLandingNavigation } from '@/lib/chatLandingNavigation';
 import { api, type Project } from '@/lib/api';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { PageLoader } from '@/components/ui/PageLoader';
@@ -85,26 +86,30 @@ function ChatLandingContent() {
 
   useEffect(() => {
     if (isDemoActive()) return;
-    if (!projectsLoaded || !activeWorkspace?.id || projectsError) return;
+    if (!activeWorkspace?.id) return;
 
-    const goToProject = (projectId: string) => {
-      writeLastProjectId(projectId);
-      router.replace(buildProjectWorkbenchPath(projectId, {
+    const decision = decideChatLandingNavigation({
+      projectsLoaded,
+      projectsError,
+      resolvedProjectId: resolveActiveProjectId('/chat', legacyProjectParam, projects),
+      projectCount: projects.length,
+    });
+
+    if (decision.kind === 'hold' || decision.kind === 'show-error') return;
+
+    if (decision.kind === 'goto-project') {
+      writeLastProjectId(decision.projectId);
+      router.replace(buildProjectWorkbenchPath(decision.projectId, {
         chat: activeChatId,
         panel: panelParam,
         assessment: assessmentParam,
       }));
-    };
-
-    const resolved = resolveActiveProjectId('/chat', legacyProjectParam, projects);
-    if (resolved) {
-      goToProject(resolved);
       return;
     }
 
-    // No projects yet — send them through the real onboarding route instead of
-    // auto-creating an empty workbench that skips the describe step.
-    if (projects.length === 0) {
+    if (decision.kind === 'goto-onboarding') {
+      // No projects yet — send them through the real onboarding route instead of
+      // auto-creating an empty workbench that skips the describe step.
       router.replace('/projects/new');
       return;
     }

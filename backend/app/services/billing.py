@@ -15,6 +15,21 @@ logger = logging.getLogger(__name__)
 _VALID_PAID_TIERS = frozenset({"individual", "starter", "pro"})
 
 
+def _sget(obj: Any, key: str, default: Any = None) -> Any:
+    """Dict-or-StripeObject-safe lookup.
+
+    Recent stripe-python `StripeObject`/`ListObject` instances no longer
+    subclass `dict`, so `.get()` isn't a real method on them — Python falls
+    through to `__getattr__`, which raises `AttributeError` for any name that
+    isn't a literal key (this crashed `/billing/status` with `AttributeError:
+    get`). Item access (`obj["key"]`) still works on both, but `getattr` is
+    the safe read for keys that may be absent.
+    """
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
 def _tier_from_stripe_price(price_id: str | None, price_obj: Any | None = None) -> str | None:
     if price_id:
         if price_id == settings.stripe_price_id:
@@ -201,16 +216,16 @@ async def fulfill_checkout_session(user_id: str, session_id: str, db: AsyncSessi
     """Client-return fulfillment: apply Checkout Session when webhooks lag or fail."""
     stripe.api_key = settings.stripe_secret_key
     session = stripe.checkout.Session.retrieve(session_id, expand=["subscription"])
-    meta_uid = (session.get("metadata") or {}).get("user_id") or session.get("client_reference_id")
+    meta_uid = _sget(_sget(session, "metadata") or {}, "user_id") or _sget(session, "client_reference_id")
     if meta_uid and meta_uid != user_id:
         raise ValueError("Checkout session does not belong to this user")
 
-    customer_id = session.get("customer")
+    customer_id = _sget(session, "customer")
     sub = await ensure_subscription(user_id, db)
     if customer_id and not sub.stripe_customer_id:
         sub.stripe_customer_id = customer_id
 
-    subscription_obj = session.get("subscription")
+    subscription_obj = _sget(session, "subscription")
     if isinstance(subscription_obj, str):
         subscription_obj = stripe.Subscription.retrieve(subscription_obj)
     if subscription_obj:
@@ -236,8 +251,8 @@ async def reconcile_subscription_from_stripe(user_id: str, db: AsyncSession) -> 
         status="all",
         limit=5,
     )
-    candidates = list(listing.get("data") or [])
-    active = next((s for s in candidates if s.get("status") in ("active", "trialing", "past_due")), None)
+    candidates = list(_sget(listing, "data") or [])
+    active = next((s for s in candidates if _sget(s, "status") in ("active", "trialing", "past_due")), None)
     if not active:
         return False
     _apply_stripe_subscription(sub, active)
@@ -361,10 +376,10 @@ async def handle_webhook_event(payload: bytes, sig_header: str, db: AsyncSession
         await _handle_payment_failed(data, db)
 
 
-async def _handle_checkout_completed(data: dict, db: AsyncSession) -> None:
-    customer_id = data.get("customer")
-    subscription_id = data.get("subscription")
-    user_id = (data.get("metadata") or {}).get("user_id") or data.get("client_reference_id")
+async def _handle_checkout_completed(data: Any, db: AsyncSession) -> None:
+    customer_id = _sget(data, "customer")
+    subscription_id = _sget(data, "subscription")
+    user_id = _sget(_sget(data, "metadata") or {}, "user_id") or _sget(data, "client_reference_id")
     if not customer_id and not user_id:
         return
 
@@ -394,9 +409,9 @@ async def _handle_checkout_completed(data: dict, db: AsyncSession) -> None:
     await db.flush()
 
 
-async def _handle_subscription_updated(data: dict, db: AsyncSession) -> None:
-    sub_id = data.get("id")
-    customer_id = data.get("customer")
+async def _handle_subscription_updated(data: Any, db: AsyncSession) -> None:
+    sub_id = _sget(data, "id")
+    customer_id = _sget(data, "customer")
     result = await db.execute(
         select(Subscription).where(Subscription.stripe_subscription_id == sub_id)
     )
@@ -414,8 +429,8 @@ async def _handle_subscription_updated(data: dict, db: AsyncSession) -> None:
     await db.flush()
 
 
-async def _handle_subscription_deleted(data: dict, db: AsyncSession) -> None:
-    sub_id = data.get("id")
+async def _handle_subscription_deleted(data: Any, db: AsyncSession) -> None:
+    sub_id = _sget(data, "id")
     result = await db.execute(
         select(Subscription).where(Subscription.stripe_subscription_id == sub_id)
     )
@@ -426,8 +441,8 @@ async def _handle_subscription_deleted(data: dict, db: AsyncSession) -> None:
     await db.flush()
 
 
-async def _handle_payment_failed(data: dict, db: AsyncSession) -> None:
-    customer_id = data.get("customer")
+async def _handle_payment_failed(data: Any, db: AsyncSession) -> None:
+    customer_id = _sget(data, "customer")
     if not customer_id:
         return
     result = await db.execute(

@@ -11,6 +11,7 @@ import {
   DriveLinkedFile,
 } from '@/lib/api';
 import { getCached, setCached, swrKeys } from '@/lib/swrCache';
+import { ApiError } from '@/lib/api/client';
 
 function notifyProjectSignalsUpdated(projectId?: string | null) {
   if (typeof window === 'undefined' || !projectId) return;
@@ -25,6 +26,12 @@ interface ProjectState {
   project: Project | null;
   /** Warm by-id cache so chrome (title) never blanks on soft nav / project switch. */
   projectsById: Record<string, Project>;
+  /**
+   * Permanent (404/403) load failures keyed by project id — "this account has
+   * no access", not "retry me". Consumers must stop re-requesting and show an
+   * error/escape hatch instead of spinning forever once an id lands here.
+   */
+  projectAccessErrors: Record<string, { status: number; message: string }>;
   memo: MemoContent | null;
   memoId: string | null;
   evidenceDocs: EvidenceDoc[];
@@ -163,6 +170,7 @@ function rememberProject(
 export const useProjectStore = create<ProjectState>((set, get) => ({
   project: null,
   projectsById: {},
+  projectAccessErrors: {},
   memo: null,
   memoId: null,
   evidenceDocs: [],
@@ -178,6 +186,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   setDraftMessage: (msg) => set({ draftMessage: msg }),
 
   loadProject: async (id: string) => {
+    // A prior permanent failure for this exact id means "no access" — do not
+    // keep hammering the API on every re-render/rehydrate effect.
+    if (get().projectAccessErrors[id]) return;
+
     const requestId = ++latestLoadProjectRequest;
     const cached =
       get().projectsById[id]
@@ -200,14 +212,25 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         'Project took too long to load. Please refresh and try again.',
       );
       if (requestId !== latestLoadProjectRequest) return;
-      rememberProject(set, project, { loading: false, error: null });
+      const { [id]: _cleared, ...remainingErrors } = get().projectAccessErrors;
+      rememberProject(set, project, { loading: false, error: null, projectAccessErrors: remainingErrors });
     } catch (error) {
       if (requestId !== latestLoadProjectRequest) return;
-      // Keep warm cache painted; only surface error on cold miss.
-      set({
-        error: error instanceof Error ? error.message : 'Failed to load project',
-        loading: false,
-      });
+      const status = error instanceof ApiError ? error.status : null;
+      const message = error instanceof Error ? error.message : 'Failed to load project';
+      // 404 (not found) and 403 (no access) are permanent for this account —
+      // record them so callers can show a real error instead of retrying
+      // forever. Anything else (network blip, 5xx) stays transient/retryable.
+      if (status === 404 || status === 403) {
+        set((state) => ({
+          projectAccessErrors: { ...state.projectAccessErrors, [id]: { status, message } },
+          error: message,
+          loading: false,
+        }));
+      } else {
+        // Keep warm cache painted; only surface error on cold miss.
+        set({ error: message, loading: false });
+      }
     }
   },
 

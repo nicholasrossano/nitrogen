@@ -161,4 +161,19 @@ describe('syncAuthSessionBoundary', () => {
     );
     exitDemo();
   });
+
+  it('keeps live Home title/Overview cache when a late auth null is not a real sign-out after stamp', () => {
+    // First stamp must not clear in-memory project state that Home already painted.
+    useProjectStore.setState({
+      project: { id: 'proj-live', title: 'Acme Hydro' } as any,
+      projectsById: { 'proj-live': { id: 'proj-live', title: 'Acme Hydro' } as any },
+    });
+    syncAuthSessionBoundary('user-live');
+    expect(useProjectStore.getState().project?.title).toBe('Acme Hydro');
+
+    // Same uid refresh is a no-op — Overview must not flicker empty.
+    syncAuthSessionBoundary('user-live');
+    expect(useProjectStore.getState().project?.id).toBe('proj-live');
+    expect(useProjectStore.getState().projectsById['proj-live']?.title).toBe('Acme Hydro');
+  });
 });

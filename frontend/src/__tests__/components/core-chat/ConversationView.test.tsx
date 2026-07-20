@@ -101,4 +101,43 @@ describe('ConversationView', () => {
 
     expect(screen.getByPlaceholderText('Ask anything')).toHaveValue('');
   });
+
+  it('applies pendingDraft into the composer without auto-sending', () => {
+    const onSendMessage = jest.fn();
+    const onPendingDraftHandled = jest.fn();
+
+    render(
+      <ConversationView
+        messages={[]}
+        sending={false}
+        thinkingLines={[]}
+        researchSteps={[]}
+        streamingContent=""
+        error={null}
+        onSendMessage={onSendMessage}
+        onEditMessage={jest.fn()}
+        onRetryMessage={jest.fn()}
+        messageFeedback={{}}
+        onSetFeedback={jest.fn()}
+        retryingMessageId={null}
+        projectId="initiative-1"
+        pendingDraft={{
+          requestId: 'investigate-capacity_factor-1',
+          content: 'Can you investigate the value for Capacity factor?',
+          fieldContext: {
+            field_name: 'capacity_factor',
+            label: 'Capacity factor',
+            model_type: 'lcoe',
+          },
+        }}
+        onPendingDraftHandled={onPendingDraftHandled}
+      />,
+    );
+
+    expect(screen.getByPlaceholderText('Ask anything')).toHaveValue(
+      'Can you investigate the value for Capacity factor?',
+    );
+    expect(onPendingDraftHandled).toHaveBeenCalledTimes(1);
+    expect(onSendMessage).not.toHaveBeenCalled();
+  });
 });

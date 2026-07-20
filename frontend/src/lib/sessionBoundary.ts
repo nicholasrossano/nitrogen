@@ -30,7 +30,7 @@ export function resetClientStores(): void {
   invalidateWorkspaceLoads();
   clearSwrCache();
   useProjectStore.getState().reset();
-  useProjectStore.setState({ projectsById: {} });
+  useProjectStore.setState({ projectsById: {}, projectAccessErrors: {} });
   useWorkspaceStore.setState({
     workspaces: [],
     activeWorkspace: null,

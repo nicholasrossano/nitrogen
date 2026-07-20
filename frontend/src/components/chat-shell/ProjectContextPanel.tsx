@@ -41,18 +41,20 @@ export function ProjectContextPanel({
     return s.projectsById[resolvedId] ?? null;
   });
   const resolvedProject = project?.id === resolvedId ? project : storeProject;
+  const accessError = useProjectStore((s) => (resolvedId ? s.projectAccessErrors[resolvedId] ?? null : null));
 
   const [healthDimensions, setHealthDimensions] = useState<ProjectHealthDimension[]>([]);
   const [shares, setShares] = useState<ProjectShare[]>([]);
   const [collaboratorsLoading, setCollaboratorsLoading] = useState(false);
 
   // Re-hydrate the shared project store when Overview would otherwise vanish.
+  // A recorded access error is permanent for this id — stop retrying.
   useEffect(() => {
-    if (!resolvedId) return;
+    if (!resolvedId || accessError) return;
     if (resolvedProject?.id === resolvedId) return;
     if (useProjectStore.getState().loading) return;
     void useProjectStore.getState().loadProject(resolvedId);
-  }, [resolvedId, resolvedProject?.id, refreshKey]);
+  }, [accessError, resolvedId, resolvedProject?.id, refreshKey]);
 
   useEffect(() => {
     if (!resolvedProject?.id) {
@@ -132,8 +134,10 @@ export function ProjectContextPanel({
         <div className="px-4 py-3 shrink-0">
           <h2 className="text-sm font-semibold text-text-primary truncate">Overview</h2>
         </div>
-        <div className="flex flex-1 items-center justify-center px-4 pb-4 text-text-tertiary">
-          <Loader2 className="h-4 w-4 animate-spin" aria-label="Loading overview" />
+        <div className="flex flex-1 items-center justify-center px-4 pb-4 text-center text-xs text-text-tertiary">
+          {accessError ? 'Unavailable — no access to this project.' : (
+            <Loader2 className="h-4 w-4 animate-spin" aria-label="Loading overview" />
+          )}
         </div>
       </aside>
     );

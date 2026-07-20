@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Maximize2, MessageCircle, PanelRight } from 'lucide-react';
 import { ProjectChatSurface } from '@/components/core-chat/ProjectChatSurface';
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
-import { useChatShellLandingReset, writeLastProjectId } from '@/components/chat-shell/ChatShellProvider';
+import { readLastProjectId, useChatShellLandingReset, writeLastProjectId } from '@/components/chat-shell/ChatShellProvider';
 import {
   ChatContextStack,
   type ChatContextExpandedWidget,
@@ -48,10 +48,12 @@ import { activeEditorContextFromWidget } from '@/lib/activeEditorContext';
 import { debugChatFlow } from '@/lib/chatDebug';
 import { api, type AssessmentInstance, type FieldContext, type ProjectMaterial, type Variable } from '@/lib/api';
 import { projectDisplayName } from '@/lib/projectDisplayName';
+import { shouldShowFloatLayer } from '@/lib/floatLayerVisibility';
 import { discardEphemeralAssessmentInstance } from '@/lib/assessmentEngagement';
 import { assessmentHeaderTitle } from '@/lib/assessmentDisplay';
 import { getCached, swrFetch, swrKeys } from '@/lib/swrCache';
 import { useProjectStore } from '@/stores/projectStore';
+import { PageLoader } from '@/components/ui/PageLoader';
 import {
   CHAT_CONTEXT_STACK_GUTTER,
   CHAT_EDITOR_PANEL_MAX_CONTENT_RATIO,
@@ -481,6 +483,9 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   const project = useProjectStore((s) => s.project);
   const projectPlan = useProjectStore((s) => s.projectPlan);
   const cachedProject = useProjectStore((s) => s.projectsById[projectId] ?? null);
+  // 404/403 on this exact id — this account has no access. Permanent, not a
+  // loading race; render an escape hatch instead of spinning forever.
+  const accessError = useProjectStore((s) => s.projectAccessErrors[projectId] ?? null);
 
   // Prefer live store slot, then by-id cache — never paint "Untitled" for a known id.
   const selectedProject = project?.id === projectId ? project : cachedProject;
@@ -488,6 +493,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   // If auth/demo boundary wipes the store after mount, re-hydrate so Home keeps
   // the project name / overview chrome instead of an empty composer stage.
   useEffect(() => {
+    if (accessError) return;
     if (selectedProject?.id === projectId) return;
     if (useProjectStore.getState().loading) return;
     let cancelled = false;
@@ -502,7 +508,20 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [projectId, selectedProject?.id]);
+  }, [accessError, projectId, selectedProject?.id]);
+
+  // A dead/inaccessible id must never dead-end the user or keep steering
+  // "Home" back here. Clear it and hand off to /chat's existing project
+  // resolution (resolveActiveProjectId → most-recently-updated own project,
+  // same rule used everywhere else in the app) instead of duplicating that
+  // selection logic here.
+  useEffect(() => {
+    if (!accessError) return;
+    if (readLastProjectId() === projectId) {
+      writeLastProjectId(null);
+    }
+    router.replace('/chat');
+  }, [accessError, projectId, router]);
 
   const frameworkPlannedAssessmentIds = useMemo(() => {
     const fromProject = selectedProject?.selected_tools ?? project?.selected_tools ?? [];
@@ -520,7 +539,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     return !hasFrameworkSelection;
   }, [projectId, project, projectPlan]);
 
-  const showFloatLayer = floatTabs.length > 0 && !floatLayerHidden;
+  const showFloatLayer = shouldShowFloatLayer(floatTabs.length, floatLayerHidden);
   const activeFloatWidget = useMemo(() => {
     if (!floatTabs.length) return null;
     if (activeFloatTabId) {
@@ -1574,6 +1593,17 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   }, [revealChatFloorForInvestigate]);
 
   const chatSurfaceKey = projectId;
+
+  if (accessError) {
+    // Transitional only — the effect above already redirects to /chat, which
+    // lands on the user's most recently edited project. This paints one
+    // frame instead of a dead-end while that navigation resolves.
+    return (
+      <div className="flex flex-1 items-center justify-center min-h-0 h-full bg-surface">
+        <PageLoader label="" />
+      </div>
+    );
+  }
 
   return (
     <div ref={workbenchRef} className="relative flex-1 flex flex-col min-h-0 min-w-0 h-full bg-surface">

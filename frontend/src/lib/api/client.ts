@@ -4,6 +4,19 @@ import { tryResolveDemoRequest } from '@/lib/demo/demoApi';
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+/** Thrown by fetchApi with the HTTP status attached so callers can tell a
+ * permanent "not found / no access" (404/403) from a transient failure
+ * (network error, 5xx) instead of treating both as "keep retrying forever". */
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 // Get the current user's ID token for API requests.
 // Uses authStateReady() so calls made immediately after a page load/redirect
 // (e.g. the OAuth callback redirect) still get a token once Firebase has
@@ -57,7 +70,8 @@ export async function fetchApi<T>(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new Error(error.detail?.message || error.detail || `HTTP ${response.status}`);
+    const message = error.detail?.message || error.detail || `HTTP ${response.status}`;
+    throw new ApiError(message, response.status);
   }
 
   const text = await response.text();

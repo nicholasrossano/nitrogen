@@ -104,5 +104,12 @@ describe('EditableTableStage investigate', () => {
         }),
       );
     });
+
+    // Investigate must never auto-send — only draft / open-variable-chat events.
+    const sentTypes = dispatchSpy.mock.calls
+      .map(([event]) => (event as Event).type)
+      .filter((type) => type.startsWith('nitrogen:'));
+    expect(sentTypes.every((type) => type === 'nitrogen:draft' || type === 'nitrogen:open-variable-chat')).toBe(true);
+    expect(sentTypes).not.toContain('nitrogen:send');
   });
 });
