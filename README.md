@@ -24,6 +24,35 @@ The platform helps teams:
 - upload and organize company library and deal-room documents
 - track rubric health across documents, findings, and computed signals
 
+## Screenshots
+
+From the built-in demo (`/demo`) — a sample diligence workspace for **Rift Valley Solar — 40 MW PV + BESS**.
+
+<p align="center">
+  <img src="docs/images/demo-chat-assessment.png" alt="Project chat beside an open LCOE assessment" width="900" />
+</p>
+<p align="center"><em>Chat-first diligence with an LCOE assessment float</em></p>
+
+<p align="center">
+  <img src="docs/images/demo-project-chat.png" alt="Project chat with proposed CAPEX value" width="900" />
+</p>
+<p align="center"><em>Cited answers and proposed variable updates in project chat</em></p>
+
+<p align="center">
+  <img src="docs/images/demo-overview.png" alt="Project overview status rubric" width="900" />
+</p>
+<p align="center"><em>Overview — deal health across evidence, technical, funding, and risk</em></p>
+
+<p align="center">
+  <img src="docs/images/demo-variables.png" alt="Variables table with capacity factor detail" width="900" />
+</p>
+<p align="center"><em>Structured variables with status, source, and team comments</em></p>
+
+<p align="center">
+  <img src="docs/images/demo-files.png" alt="Project files library" width="900" />
+</p>
+<p align="center"><em>Project materials — feasibility, PPA, ESIA, and technical packs</em></p>
+
 ## Tech Stack
 
 - **Frontend**: Next.js 14 (TypeScript), Tailwind CSS, Zustand
@@ -57,7 +86,7 @@ cp .env.example .env   # first-time template only — then keep your real .env
 bash scripts/setup.sh
 ```
 
-Open http://localhost:3000. For status only: `bash scripts/setup.sh --status`.
+Open http://localhost:3000. Try the sample workspace without signing in at http://localhost:3000/demo. For status only: `bash scripts/setup.sh --status`.
 
 ## Docker (Optional — for local Postgres only)
 
