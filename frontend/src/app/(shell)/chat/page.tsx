@@ -29,6 +29,8 @@ function ChatLandingContent() {
   const { activeWorkspace, loadWorkspaces } = useWorkspaceStore();
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectsLoaded, setProjectsLoaded] = useState(false);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
   const [resolving, setResolving] = useState(true);
 
   const legacyProjectParam = searchParams.get('project');
@@ -55,18 +57,35 @@ function ChatLandingContent() {
     if (!activeWorkspace?.id) {
       setProjects([]);
       setProjectsLoaded(false);
+      setProjectsError(null);
       return;
     }
+    let cancelled = false;
     setProjectsLoaded(false);
+    setProjectsError(null);
     api.listProjects(100, 0, false, activeWorkspace.id)
-      .then(setProjects)
-      .catch(() => setProjects([]))
-      .finally(() => setProjectsLoaded(true));
-  }, [activeWorkspace?.id, chatShell?.drawerRefreshKey]);
+      .then((rows) => {
+        if (cancelled) return;
+        setProjects(rows);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        // A failed request is not evidence the workspace is empty. Treating it
+        // as "no projects" would bounce an existing user into onboarding —
+        // surface a retry instead of guessing.
+        setProjectsError(err instanceof Error ? err.message : 'Failed to load projects');
+      })
+      .finally(() => {
+        if (!cancelled) setProjectsLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspace?.id, chatShell?.drawerRefreshKey, retryNonce]);
 
   useEffect(() => {
     if (isDemoActive()) return;
-    if (!projectsLoaded || !activeWorkspace?.id) return;
+    if (!projectsLoaded || !activeWorkspace?.id || projectsError) return;
 
     const goToProject = (projectId: string) => {
       writeLastProjectId(projectId);
@@ -98,9 +117,26 @@ function ChatLandingContent() {
     legacyProjectParam,
     panelParam,
     projects,
+    projectsError,
     projectsLoaded,
     router,
   ]);
+
+  if (projectsError) {
+    return (
+      <div className="flex h-full flex-1 flex-col items-center justify-center gap-3 bg-surface px-4 text-center">
+        <p className="text-sm text-text-secondary">Couldn&apos;t load your projects.</p>
+        <p className="text-xs text-text-tertiary">{projectsError}</p>
+        <button
+          type="button"
+          onClick={() => setRetryNonce((n) => n + 1)}
+          className="rounded-full border border-stroke-subtle px-3 py-1.5 text-xs font-medium text-text-primary hover:border-black/20"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   if (resolving || !projectsLoaded) {
     return (

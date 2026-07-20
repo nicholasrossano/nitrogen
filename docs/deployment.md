@@ -30,7 +30,28 @@ NITROGEN_FIREBASE_CREDENTIALS=/path/to/service-account.json
 # Or: FIREBASE_SERVICE_ACCOUNT_JSON='{"type":"service_account",...}'
 # Note: For GOOGLE_APPLICATION_CREDENTIALS, upload the JSON file to Railway
 # and set this to the file path in the container
+
+# Stripe billing (required for real subscriptions — omitting these is the
+# #1 cause of "Stripe isn't configured for this environment yet" in prod).
+# MUST be the LIVE secret key (sk_live_...), not a test key — this is the
+# backend's only source of truth for billing_enabled; setting Stripe vars
+# on Vercel does NOT help, the backend here on Railway is what checks out
+# and calls Stripe. scripts/sync_secrets_to_vercel.py only syncs to Vercel;
+# it does not (and cannot) push these to Railway.
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...        # from the live webhook endpoint pointed at this Railway URL
+STRIPE_PRICE_ID=price_...              # live Price id (Stripe dashboard -> Product catalog)
 ```
+
+If billing ever shows "Stripe isn't configured for this environment yet" or Subscribe is disabled in production:
+1. Check Railway logs for `STRIPE_SECRET_KEY was rejected by Stripe (401)` — this means the key Railway
+   has is revoked/rolled/wrong-mode, not that any Stripe data was deleted (subscriptions/customers/prices
+   live in Stripe itself and are unaffected).
+2. Get the current live secret key from the Stripe dashboard (Developers -> API keys) and set it as
+   `STRIPE_SECRET_KEY` (or the repo-scoped `STRIPE_SECRET_KEY_NITROGEN` alias — see `backend/app/config.py`)
+   in the Railway project's Variables tab, then redeploy.
+3. Verify with `curl https://your-app.railway.app/api/v1/billing/catalog` — `stripe_key_valid` should be
+   `true` (or absent) and `billing_enabled` should be `true`.
 
 #### Deployment Configuration
 
