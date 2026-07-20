@@ -52,6 +52,8 @@ Then also add the backend-only vars that live in Railway (not Vercel):
 
 `materialize_dev_env.sh` auto-runs `vercel env pull` and gets all the frontend vars from Vercel, then writes the backend vars alongside them.
 
+**Stripe secrets specifically use a `_NITROGEN` suffix** (`STRIPE_SECRET_KEY_NITROGEN`, `STRIPE_PUBLISHABLE_KEY_NITROGEN`, `STRIPE_RESTRICTED_KEY_NITROGEN`) instead of the plain `.env.example` names, because Stripe keys are the highest-blast-radius secret to accidentally share across repos — `materialize_dev_env.sh` and `sync_secrets_to_vercel.py` alias the suffixed names onto the plain ones (`STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`) that the app actually reads, so no app code needs to know about the suffix. `STRIPE_PRICE_ID` and `STRIPE_WEBHOOK_SECRET` are lower-risk (a price ID isn't even secret — it's already returned by the public `GET /billing/catalog`) and are still unsuffixed; give them the same `_NITROGEN` treatment too if another repo in your Cursor account ever defines its own.
+
 **Option B — Mirror all vars individually**
 
 Add each variable from `.env.example` as a Cursor secret using the exact same key name. No Vercel CLI needed.
@@ -138,6 +140,53 @@ Any Postgres database with the `pgvector` extension works. [Neon](https://neon.t
 ```bash
 cd backend && alembic upgrade head
 ```
+
+---
+
+## Secret source-of-truth model (read this before touching keys)
+
+The app **only reads plain environment variables** (`os.environ` / `.env`). It
+never knows or cares whether a value came from Railway, Vercel, Docker, or a
+systemd unit. That single fact is what keeps hosted and self-hosted deployments
+decoupled and safe — there is no shared secret store and no cross-account coupling.
+
+**Where each secret authoritatively lives:**
+
+| Audience | Backend secrets (`OPENAI_API_KEY`, `DATABASE_URL`, `STRIPE_*`, …) | Frontend (`NEXT_PUBLIC_*`) |
+|---|---|---|
+| Maintainer hosted | Railway dashboard (source of truth) | Vercel dashboard (source of truth) |
+| Self-hoster | Wherever your host sets env vars (Railway/Fly/Docker/systemd/…) | Same |
+| Local dev (either) | repo-root `.env` (symlinked to `backend/.env`) | same `.env` (symlinked to `frontend/.env.local`) |
+
+Rules that prevent the instability we've hit:
+
+1. **Never blindly push a local `.env` to production.** Local `.env` mixes
+   dev-only values (`CORS_ORIGINS=localhost`, `NEXT_PUBLIC_API_URL=localhost:8000`,
+   `DEBUG=true`, test Stripe keys) with real secrets. Pushing all of it would take
+   prod down. Change prod secrets **in the dashboard**, or push an explicit
+   allowlist only.
+2. **Local dev pulls down, it doesn't push up.** Rotate a key in the dashboard,
+   then refresh local — never the reverse.
+3. **Frontend never needs backend secrets.** `OPENAI_API_KEY` is backend-only;
+   it must not be added to Vercel.
+4. **`OPENAI_API_KEY` note:** a key that is present but out of credits fails at
+   request time with `insufficient_quota` (HTTP 429), not at startup — so a
+   "configured" key can still be dead. Use the validator below to catch this.
+
+### Validate keys are actually LIVE
+
+Presence ≠ working. `scripts/check_secrets.sh` performs a real call against each
+provider (a 1-token OpenAI completion, a Stripe balance read, an OpenRouter key
+check) and reports live / invalid / out-of-quota. Run it after any key change or
+before a deploy:
+
+```bash
+bash scripts/check_secrets.sh          # checks repo-root .env
+ENV_FILE=/path/to/.env bash scripts/check_secrets.sh
+```
+
+Exit code is non-zero only if a **required** key (OpenAI) is missing or not live,
+so it is safe to gate CI / a predeploy step on.
 
 ---
 

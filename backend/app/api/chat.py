@@ -419,14 +419,14 @@ async def _get_or_create_chat(
             raise HTTPException(status_code=404, detail="Chat not found")
         if project_id and not chat.project_id:
             chat.project_id = project_id
-        if variable_id:
-            if chat.variable_id and chat.variable_id != variable_id:
-                raise HTTPException(
-                    status_code=409,
-                    detail="This chat is already scoped to a different variable.",
-                )
-            if chat.variable_id is None:
-                chat.variable_id = variable_id
+        # A chat's `variable_id` is a soft "primary" association (set once, from the
+        # first message that names one) used to keep a dedicated variable chat focused
+        # on follow-ups that omit field_context. It must not block reuse of a general
+        # project chat for investigating a *different* variable later — the requested
+        # variable_id is still honored for this message's own context regardless
+        # (see focused_variable resolution in chat_stream).
+        if variable_id and chat.variable_id is None:
+            chat.variable_id = variable_id
         await db.flush()
         return chat
 
@@ -744,6 +744,15 @@ async def chat_stream(
             db.add(user_msg)
             await db.flush()
 
+            # Captured now, before any concurrent evidence-search/generation work runs.
+            # A failed embedding/search call elsewhere (e.g. tiered_retrieval) can roll
+            # back this shared session, which expires all its tracked ORM objects; a
+            # later un-awaited `chat.id`/`user_msg.id` access would then try an implicit
+            # lazy-reload with no active greenlet and crash with MissingGreenlet.
+            chat_uuid = chat.id
+            chat_id_str = str(chat_uuid)
+            user_msg_id_str = str(user_msg.id)
+
             event_queue: asyncio.Queue[str] = asyncio.Queue()
             thinking_lines: list[str] = []
 
@@ -1022,7 +1031,7 @@ async def chat_stream(
                             result = generation_task.result()
                             _log_chat_stream_debug(
                                 "response",
-                                chat_id=str(chat.id),
+                                chat_id=chat_id_str,
                                 project_id=data.project_id,
                                 widget_type=result.widget_type,
                                 has_widget_data=bool(result.widget_data),
@@ -1037,7 +1046,7 @@ async def chat_stream(
 
                             sources_list = []
                             assistant_msg = CoreChatMessage(
-                                chat_id=chat.id,
+                                chat_id=chat_uuid,
                                 role="assistant",
                                 content=result.content,
                                 sources=sources_list,
@@ -1063,8 +1072,8 @@ async def chat_stream(
                                 "widget_type": result.widget_type,
                                 "widget_data": result.widget_data,
                                 "thinking_lines": thinking_lines,
-                                "chat_id": str(chat.id),
-                                "user_message_id": str(user_msg.id),
+                                "chat_id": chat_id_str,
+                                "user_message_id": user_msg_id_str,
                                 "assistant_message_id": str(assistant_msg.id),
                             }
                             yield f"data: {json.dumps(complete)}\n\n"
@@ -1181,7 +1190,7 @@ async def chat_stream(
             result = generation_task.result()
             _log_chat_stream_debug(
                 "response",
-                chat_id=str(chat.id),
+                chat_id=chat_id_str,
                 project_id=data.project_id,
                 widget_type=result.widget_type,
                 has_widget_data=bool(result.widget_data),
@@ -1196,7 +1205,7 @@ async def chat_stream(
 
             sources_list = [s.to_dict() for s in result.sources]
             assistant_msg = CoreChatMessage(
-                chat_id=chat.id,
+                chat_id=chat_uuid,
                 role="assistant",
                 content=result.content,
                 sources=sources_list,
@@ -1223,8 +1232,8 @@ async def chat_stream(
                 "widget_type": result.widget_type,
                 "widget_data": result.widget_data,
                 "thinking_lines": thinking_lines,
-                "chat_id": str(chat.id),
-                "user_message_id": str(user_msg.id),
+                "chat_id": chat_id_str,
+                "user_message_id": user_msg_id_str,
                 "assistant_message_id": str(assistant_msg.id),
             }
             yield f"data: {json.dumps(complete)}\n\n"

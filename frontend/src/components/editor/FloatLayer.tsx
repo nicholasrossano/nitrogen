@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import type { Variable, ProjectMaterial } from '@/lib/api';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
+import { floatTabDedupeKey } from '@/lib/floatTabSession';
 import { EditorPanelHeader } from './EditorPanelHeader';
 import {
   EditorPanelChromeProvider,
@@ -71,6 +72,10 @@ export type AssessmentReportPayload = AssessmentLogContext & {
 
 interface FloatLayerProps {
   widgets: FloatWidget[];
+  /** Stable tab id from floatTabDedupeKey — controls which widget is visible. */
+  activeTabId?: string | null;
+  /** Inactive tab ids that should stay mounted (hidden) for remount cost. */
+  keepAliveTabIds?: ReadonlySet<string>;
   projectId?: string;
   onClose?: () => void;
   onAssessmentEngaged?: (instanceId: string) => void;
@@ -85,7 +90,7 @@ interface FloatLayerProps {
   onOpenFile?: (file: ProjectMaterial) => void;
 }
 
-function getWidgetTitle(widget: FloatWidget): string {
+export function getFloatWidgetTitle(widget: FloatWidget): string {
   const dataTitle = typeof widget.data?.title === 'string' ? widget.data.title.trim() : '';
   if (dataTitle) {
     // Assessment list labels include " · @creator"; keep that out of the panel header.
@@ -147,6 +152,8 @@ const WIDGET_LABELS: Record<string, string> = {
 
 export function FloatLayer({
   widgets,
+  activeTabId = null,
+  keepAliveTabIds,
   projectId = '',
   onClose,
   onAssessmentEngaged,
@@ -159,7 +166,6 @@ export function FloatLayer({
   onOpenDocument,
   onOpenFile,
 }: FloatLayerProps) {
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [childChrome, setChildChrome] = useState<EditorPanelChrome | null>(null);
 
   const handleChromeChange = useCallback((chrome: EditorPanelChrome | null) => {
@@ -181,22 +187,35 @@ export function FloatLayer({
     });
   }, []);
 
-  const displayIndex =
-    activeIndex != null && activeIndex < widgets.length
-      ? activeIndex
-      : Math.max(widgets.length - 1, 0);
-  const widget = widgets[displayIndex];
-  const widgetsIdentity = widgets.map((item) => item.messageId).join('|');
+  const ignoreChromeChange = useCallback((_chrome: EditorPanelChrome | null) => {}, []);
 
-  useEffect(() => {
-    setActiveIndex(null);
-  }, [widgetsIdentity]);
+  const resolvedActiveTabId = useMemo(() => {
+    if (activeTabId && widgets.some((item) => floatTabDedupeKey(item) === activeTabId)) {
+      return activeTabId;
+    }
+    const last = widgets[widgets.length - 1];
+    return last ? floatTabDedupeKey(last) : null;
+  }, [activeTabId, widgets]);
+
+  const widget = useMemo(
+    () => widgets.find((item) => floatTabDedupeKey(item) === resolvedActiveTabId) ?? widgets[widgets.length - 1],
+    [resolvedActiveTabId, widgets],
+  );
+
+  const mountedWidgets = useMemo(() => {
+    if (!widget) return [];
+    const activeId = floatTabDedupeKey(widget);
+    return widgets.filter((item) => {
+      const id = floatTabDedupeKey(item);
+      return id === activeId || Boolean(keepAliveTabIds?.has(id));
+    });
+  }, [keepAliveTabIds, widget, widgets]);
 
   // Do not clear chrome on messageId change — the previous widget's unmount
   // cleanup already nulls it. Clearing after the new child's layout effect
   // drops Export/actions until the next state update.
 
-  const headerTitle = childChrome?.title ?? (widget ? getWidgetTitle(widget) : 'Output');
+  const headerTitle = childChrome?.title ?? (widget ? getFloatWidgetTitle(widget) : 'Output');
   const headerSuffix = childChrome?.suffix;
   const headerActions = childChrome?.actions;
   const headerTitleEditable = childChrome?.titleEditable;
@@ -227,53 +246,54 @@ export function FloatLayer({
     <div className="flex h-full flex-col bg-white">
       {header}
 
-      {widgets.length > 1 && (
-        <div className="flex-shrink-0 flex border-b border-divider bg-white overflow-x-auto">
-          {widgets.map((w, i) => (
-            <button
-              key={w.messageId}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setActiveIndex(i)}
-              className={`px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
-                displayIndex === i
-                  ? 'border-accent text-accent'
-                  : 'border-transparent text-text-secondary hover:text-text-primary'
-              }`}
-            >
-              {getWidgetTitle(w)}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="relative min-h-0 flex-1">
+        {mountedWidgets.map((item) => {
+          const tabId = floatTabDedupeKey(item);
+          const isActive = tabId === resolvedActiveTabId;
+          const overflowClass =
+            item.type === 'variables_workspace' || item.type === 'assessment_workspace'
+              ? 'overflow-hidden'
+              : 'overflow-y-auto';
 
-      <div
-        className={`flex-1 min-h-0 ${
-          widget.type === 'variables_workspace' || widget.type === 'assessment_workspace'
-            ? 'overflow-hidden'
-            : 'overflow-y-auto'
-        }`}
-      >
-        <ErrorBoundary>
-          <EditorPanelChromeProvider onChromeChange={handleChromeChange}>
-            <FloatWidgetRenderer
-              key={widget.messageId}
-              type={widget.type}
-              data={widget.data}
-              projectId={projectId}
-              messageId={widget.messageId}
-              onClose={onClose}
-              onAssessmentEngaged={onAssessmentEngaged}
-              onOpenDecisionLog={onOpenDecisionLog}
-              onOpenActivityLog={onOpenActivityLog}
-              onOpenAssessmentReport={onOpenAssessmentReport}
-              onOpenAssessment={onOpenAssessment}
-              onAssessmentTitleChange={onAssessmentTitleChange}
-              onCompanionSidePanelOpenChange={onCompanionSidePanelOpenChange}
-              onOpenDocument={onOpenDocument}
-              onOpenFile={onOpenFile}
-            />
-          </EditorPanelChromeProvider>
-        </ErrorBoundary>
+          return (
+            <div
+              key={tabId}
+              className={`absolute inset-0 flex min-h-0 flex-col ${overflowClass} ${
+                isActive ? '' : 'invisible pointer-events-none'
+              }`}
+              aria-hidden={!isActive}
+              // Set the DOM `inert` property imperatively: React 18's types/runtime don't
+              // support it as a JSX boolean attribute yet (that lands in React 19), and
+              // passing it as a prop trips a "non-boolean attribute" dev warning.
+              ref={(el) => {
+                if (el) el.inert = !isActive;
+              }}
+            >
+              <ErrorBoundary>
+                <EditorPanelChromeProvider
+                  onChromeChange={isActive ? handleChromeChange : ignoreChromeChange}
+                >
+                  <FloatWidgetRenderer
+                    type={item.type}
+                    data={item.data}
+                    projectId={projectId}
+                    messageId={item.messageId}
+                    onClose={onClose}
+                    onAssessmentEngaged={onAssessmentEngaged}
+                    onOpenDecisionLog={onOpenDecisionLog}
+                    onOpenActivityLog={onOpenActivityLog}
+                    onOpenAssessmentReport={onOpenAssessmentReport}
+                    onOpenAssessment={onOpenAssessment}
+                    onAssessmentTitleChange={onAssessmentTitleChange}
+                    onCompanionSidePanelOpenChange={isActive ? onCompanionSidePanelOpenChange : undefined}
+                    onOpenDocument={onOpenDocument}
+                    onOpenFile={onOpenFile}
+                  />
+                </EditorPanelChromeProvider>
+              </ErrorBoundary>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

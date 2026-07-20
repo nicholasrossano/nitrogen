@@ -77,6 +77,15 @@ fi
 
 # ── 4. Individual secrets from process environment ─────────────
 # Works when each var is added individually as a Cursor secret.
+
+# Repo-scoped Stripe secrets are suffixed _NITROGEN in Cursor so they don't
+# collide with other repos/projects under the same Cursor account that use
+# the same unsuffixed variable names for their own (different) Stripe
+# accounts. Precedence: suffixed (repo-scoped) > legacy unsuffixed (shared).
+[[ -n "${STRIPE_SECRET_KEY_NITROGEN:-}" ]] && STRIPE_SECRET_KEY="$STRIPE_SECRET_KEY_NITROGEN"
+[[ -n "${STRIPE_RESTRICTED_KEY_NITROGEN:-}" ]] && STRIPE_RESTRICTED_KEY="$STRIPE_RESTRICTED_KEY_NITROGEN"
+[[ -n "${STRIPE_PUBLISHABLE_KEY_NITROGEN:-}" ]] && NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="$STRIPE_PUBLISHABLE_KEY_NITROGEN"
+
 ENV_KEYS=(
   DATABASE_URL
   OPENAI_API_KEY
@@ -98,6 +107,8 @@ ENV_KEYS=(
   FRONTEND_URL
   BILLING_TESTING_MODE
   STRIPE_SECRET_KEY
+  STRIPE_RESTRICTED_KEY
+  STRIPE_PRICE_ID
   STRIPE_WEBHOOK_SECRET
   STRIPE_STARTER_PRICE_ID
   STRIPE_PRO_PRICE_ID
@@ -120,6 +131,8 @@ ENV_KEYS=(
   NEXT_PUBLIC_GOOGLE_API_KEY
   NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID
   NEXT_PUBLIC_STRIPE_PRO_PRICE_ID
+  NEXT_PUBLIC_STRIPE_PRICE_ID
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 )
 
 missing=()

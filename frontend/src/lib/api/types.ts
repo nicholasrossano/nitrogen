@@ -686,6 +686,8 @@ export interface BillingCatalog {
   subscription_usage_limit_usd: number;
   usage_budget_buffer_pct: number;
   stripe_price_id: string | null;
+  /** False once Stripe has rejected STRIPE_SECRET_KEY (misconfigured deployment). */
+  stripe_key_valid?: boolean;
 }
 
 export interface UsageModelBreakdown {
