@@ -1,4 +1,4 @@
-# Nitrogen user documentation (Mintlify)
+# Nitrogen AI user documentation (Mintlify)
 
 Public product docs for [nitrogenai.mintlify.app](https://nitrogenai.mintlify.app/), also proxied at `/docs` on the main site.
 

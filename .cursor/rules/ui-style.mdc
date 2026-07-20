@@ -1,10 +1,10 @@
 ---
-description: Nitrogen UI style guide - colors, typography, and design principles
+description: Nitrogen AI UI style guide - colors, typography, and design principles
 globs: **/*.{tsx,ts,css}
 alwaysApply: false
 ---
 
-# Nitrogen UI Style Guide
+# Nitrogen AI UI Style Guide
 
 For narrative detail see `docs/style-guide.md` (do not confuse with a missing `STYLEGUIDE.md`). Key rules:
 

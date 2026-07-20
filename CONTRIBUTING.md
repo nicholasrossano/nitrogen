@@ -1,10 +1,10 @@
-# Contributing to Nitrogen
+# Contributing to Nitrogen AI
 
 Thanks for your interest in contributing! This guide will help you get started.
 
-Nitrogen is open source under the [GNU Affero General Public License v3.0](LICENSE). Contributions are welcome. Before a contribution can be merged, contributors must sign the [Contributor License Agreement](CLA.md), which keeps contribution rights clear and helps us maintain the project over time.
+Nitrogen AI is open source under the [GNU Affero General Public License v3.0](LICENSE). Contributions are welcome. Before a contribution can be merged, contributors must sign the [Contributor License Agreement](CLA.md), which keeps contribution rights clear and helps us maintain the project over time.
 
-Only submit code, documentation, data, designs, or other assets that you have the right to contribute. The AGPLv3 covers the software license; the Nitrogen name and branding are covered separately — see [brand and naming](TRADEMARKS.md).
+Only submit code, documentation, data, designs, or other assets that you have the right to contribute. The AGPLv3 covers the software license; the Nitrogen AI name and branding are covered separately — see [brand and naming](TRADEMARKS.md).
 
 ## Getting Started
 
@@ -116,6 +116,6 @@ Please report security issues privately. See [SECURITY.md](SECURITY.md) for deta
 
 ## Licensing
 
-Nitrogen is distributed under the [GNU Affero General Public License v3.0](LICENSE). For organizations that need terms outside the AGPLv3, separate licensing may be available. See [Commercial Licensing](COMMERCIAL_LICENSE.md).
+Nitrogen AI is distributed under the [GNU Affero General Public License v3.0](LICENSE). For organizations that need terms outside the AGPLv3, separate licensing may be available. See [Commercial Licensing](COMMERCIAL_LICENSE.md).
 
 By contributing, you agree that your contributions may be distributed under the [AGPLv3](LICENSE) and under the additional terms described in the [Contributor License Agreement](CLA.md).

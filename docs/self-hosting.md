@@ -1,6 +1,6 @@
-# Running Nitrogen
+# Running Nitrogen AI
 
-There are three distinct ways to run Nitrogen. Pick the one that matches your situation.
+There are three distinct ways to run Nitrogen AI. Pick the one that matches your situation.
 
 ---
 

@@ -1,5 +1,5 @@
 """
-Template for a widget-backed (calculator) Nitrogen assessment using the staged workflow.
+Template for a widget-backed (calculator) Nitrogen AI assessment using the staged workflow.
 
 Calculator assessments have two stages:
   1. Inputs  (table / editable_table)   — user confirms pre-populated input rows

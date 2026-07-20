@@ -1,8 +1,8 @@
 # Assessment Authoring Guide
 
-Use this guide when adding a new Nitrogen assessment.
+Use this guide when adding a new Nitrogen AI assessment.
 
-Nitrogen assessments now author against the shared staged workflow contract:
+Nitrogen AI assessments now author against the shared staged workflow contract:
 
 - declare ordered `stage_defs`
 - let the workflow service persist `workflow_state`

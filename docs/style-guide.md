@@ -1,4 +1,4 @@
-# Nitrogen UI Style Guide (Core)
+# Nitrogen AI UI Style Guide (Core)
 
 Use this file for fast, high-frequency UI decisions. Load deeper guidance only when needed from `docs/style-guide-examples.md`.
 
