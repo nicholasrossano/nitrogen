@@ -7,15 +7,15 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-Open-source, chat-first reference architecture for climate-impact investment diligence.
+Open-source, chat-first reference architecture for climate-impact investment diligence and technical assistance.
 
-Nitrogen AI is a self-hostable platform for impact investors and diligence teams: research companies in personal chat, promote findings to shared project records, and track deal health with rubric snapshots. Energy calculators (carbon, LCOE, solar) ship as signal providers for the worked example — the engine is domain-agnostic.
+Nitrogen AI is a self-hostable platform for impact investors, diligence teams, and technical assistance providers: research companies in personal chat, promote findings to shared project records, and track deal health with rubric snapshots. Energy calculators (carbon, LCOE, solar) ship as signal providers for the worked example; the engine is domain-agnostic.
 
 See [docs/positioning.md](docs/positioning.md) for the product narrative and [docs/architecture.md](docs/architecture.md) for system design.
 
 ## Overview
 
-Investment diligence is fragmented across spreadsheets, data rooms, consultant memos, and ad-hoc notes. Nitrogen AI brings that work into a shared, chat-native system with clear promotion boundaries between private research and team-visible findings.
+Investment diligence and technical assistance are fragmented across spreadsheets, data rooms, consultant memos, and ad-hoc notes. Nitrogen AI brings that work into a shared, chat-native system with clear promotion boundaries between private research and team-visible findings.
 
 The platform helps teams:
 

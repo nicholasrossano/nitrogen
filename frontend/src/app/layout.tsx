@@ -4,7 +4,7 @@ import { Providers } from './providers';
 
 export const metadata: Metadata = {
   title: 'Nitrogen AI',
-  description: 'Chat-first climate-impact investment diligence',
+  description: 'Chat-first climate-impact investment diligence and technical assistance',
 };
 
 export default function RootLayout({
