@@ -30,7 +30,7 @@ Only submit code, documentation, data, designs, or other assets that you have th
 
 **Using Cursor cloud agents?** Add your `.env` values as [Cursor Secrets](https://cursor.com/dashboard/cloud-agents) once (see `scripts/cursor_secrets_manifest.txt`). Cloud VMs don't get your laptop's `.env` automatically.
 
-See [docs/self-hosting.md](docs/self-hosting.md) for Firebase config and self-hosting.
+See [docs/self-hosting.md](docs/self-hosting.md) for Firebase config and self-hosting. If you maintain a long-lived fork (custom assessments, private deploy) and want upstream updates, see [docs/forking.md](docs/forking.md).
 
 ## Making Changes
 
