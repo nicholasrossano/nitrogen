@@ -34,14 +34,14 @@ From the built-in demo (`/demo`) — a sample diligence workspace for **Rift Val
 <p align="center"><em>Chat-first diligence with an LCOE assessment float</em></p>
 
 <p align="center">
-  <img src="docs/images/demo-assessment.png" alt="Full-screen LCOE assessment results" width="900" />
+  <img src="docs/images/demo-assessment.png" alt="Full-screen carbon calculator with net emission reductions" width="900" />
 </p>
-<p align="center"><em>Full-screen assessment — LCOE results with cost breakdown</em></p>
+<p align="center"><em>Full-screen assessment — carbon emissions reduction results</em></p>
 
 <p align="center">
   <img src="docs/images/demo-overview.png" alt="Project overview status rubric" width="900" />
 </p>
-<p align="center"><em>Overview — deal health across evidence, technical, funding, and risk</em></p>
+<p align="center"><em>Overview page shows project health...</em></p>
 
 <p align="center">
   <img src="docs/images/demo-variables.png" alt="Variables table with capacity factor detail" width="900" />
