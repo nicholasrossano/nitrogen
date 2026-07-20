@@ -144,3 +144,9 @@ cd backend && alembic upgrade head
 ## Env var reference
 
 See [`.env.example`](../.env.example) for the full annotated list of every variable, which are required vs optional, and their default values.
+
+---
+
+## Forking and upstream updates
+
+If you fork Nitrogen to add custom assessments or other changes and still want upstream releases, see [forking.md](forking.md) for the `upstream` remote + rebase workflow, what is safe to edit, and how to contribute improvements back.
