@@ -31,12 +31,12 @@ From the [demo](https://the-nitrogen.ai/demo) (/demo): a sample diligence worksp
 <p align="center">
   <img src="docs/images/demo-overview.png" alt="Project overview status rubric" width="900" />
 </p>
-<p align="center"><em>Overview page shows project health...</em></p>
+<p align="center"><em>Overview page shows project health across evidence, technical, funding, and risk</em></p>
 
 <p align="center">
   <img src="docs/images/demo-assessments.png" alt="Assessments plan with LCOE, carbon, and stakeholder work" width="900" />
 </p>
-<p align="center"><em>Framework — diligence plan across definition, feasibility, and impact</em></p>
+<p align="center"><em>Framework: diligence plan across definition, feasibility, and impact</em></p>
 
 <p align="center">
   <img src="docs/images/demo-variables.png" alt="Variables table with capacity factor detail" width="900" />
@@ -51,7 +51,7 @@ From the [demo](https://the-nitrogen.ai/demo) (/demo): a sample diligence worksp
 <p align="center">
   <img src="docs/images/demo-assessment.png" alt="Full-screen carbon calculator with net emission reductions" width="900" />
 </p>
-<p align="center"><em>Full-screen assessment — carbon emissions reduction results</em></p>
+<p align="center"><em>Full-screen assessment: carbon emissions reduction results</em></p>
 
 ## Tech Stack
 
