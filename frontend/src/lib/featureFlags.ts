@@ -22,7 +22,7 @@ const FEATURE_FLAG_DEFINITIONS = {
     isEnabled: (context: FeatureFlagContext) => context.devMode,
   },
   billing_features: {
-    description: 'Billing surfaces and billing sync behavior.',
+    description: 'Billing surfaces and billing sync behavior (also auto-shown for metered tiers).',
     isEnabled: (context: FeatureFlagContext) => BILLING_ENABLED_IN_PROD || context.devMode,
   },
   billing_test_headers: {
@@ -34,7 +34,7 @@ const FEATURE_FLAG_DEFINITIONS = {
     isEnabled: (context: FeatureFlagContext) => context.devMode,
   },
   paywall_modal: {
-    description: 'Render paywall modal in app providers.',
+    description: 'Legacy flag; PaywallModal is always mounted and opens on 402.',
     isEnabled: (context: FeatureFlagContext) => BILLING_ENABLED_IN_PROD || context.devMode,
   },
 } as const;
