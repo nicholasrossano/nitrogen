@@ -65,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           // Drop cross-account workspace / last-project / tour prefs when the
           // Firebase UID changes so new signups never inherit another user's IDs.
+          // Skip store wipe on signed-out auth while demo is active (see sessionBoundary).
           syncAuthSessionBoundary(nextUser?.uid ?? null);
           setUser(nextUser);
           setLoading(false);

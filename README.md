@@ -7,7 +7,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-Open-source, chat-first reference architecture for climate-impact investment diligence and technical assistance.
+Open-source, chat-first reference architecture for impact investment diligence and technical assistance.
 
 Nitrogen AI is a self-hostable platform for impact investors, diligence teams, and technical assistance providers: research companies in personal chat, promote findings to shared project records, and track deal health with rubric snapshots. Energy calculators (carbon, LCOE, solar) ship as signal providers for the worked example; the engine is domain-agnostic.
 
