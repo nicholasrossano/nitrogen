@@ -755,7 +755,7 @@ export const demoChatMessages: Record<string, ChatMessage[]> = {
       id: 'demo-msg-carbon-a1',
       role: 'assistant',
       content:
-        'With **~77 GWh/year** net generation (40 MWAC × 22% CF × 8760) and a grid emission factor of **0.48 tCO2e/MWh**, annual displacement is about **37,000 tCO2e/yr** before degradation.\n\nOver 25 years with 0.5%/yr module degradation, lifetime abatement is on the order of **~850,000 tCO2e**. Cite the feasibility generation table and the Kenya combined-margin EF in the carbon memo.',
+        'With **~77 GWh/year** net generation (40 MWAC × 22% CF × 8760) [Evidence: Rift Valley Solar Feasibility Study v3, p0] and a grid emission factor of **0.48 tCO2e/MWh** [Corpus: Kenya grid emission factor guidance], annual displacement is about **37,000 tCO2e/yr** before degradation.\n\nOver 25 years with 0.5%/yr module degradation, lifetime abatement is on the order of **~850,000 tCO2e**. Cite the feasibility generation table and the Kenya combined-margin EF in the carbon memo.',
       widget_type: null,
       widget_data: null,
       sources: [
@@ -764,7 +764,8 @@ export const demoChatMessages: Record<string, ChatMessage[]> = {
           source_title: 'Rift Valley Solar Feasibility Study v3',
           confidence: 0.9,
           evidence_doc_id: 'demo-mat-feasibility',
-          chunk_index: 28,
+          chunk_id: 'demo-mat-feasibility-chunk-0',
+          chunk_index: 0,
         },
         {
           source_type: 'corpus',
@@ -773,6 +774,7 @@ export const demoChatMessages: Record<string, ChatMessage[]> = {
           publisher: 'Nitrogen AI corpus',
         },
       ],
+      thinking_lines: ['Pulled feasibility yield table', 'Applied Kenya combined-margin EF'],
       completion_meta: { latency_ms: 2100, citation_count: 2, tiers_used: ['evidence', 'corpus'] },
       created_at: '2026-06-11T09:15:00.000Z',
     },
@@ -788,7 +790,7 @@ export const demoChatMessages: Record<string, ChatMessage[]> = {
       id: 'demo-msg-carbon-a2',
       role: 'assistant',
       content:
-        'If BESS is charged exclusively from on-site PV (as designed), round-trip losses reduce delivered MWh slightly but do **not** introduce fossil charging. Use **net AC export** for the displacement claim; call out ~8–10% storage losses separately so reviewers do not double-count.',
+        'If BESS is charged exclusively from on-site PV (as designed) [Evidence: Single Line Diagram 40MW BESS, p0], round-trip losses reduce delivered MWh slightly but do **not** introduce fossil charging. Use **net AC export** for the displacement claim; call out ~8-10% storage losses separately so reviewers do not double-count.',
       widget_type: null,
       widget_data: null,
       sources: [
@@ -797,7 +799,8 @@ export const demoChatMessages: Record<string, ChatMessage[]> = {
           source_title: 'Single Line Diagram 40MW BESS',
           confidence: 0.88,
           evidence_doc_id: 'demo-mat-sld',
-          chunk_index: 1,
+          chunk_id: 'demo-mat-sld-chunk-0',
+          chunk_index: 0,
         },
       ],
       completion_meta: { latency_ms: 1600, citation_count: 1, tiers_used: ['evidence'] },

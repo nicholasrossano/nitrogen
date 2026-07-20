@@ -1,6 +1,6 @@
 import { resolveDemoRequest, DemoDisabledError } from '@/lib/demo/demoApi';
 import { DEMO_PROJECT_ID, DEMO_WORKSPACE_ID } from '@/lib/demo/demoSession';
-import { DEMO_CHAT_LCOE_ID, DEMO_INSTANCE_LCOE, DEMO_INSTANCE_SOLAR, DEMO_INSTANCE_STAKEHOLDER, DEMO_VAR_CAPACITY_FACTOR } from '@/lib/demo/demoFixtures';
+import { DEMO_CHAT_CARBON_ID, DEMO_CHAT_LCOE_ID, DEMO_INSTANCE_LCOE, DEMO_INSTANCE_SOLAR, DEMO_INSTANCE_STAKEHOLDER, DEMO_VAR_CAPACITY_FACTOR } from '@/lib/demo/demoFixtures';
 
 describe('resolveDemoRequest', () => {
   it('returns the demo workspace and project', () => {
@@ -28,6 +28,16 @@ describe('resolveDemoRequest', () => {
       `/api/v1/variables/${DEMO_VAR_CAPACITY_FACTOR}/comments`,
     );
     expect(comments.length).toBeGreaterThan(0);
+  });
+
+  it('includes inline citation markers in the carbon demo chat', () => {
+    const { messages } = resolveDemoRequest<{
+      messages: Array<{ role: string; content: string; sources?: unknown[] }>;
+    }>(`/api/v1/chats/${DEMO_CHAT_CARBON_ID}/messages`);
+    const assistant = messages.find((m) => m.role === 'assistant');
+    expect(assistant?.content).toMatch(/\[Evidence: Rift Valley Solar Feasibility Study v3, p0\]/);
+    expect(assistant?.content).toMatch(/\[Corpus: Kenya grid emission factor guidance\]/);
+    expect(assistant?.sources?.length).toBeGreaterThan(0);
   });
 
   it('returns assessments associated with a demo chat', () => {
