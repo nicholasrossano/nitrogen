@@ -28,6 +28,11 @@ export const billingApi = {
         ...(priceId ? { price_id: priceId } : {}),
       }),
     }),
+  confirmCheckout: (sessionId: string) =>
+    fetchApi<BillingStatus>('/api/v1/billing/confirm-checkout', {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId }),
+    }),
   createPortalSession: (returnUrl: string) =>
     fetchApi<{ url: string }>('/api/v1/billing/portal', {
       method: 'POST',

@@ -89,7 +89,7 @@ export function BillingOptionsPanel({ onByokSaved }: BillingOptionsPanelProps) {
     setCheckoutLoading(true);
     try {
       const { url } = await api.createCheckout(
-        `${window.location.origin}/subscribe?success=true`,
+        `${window.location.origin}/subscribe?success=true&session_id={CHECKOUT_SESSION_ID}`,
         `${window.location.origin}/subscribe?canceled=true`,
         catalog?.stripe_price_id ?? undefined,
       );

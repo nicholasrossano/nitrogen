@@ -70,7 +70,7 @@ export function UsageBarometer({
         />
       </div>
       {disclaimer && (
-        <p className="text-[10px] text-text-tertiary text-right pt-0.5">{disclaimer}</p>
+        <p className="text-[10px] text-text-tertiary text-center pt-0.5">{disclaimer}</p>
       )}
     </div>
   );

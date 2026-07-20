@@ -13,6 +13,7 @@ from app.services.billing import (
     create_checkout_session,
     create_portal_session,
     ensure_subscription,
+    fulfill_checkout_session,
     get_billing_status,
     get_usage_summary,
     handle_webhook_event,
@@ -33,6 +34,10 @@ class CheckoutRequest(BaseModel):
 
 class PortalRequest(BaseModel):
     return_url: str
+
+
+class ConfirmCheckoutRequest(BaseModel):
+    session_id: str
 
 
 class RedeemCodeRequest(BaseModel):
@@ -72,8 +77,8 @@ async def billing_status(
     if not settings.billing_enabled:
         return {"allowed": True, "tier": "unlimited", "used_usd": 0, "limit_usd": 0}
     await ensure_subscription(user.uid, db)
-    await db.commit()
     status = await get_billing_status(user.uid, db)
+    await db.commit()
     return status
 
 
@@ -134,6 +139,35 @@ async def checkout(
         )
     await db.commit()
     return {"url": url}
+
+
+@router.post("/confirm-checkout")
+async def confirm_checkout(
+    body: ConfirmCheckoutRequest,
+    user: AuthUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Fulfill a Checkout Session on browser return (webhook backup)."""
+    if not settings.billing_enabled:
+        raise HTTPException(status_code=503, detail="Billing is not configured")
+    session_id = (body.session_id or "").strip()
+    if not session_id.startswith("cs_"):
+        raise HTTPException(status_code=400, detail="Invalid checkout session id")
+    try:
+        status = await fulfill_checkout_session(user.uid, session_id, db)
+        await db.commit()
+        return status
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except stripe.InvalidRequestError as e:
+        logger.error("Confirm checkout failed: %s", e)
+        raise HTTPException(status_code=400, detail="Invalid checkout session")
+    except stripe.AuthenticationError:
+        logger.error("Confirm checkout failed: STRIPE_SECRET_KEY rejected by Stripe")
+        raise HTTPException(
+            status_code=503,
+            detail="Stripe is misconfigured on this deployment (invalid API key). Contact support.",
+        )
 
 
 @router.post("/portal")

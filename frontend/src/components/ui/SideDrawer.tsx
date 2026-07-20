@@ -2,7 +2,7 @@
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
-import { LayoutGrid, LogOut, Map, Home, Calculator, ListChecks, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, Unlink, HelpCircle, PanelLeft } from 'lucide-react';
+import { LayoutGrid, LayoutDashboard, LogOut, Map, Calculator, ListChecks, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, Unlink, HelpCircle, PanelLeft } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { ChangeWorkspaceSelect } from '@/components/chat-shell/ChangeWorkspaceSelect';
 import { DrawerChatTree } from '@/components/chat-shell/DrawerChatTree';
@@ -49,7 +49,7 @@ const GLOBAL_ITEMS: NavItemConfig[] = [
 ];
 
 const PROJECT_ITEMS: NavItemConfig[] = [
-  { key: 'research', label: 'Overview', Icon: Home },
+  { key: 'research', label: 'Overview', Icon: LayoutDashboard },
   { key: 'plan', label: 'Assessments', Icon: Map },
   { key: 'workspace', label: 'Assessments', Icon: Calculator },
   { key: 'variables', label: PROJECT_VARIABLES.title, Icon: ListChecks },
