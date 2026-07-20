@@ -89,4 +89,4 @@ Private expertise can stay on your fork forever; rebase still works as long as y
 
 ## License reminder
 
-Code remains AGPLv3. Forks and self-hosting are welcome; the Nitrogen AI **name** is reserved — rename your product if it is a separate offering ([TRADEMARKS.md](../TRADEMARKS.md)). Commercial terms outside AGPL are optional ([COMMERCIAL_LICENSE.md](../COMMERCIAL_LICENSE.md)).
+Code remains AGPLv3. Name/branding is reserved separately ([TRADEMARKS.md](../TRADEMARKS.md)). Other licensing terms: [COMMERCIAL_LICENSE.md](../COMMERCIAL_LICENSE.md).
