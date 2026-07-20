@@ -5,24 +5,14 @@ import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader2, Mail, Lock, AlertCircle } from 'lucide-react';
 import { needsEmailVerification, useAuth } from '@/lib/auth';
-import { buildDemoProjectPath, DEMO_PROJECT_ID, clearLeavingDemoForAuth } from '@/lib/demo/demoSession';
+import { resolvePostAuthDestination } from '@/lib/authReturnUrl';
+import { buildDemoProjectPath, clearLeavingDemoForAuth } from '@/lib/demo/demoSession';
 import { startDemoSession } from '@/lib/demo/demoBoundary';
 import nitrogenIcon from '@/app/icon.png';
 
-function getSafeReturnUrl(raw: string | null): string {
-  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return '/';
-  // Never bounce a signed-in user back onto the demo project route.
-  if (raw === `/projects/${DEMO_PROJECT_ID}` || raw.startsWith(`/projects/${DEMO_PROJECT_ID}?`)) {
-    return '/';
-  }
-  return raw;
-}
-
 /** Post-auth entry into the real app (not a soft leave that can leave /login blank). */
-function enterApp(returnUrl: string) {
-  // Default home goes through /chat — empty workspaces land on /projects/new.
-  const dest = returnUrl === '/' ? '/chat' : returnUrl;
-  window.location.assign(dest);
+function enterApp(rawReturnUrl: string | null) {
+  window.location.assign(resolvePostAuthDestination(rawReturnUrl));
 }
 
 type AuthMode = 'signin' | 'signup' | 'reset' | 'verify';
@@ -30,7 +20,7 @@ type AuthMode = 'signin' | 'signup' | 'reset' | 'verify';
 function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const returnUrl = getSafeReturnUrl(searchParams.get('returnUrl'));
+  const rawReturnUrl = searchParams.get('returnUrl');
   const {
     signInWithEmail,
     signUpWithEmail,
@@ -67,8 +57,8 @@ function LoginPageContent() {
       return;
     }
     // Already signed in / just verified — enter the app immediately.
-    enterApp(returnUrl);
-  }, [loading, user, returnUrl]);
+    enterApp(rawReturnUrl);
+  }, [loading, user, rawReturnUrl]);
 
   // Poll Firebase while waiting — clicking the email link updates the account
   // server-side, but this tab won't hear about it until we reload the user.
@@ -81,7 +71,7 @@ function LoginPageContent() {
         const next = await reloadUser();
         if (cancelled) return;
         if (next && !needsEmailVerification(next)) {
-          enterApp(returnUrl);
+          enterApp(rawReturnUrl);
         }
       } catch {
         // Ignore transient poll failures; the manual button still works.
@@ -104,7 +94,7 @@ function LoginPageContent() {
       window.removeEventListener('focus', onVisible);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [loading, mode, reloadUser, returnUrl, user?.uid, user?.emailVerified]);
+  }, [loading, mode, reloadUser, rawReturnUrl, user?.uid, user?.emailVerified]);
 
   // Auth still booting, or verified and mid-redirect — never paint a blank page.
   if (loading || (user && !needsEmailVerification(user))) {
@@ -204,7 +194,7 @@ function LoginPageContent() {
         setError('Email not verified yet. Check your inbox and click the link, then try again.');
         return;
       }
-      enterApp(returnUrl);
+      enterApp(rawReturnUrl);
     } catch (err: unknown) {
       setError(mapAuthError(err));
     } finally {

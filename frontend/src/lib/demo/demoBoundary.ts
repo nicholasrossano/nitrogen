@@ -4,9 +4,9 @@
  * direction must clear in-memory stores so the two never render mixed data.
  */
 
+import { clearLastProjectPreference } from '@/lib/authReturnUrl';
 import { resetClientStores } from '@/lib/sessionBoundary';
 import {
-  DEMO_PROJECT_ID,
   beginDemoEntry,
   beginLeavingDemoForAuth,
   endDemoEntry,
@@ -16,18 +16,11 @@ import {
   isDemoEntryInProgress,
 } from '@/lib/demo/demoSession';
 
-const LAST_PROJECT_KEY = 'nitrogen-last-project-id';
-
 export function resetClientStateForDemoBoundary(): void {
   resetClientStores();
-  // Never leave a demo project id as the post-login landing preference.
-  try {
-    if (typeof window !== 'undefined' && localStorage.getItem(LAST_PROJECT_KEY) === DEMO_PROJECT_ID) {
-      localStorage.removeItem(LAST_PROJECT_KEY);
-    }
-  } catch {
-    // ignore
-  }
+  // Crossing demo↔real must not keep a last-project resume (demo id or a
+  // real UUID that would 404 after the next login).
+  clearLastProjectPreference();
 }
 
 /**

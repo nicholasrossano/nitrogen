@@ -26,6 +26,7 @@ jest.mock('@/lib/auth', () => ({
 }));
 
 jest.mock('@/lib/demo/demoSession', () => ({
+  DEMO_PROJECT_ID: 'demo-rift-valley-solar',
   DEMO_SESSION_EVENT: 'nitrogen:demo-session',
   isDemoActive: () => demoActive,
   isDemoProjectPath: (path: string | null) =>
@@ -64,9 +65,37 @@ describe('ProtectedRoute demo edges', () => {
     );
 
     await waitFor(() => {
-      expect(push).toHaveBeenCalled();
+      expect(push).toHaveBeenCalledWith('/login');
     });
     expect(replace).not.toHaveBeenCalledWith('/demo');
+  });
+
+  it('does not attach project returnUrl when sending logged-out users to login', async () => {
+    pathname = '/projects/29fac4ff-3549-44b6-b80e-991b3b123f94';
+    render(
+      <ProtectedRoute>
+        <div>secret</div>
+      </ProtectedRoute>,
+    );
+
+    await waitFor(() => {
+      expect(push).toHaveBeenCalledWith('/login');
+    });
+    expect(push).not.toHaveBeenCalledWith(expect.stringContaining('returnUrl'));
+  });
+
+  it('preserves non-project returnUrl when sending logged-out users to login', async () => {
+    pathname = '/settings';
+    // settings may not be wrapped by ProtectedRoute in prod, but loginRedirect should keep it
+    render(
+      <ProtectedRoute>
+        <div>secret</div>
+      </ProtectedRoute>,
+    );
+
+    await waitFor(() => {
+      expect(push).toHaveBeenCalledWith('/login?returnUrl=%2Fsettings');
+    });
   });
 
   it('allows the demo project through when the demo session flag is active', async () => {

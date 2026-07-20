@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { needsEmailVerification, useAuth } from '@/lib/auth';
+import { isProjectResumePath } from '@/lib/authReturnUrl';
 import { DEMO_SESSION_EVENT, isDemoActive, isDemoProjectPath, isLeavingDemoForAuth } from '@/lib/demo/demoSession';
 
 interface ProtectedRouteProps {
@@ -13,7 +14,9 @@ interface ProtectedRouteProps {
 function loginRedirect(pathname: string | null, mode?: 'verify'): string {
   const params = new URLSearchParams();
   if (mode) params.set('mode', mode);
-  if (pathname && pathname !== '/') {
+  // Never park a project id on /login — stale/demo/cross-account resumes 404
+  // after auth. Non-project paths (e.g. settings) still deep-link back.
+  if (pathname && pathname !== '/' && !isProjectResumePath(pathname)) {
     params.set('returnUrl', pathname);
   }
   const query = params.toString();

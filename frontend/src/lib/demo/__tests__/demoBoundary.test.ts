@@ -84,6 +84,12 @@ describe('demoBoundary', () => {
     expect(getCached(swrKeys.project('demo-rift-valley-solar'))).toBeUndefined();
   });
 
+  it('resetClientStateForDemoBoundary clears any last-project preference', () => {
+    localStorage.setItem('nitrogen-last-project-id', 'real-project-uuid');
+    resetClientStateForDemoBoundary();
+    expect(localStorage.getItem('nitrogen-last-project-id')).toBeNull();
+  });
+
   it('enterDemo alone does not write persistent workspace prefs', () => {
     const before = localStorage.getItem('nitrogen-active-workspace-id');
     enterDemo();
