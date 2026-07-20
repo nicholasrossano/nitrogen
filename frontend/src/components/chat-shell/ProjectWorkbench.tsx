@@ -1560,9 +1560,11 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
             key={chatSurfaceKey}
             projectId={projectId}
             initialChatId={activeChatId}
-            useLandingWhenEmpty={!isOnboarding}
+            useLandingWhenEmpty={!isOnboarding && !seedParam}
             hideTiles
-            allowInitialProjectOnboarding={isOnboarding}
+            // ?seed= is an explicit handoff from /projects/new — treat as
+            // onboarding immediately so auto-send does not race project fetch.
+            allowInitialProjectOnboarding={isOnboarding || Boolean(seedParam)}
             restoreLatestChatOnMount={isOnboarding}
             autoSendOnMount={seedParam}
             onAutoSendOnMountHandled={handleSeedHandled}
