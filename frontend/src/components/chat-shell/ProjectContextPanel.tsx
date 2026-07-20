@@ -6,6 +6,7 @@ import { api, type Project, type ProjectHealthDimension, type ProjectHealthStatu
 import { CHAT_FLOATING_PANEL_CHROME } from '@/components/ui/chatSidebarLayout';
 import { buildCollaborators, CollaboratorRow } from '@/components/chat-shell/projectContextCollaborators';
 import { getCached, swrFetch, swrKeys } from '@/lib/swrCache';
+import { useProjectStore } from '@/stores/projectStore';
 
 const MAX_COLLABORATOR_ROWS = 3;
 
@@ -18,6 +19,8 @@ const STATUS_META: Record<ProjectHealthStatus, { label: string; className: strin
 
 interface ProjectContextPanelProps {
   project: Project | null;
+  /** When `project` is briefly null after a store wipe, still resolve Overview by id. */
+  projectId?: string | null;
   /** Floating card in stack vs docked column */
   variant?: 'docked' | 'floating' | 'stacked';
   refreshKey?: number;
@@ -26,26 +29,43 @@ interface ProjectContextPanelProps {
 
 export function ProjectContextPanel({
   project,
+  projectId = null,
   variant = 'docked',
   refreshKey = 0,
   onViewAll,
 }: ProjectContextPanelProps) {
+  const resolvedId = project?.id ?? projectId ?? null;
+  const storeProject = useProjectStore((s) => {
+    if (!resolvedId) return null;
+    if (s.project?.id === resolvedId) return s.project;
+    return s.projectsById[resolvedId] ?? null;
+  });
+  const resolvedProject = project?.id === resolvedId ? project : storeProject;
+
   const [healthDimensions, setHealthDimensions] = useState<ProjectHealthDimension[]>([]);
   const [shares, setShares] = useState<ProjectShare[]>([]);
   const [collaboratorsLoading, setCollaboratorsLoading] = useState(false);
 
+  // Re-hydrate the shared project store when Overview would otherwise vanish.
   useEffect(() => {
-    if (!project?.id) {
+    if (!resolvedId) return;
+    if (resolvedProject?.id === resolvedId) return;
+    if (useProjectStore.getState().loading) return;
+    void useProjectStore.getState().loadProject(resolvedId);
+  }, [resolvedId, resolvedProject?.id, refreshKey]);
+
+  useEffect(() => {
+    if (!resolvedProject?.id) {
       setHealthDimensions([]);
       return;
     }
-    const key = swrKeys.health(project.id);
+    const key = swrKeys.health(resolvedProject.id);
     const cached = getCached<ProjectHealthDimension[]>(key);
     if (cached) setHealthDimensions(cached.slice(0, 4));
 
     let cancelled = false;
     void swrFetch(key, async () => {
-      const res = await api.getProjectHealth(project.id);
+      const res = await api.getProjectHealth(resolvedProject.id);
       return res.dimensions;
     }, { force: refreshKey > 0 })
       .then(({ data }) => {
@@ -58,14 +78,14 @@ export function ProjectContextPanel({
     return () => {
       cancelled = true;
     };
-  }, [project?.id, refreshKey]);
+  }, [resolvedProject?.id, refreshKey]);
 
   useEffect(() => {
-    if (!project?.id) {
+    if (!resolvedProject?.id) {
       setShares([]);
       return;
     }
-    const key = swrKeys.shares(project.id);
+    const key = swrKeys.shares(resolvedProject.id);
     const cached = getCached<ProjectShare[]>(key);
     if (cached) {
       setShares(cached);
@@ -75,7 +95,7 @@ export function ProjectContextPanel({
     }
 
     let cancelled = false;
-    void swrFetch(key, () => api.getShares(project.id), { force: refreshKey > 0 })
+    void swrFetch(key, () => api.getShares(resolvedProject.id), { force: refreshKey > 0 })
       .then(({ data }) => {
         if (!cancelled) setShares(data);
       })
@@ -89,16 +109,14 @@ export function ProjectContextPanel({
     return () => {
       cancelled = true;
     };
-  }, [project?.id, refreshKey]);
+  }, [resolvedProject?.id, refreshKey]);
 
   const collaborators = useMemo(
-    () => (project ? buildCollaborators(project, shares) : []),
-    [project, shares],
+    () => (resolvedProject ? buildCollaborators(resolvedProject, shares) : []),
+    [resolvedProject, shares],
   );
   const visibleCollaborators = collaborators.slice(0, MAX_COLLABORATOR_ROWS);
   const hiddenCollaboratorCount = Math.max(0, collaborators.length - MAX_COLLABORATOR_ROWS);
-
-  if (!project) return null;
 
   const panelClass =
     variant === 'floating'
@@ -106,6 +124,20 @@ export function ProjectContextPanel({
       : variant === 'stacked'
         ? `flex h-full min-h-0 flex-col overflow-hidden ${CHAT_FLOATING_PANEL_CHROME}`
         : 'w-[min(22rem,34vw)] shrink-0 border-l border-divider bg-surface flex flex-col min-h-0';
+
+  if (!resolvedProject) {
+    if (!resolvedId) return null;
+    return (
+      <aside className={panelClass}>
+        <div className="px-4 py-3 shrink-0">
+          <h2 className="text-sm font-semibold text-text-primary truncate">Overview</h2>
+        </div>
+        <div className="flex flex-1 items-center justify-center px-4 pb-4 text-text-tertiary">
+          <Loader2 className="h-4 w-4 animate-spin" aria-label="Loading overview" />
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <aside className={panelClass}>
@@ -124,8 +156,8 @@ export function ProjectContextPanel({
             </button>
           )}
         </div>
-        {project.subject && (
-          <p className="mt-1 text-xs text-text-secondary line-clamp-3">{project.subject}</p>
+        {resolvedProject.subject && (
+          <p className="mt-1 text-xs text-text-secondary line-clamp-3">{resolvedProject.subject}</p>
         )}
       </div>
 
@@ -160,22 +192,24 @@ export function ProjectContextPanel({
           <h3 className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">
             Collaborators
           </h3>
-          {collaboratorsLoading ? (
+          {collaboratorsLoading && visibleCollaborators.length === 0 ? (
             <div className="flex items-center gap-2 text-xs text-text-tertiary">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
               Loading…
             </div>
           ) : (
-            <ul>
-              {visibleCollaborators.map((collaborator) => (
-                <CollaboratorRow key={collaborator.id} {...collaborator} />
-              ))}
-            </ul>
-          )}
-          {!collaboratorsLoading && hiddenCollaboratorCount > 0 && (
-            <p className="mt-1 pl-3.5 text-[10px] text-text-tertiary">
-              +{hiddenCollaboratorCount} more
-            </p>
+            <div className="space-y-2">
+              <ul>
+                {visibleCollaborators.map((person) => (
+                  <CollaboratorRow key={person.id} {...person} />
+                ))}
+              </ul>
+              {hiddenCollaboratorCount > 0 ? (
+                <p className="text-[11px] text-text-tertiary">
+                  +{hiddenCollaboratorCount} more
+                </p>
+              ) : null}
+            </div>
           )}
         </section>
       </div>

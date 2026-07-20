@@ -52,12 +52,20 @@ export function resetClientStores(): void {
   });
 }
 
-function clearCrossUserPreferences(): void {
+function clearRoutingPreferences(): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.removeItem(LAST_PROJECT_KEY);
     localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
     localStorage.removeItem(LAST_TOUCHED_WORKSPACE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function clearTourPreferences(): void {
+  if (typeof window === 'undefined') return;
+  try {
     // Drop persisted tour state so Zustand rehydrate cannot resurrect another
     // account's welcomeCompleted and skip tips for a new signup.
     localStorage.removeItem('nitrogen-tour');
@@ -95,8 +103,10 @@ function writeStoredAuthUid(uid: string | null): void {
 /**
  * Call on every Firebase auth emission.
  * - Same UID: no-op (preserves prefs across refresh / re-login).
- * - First stamp or UID change: clear cross-account routing prefs + tour so a
- *   new signup never inherits another account's workspace/project IDs.
+ * - First stamp (prevUid null): record uid + scrub orphan routing keys only.
+ *   Do NOT wipe in-memory stores or tour — that blanked Overview / Home title
+ *   on live projects that had already loaded for the signed-in user.
+ * - UID change: clear stores, routing prefs, and tour (true account switch).
  * - Sign-out (null): clear in-memory stores only; keep stored UID so the same
  *   user can sign back in without losing prefs.
  */
@@ -107,8 +117,7 @@ export function syncAuthSessionBoundary(nextUid: string | null): void {
 
   if (nextUid === null) {
     // Demo runs signed-out. Firebase sign-out (or a late null emission after
-    // /demo bootstrap) must not wipe fixture state already painted on Home —
-    // that is what made the project name / landing header randomly vanish.
+    // /demo bootstrap) must not wipe fixture state already painted on Home.
     if (!isDemoActive() && !isDemoEntryInProgress()) {
       resetClientStores();
     }
@@ -125,10 +134,18 @@ export function syncAuthSessionBoundary(nextUid: string | null): void {
 
   if (prevUid === nextUid) return;
 
-  // First stamp (prevUid null) or account switch — both must drop orphan prefs.
-  // First stamp after this boundary ships also clears once for returning users;
-  // that is intentional so a pre-boundary logout → new signup cannot keep ghost IDs.
+  if (prevUid === null) {
+    // First stamp in this browser. Logout keeps AUTH_UID_KEY, so a later
+    // signup as a different user hits the account-switch branch below — that
+    // is what clears ghost workspace/project IDs, not first stamp.
+    clearRoutingPreferences();
+    writeStoredAuthUid(nextUid);
+    return;
+  }
+
+  // True account switch (different Firebase uid).
   resetClientStores();
-  clearCrossUserPreferences();
+  clearRoutingPreferences();
+  clearTourPreferences();
   writeStoredAuthUid(nextUid);
 }

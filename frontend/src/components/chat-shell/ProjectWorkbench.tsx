@@ -1601,9 +1601,13 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
             onAutoSendOnMountHandled={handleSeedHandled}
             landingLayoutMode="default"
             landingComposerTitle={
-              isOnboarding || !selectedProject
+              isOnboarding
                 ? undefined
-                : projectDisplayName(selectedProject)
+                : selectedProject
+                  ? projectDisplayName(selectedProject)
+                  // Keep a stable Home title while the store re-hydrates after an
+                  // auth boundary wipe — never leave a blank composer stage.
+                  : (projectId ? 'Loading project…' : undefined)
             }
             landingHeaderContent={<></>}
             onLandingStateChange={(onLanding) => {

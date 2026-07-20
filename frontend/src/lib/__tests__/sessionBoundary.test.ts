@@ -25,17 +25,25 @@ describe('syncAuthSessionBoundary', () => {
     });
   });
 
-  it('stamps the first uid and clears orphan prefs from a prior browser session', () => {
+  it('stamps the first uid without wiping live project state or tour', () => {
     localStorage.setItem(LAST_PROJECT_KEY, 'proj-orphan');
     localStorage.setItem(ACTIVE_WORKSPACE_KEY, 'ws-orphan');
     useTourStore.setState({ welcomeCompleted: true, completedStepIds: ['welcome-workspace'] });
+    useProjectStore.setState({
+      project: { id: 'proj-live', title: 'Live Project' } as any,
+      projectsById: { 'proj-live': { id: 'proj-live', title: 'Live Project' } as any },
+    });
 
     syncAuthSessionBoundary('user-a');
 
     expect(localStorage.getItem(AUTH_UID_KEY)).toBe('user-a');
     expect(localStorage.getItem(LAST_PROJECT_KEY)).toBeNull();
     expect(localStorage.getItem(ACTIVE_WORKSPACE_KEY)).toBeNull();
-    expect(useTourStore.getState().welcomeCompleted).toBe(false);
+    // Returning users must keep tour + already-loaded project Home chrome.
+    expect(useTourStore.getState().welcomeCompleted).toBe(true);
+    expect(useTourStore.getState().completedStepIds).toEqual(['welcome-workspace']);
+    expect(useProjectStore.getState().project?.id).toBe('proj-live');
+    expect(useProjectStore.getState().projectsById['proj-live']?.title).toBe('Live Project');
   });
 
   it('clears cross-account prefs when the firebase uid changes', () => {

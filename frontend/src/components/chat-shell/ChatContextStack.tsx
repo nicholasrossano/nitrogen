@@ -281,6 +281,7 @@ export function ChatContextStack({
           <ProjectContextPanel
             variant="stacked"
             project={project}
+            projectId={projectId}
             refreshKey={refreshKey}
             onViewAll={handleExpandOverview}
           />
