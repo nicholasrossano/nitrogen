@@ -49,9 +49,9 @@ From the built-in demo (`/demo`) — a sample diligence workspace for **Rift Val
 <p align="center"><em>Structured variables with status, source, and team comments</em></p>
 
 <p align="center">
-  <img src="docs/images/demo-files.png" alt="Project files library" width="900" />
+  <img src="docs/images/demo-assessments.png" alt="Assessments plan with LCOE, carbon, and stakeholder work" width="900" />
 </p>
-<p align="center"><em>Project materials — feasibility, PPA, ESIA, and technical packs</em></p>
+<p align="center"><em>Assessments — diligence plan across definition, feasibility, and impact</em></p>
 
 ## Tech Stack
 
