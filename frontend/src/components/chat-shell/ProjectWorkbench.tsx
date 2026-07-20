@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Maximize2, MessageCircle, PanelRight } from 'lucide-react';
 import { ProjectChatSurface } from '@/components/core-chat/ProjectChatSurface';
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
 import { useChatShellLandingReset, writeLastProjectId } from '@/components/chat-shell/ChatShellProvider';
@@ -39,6 +40,7 @@ import { getCached, swrFetch, swrKeys } from '@/lib/swrCache';
 import { useProjectStore } from '@/stores/projectStore';
 import {
   CHAT_CONTEXT_STACK_GUTTER,
+  CHAT_EDITOR_PANEL_MAX_CONTENT_RATIO,
   CHAT_FLOATING_PANEL_CHROME,
   clampChatEditorPanelWidth,
   chatEditorPanelGutter,
@@ -89,6 +91,10 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   const [pendingInvestigateAutoSend, setPendingInvestigateAutoSend] = useState<PendingInvestigateAutoSend | null>(null);
   const [floatPanelWidthPx, setFloatPanelWidthPx] = useState(readChatEditorPanelWidth);
   const [floatCompanionOpen, setFloatCompanionOpen] = useState(false);
+  /** User-driven stage cover (Full screen button). Separate from assessment companion columns. */
+  const [floatStageExpanded, setFloatStageExpanded] = useState(false);
+  /** Last float closed this session — floor-only "Open Editor" reopens it. */
+  const [lastFloatWidgets, setLastFloatWidgets] = useState<FloatWidget[] | null>(null);
   const [isResizingFloatPanel, setIsResizingFloatPanel] = useState(false);
   const [floatLayout, setFloatLayout] = useState<FloatLayout>('docked');
   const [workbenchWidthPx, setWorkbenchWidthPx] = useState(0);
@@ -178,7 +184,10 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   useEffect(() => {
     setPinnedFloatWidgets(null);
     setFloatWidgets([]);
+    setLastFloatWidgets(null);
     setFloatLayout('docked');
+    setFloatCompanionOpen(false);
+    setFloatStageExpanded(false);
     restoringAssessmentRef.current = null;
     setFocusedVariableId(null);
     setPendingInvestigateAutoSend(null);
@@ -228,6 +237,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
         return rest.length > 0 ? rest : null;
       });
       setFloatCompanionOpen(false);
+      setFloatStageExpanded(false);
       return;
     }
 
@@ -248,6 +258,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
       setFloatWidgets([]);
       setFloatLayout('docked');
       setFloatCompanionOpen(false);
+      setFloatStageExpanded(false);
     }
     setHasMessages(false);
     setExpandMotionMode('center');
@@ -332,6 +343,13 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   }, [projectId, project, projectPlan]);
 
   const effectiveFloatWidgets = pinnedFloatWidgets ?? floatWidgets;
+  const showFloatLayer = effectiveFloatWidgets.length > 0;
+
+  // Remember the latest open float so floor-only "Open Editor" can restore it.
+  useEffect(() => {
+    if (effectiveFloatWidgets.length === 0) return;
+    setLastFloatWidgets(effectiveFloatWidgets);
+  }, [effectiveFloatWidgets]);
   const activeEditorContext = useMemo(
     () => activeEditorContextFromWidget(effectiveFloatWidgets[effectiveFloatWidgets.length - 1]),
     [effectiveFloatWidgets],
@@ -355,7 +373,6 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     }
     return null;
   }, [effectiveFloatWidgets]);
-  const showFloatLayer = effectiveFloatWidgets.length > 0;
 
   const urlAssessmentInstanceId = useMemo(() => {
     for (let index = effectiveFloatWidgets.length - 1; index >= 0; index -= 1) {
@@ -480,16 +497,17 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     && (expandedContextWidget != null || (!showFloatLayer && (!hasMessages || panelParam != null)));
   // Companion side panels promote a docked float to full-stage, covering the floor;
   // side nav lives outside this workbench and is unaffected.
-  // True solo (bare landing) uses inset fill; companion expand uses measured px so
-  // close can animate full → docked instead of jumping from width:auto.
+  // Companion columns and the Full screen control both grow the docked float via
+  // measured width so docked ↔ full can animate (true `solo` layout uses insets and jumps).
   const floatLayoutSolo = showFloatLayer && floatLayout === 'solo';
   const companionExpanded = showFloatLayer && floatCompanionOpen && !floatLayoutSolo;
-  const floatIsSolo = floatLayoutSolo || companionExpanded;
+  const stageExpanded = showFloatLayer && floatStageExpanded && !floatLayoutSolo;
+  const floatIsSolo = floatLayoutSolo || companionExpanded || stageExpanded;
   const floatIsDocked = showFloatLayer && !floatIsSolo;
   const floatFullWidthPx = workbenchWidthPx > 0
     ? Math.max(floatPanelWidthPx, workbenchWidthPx - RIGHT_MARGIN_PX)
     : floatPanelWidthPx;
-  const floatDisplayWidthPx = companionExpanded ? floatFullWidthPx : floatPanelWidthPx;
+  const floatDisplayWidthPx = (companionExpanded || stageExpanded) ? floatFullWidthPx : floatPanelWidthPx;
   const reserveRightSpace = (showContextStack && !expandedContextWidget) || floatIsDocked;
   const rightGutter = floatIsSolo
     ? undefined
@@ -515,6 +533,8 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   // than the browser paints) collapses into one width commit per frame.
   const floatResizeFrameRef = useRef<number | null>(null);
   const floatResizePendingClientXRef = useRef<number | null>(null);
+  /** True while dragging inward from fullscreen — skip the >60% re-promote until below the band. */
+  const floatResizeCollapsingRef = useRef(false);
 
   const handleFloatResizeMove = useCallback((event: MouseEvent) => {
     floatResizePendingClientXRef.current = event.clientX;
@@ -523,18 +543,87 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
       floatResizeFrameRef.current = null;
       const clientX = floatResizePendingClientXRef.current;
       if (clientX == null) return;
-      const nextWidth = window.innerWidth - clientX - RIGHT_MARGIN_PX;
-      setFloatPanelWidthPx(clampChatEditorPanelWidth(nextWidth));
+      const workbenchEl = workbenchRef.current;
+      const contentWidth = workbenchWidthPx > 0
+        ? workbenchWidthPx
+        : (workbenchEl?.clientWidth ?? window.innerWidth);
+      const workbenchRight = workbenchEl?.getBoundingClientRect().right ?? window.innerWidth;
+      const nextWidth = workbenchRight - clientX - RIGHT_MARGIN_PX;
+      const maxDockedWidth = Math.floor(contentWidth * CHAT_EDITOR_PANEL_MAX_CONTENT_RATIO);
+      const fullWidth = Math.max(maxDockedWidth, contentWidth - RIGHT_MARGIN_PX);
+
+      // Collapsing from fullscreen: allow widths above the docked max so the panel
+      // can shrink continuously. Re-promote only after the gesture re-enters expand.
+      if (floatResizeCollapsingRef.current) {
+        const minWidth = clampChatEditorPanelWidth(0, {
+          contentWidth,
+          companionOpen: floatCompanionOpen,
+        });
+        const width = Math.min(fullWidth, Math.max(minWidth, Math.round(nextWidth)));
+        setFloatStageExpanded(false);
+        setFloatPanelWidthPx(width);
+        if (width <= maxDockedWidth) {
+          floatResizeCollapsingRef.current = false;
+        }
+        return;
+      }
+
+      // Expanding past 60% of the stage → promote to fullscreen.
+      if (!floatCompanionOpen && nextWidth > maxDockedWidth) {
+        setFloatPanelWidthPx(clampChatEditorPanelWidth(maxDockedWidth, {
+          contentWidth,
+          companionOpen: false,
+        }));
+        setFloatStageExpanded(true);
+        setIsResizingFloatPanel(false);
+        return;
+      }
+
+      setFloatStageExpanded(false);
+      setFloatPanelWidthPx(clampChatEditorPanelWidth(nextWidth, {
+        contentWidth,
+        companionOpen: floatCompanionOpen,
+      }));
     });
-  }, []);
+  }, [floatCompanionOpen, workbenchWidthPx]);
 
   const handleFloatResizeEnd = useCallback(() => {
     if (floatResizeFrameRef.current != null) {
       cancelAnimationFrame(floatResizeFrameRef.current);
       floatResizeFrameRef.current = null;
     }
+    if (floatResizeCollapsingRef.current) {
+      // Gesture ended still above the docked band — settle at max docked split.
+      const contentWidth = workbenchWidthPx > 0
+        ? workbenchWidthPx
+        : (workbenchRef.current?.clientWidth ?? window.innerWidth);
+      setFloatPanelWidthPx(clampChatEditorPanelWidth(contentWidth, {
+        contentWidth,
+        companionOpen: floatCompanionOpen,
+      }));
+      floatResizeCollapsingRef.current = false;
+    }
     setIsResizingFloatPanel(false);
-  }, []);
+  }, [floatCompanionOpen, workbenchWidthPx]);
+
+  /** Start a resize; if fullscreen, hand off to measured docked width first so drag can collapse. */
+  const handleFloatResizeStart = useCallback((event: ReactMouseEvent) => {
+    event.preventDefault();
+    if (floatLayout === 'solo' || floatStageExpanded) {
+      const fullWidth = workbenchWidthPx > 0
+        ? Math.max(floatPanelWidthPx, workbenchWidthPx - RIGHT_MARGIN_PX)
+        : floatPanelWidthPx;
+      if (floatLayout === 'solo') {
+        setFloatLayout('docked');
+      }
+      setFloatStageExpanded(false);
+      setFloatPanelWidthPx(fullWidth);
+      floatResizeCollapsingRef.current = true;
+    } else {
+      floatResizeCollapsingRef.current = false;
+    }
+    setIsResizingFloatPanel(true);
+  }, [floatLayout, floatPanelWidthPx, floatStageExpanded, workbenchWidthPx]);
 
   useEffect(() => {
     if (!isResizingFloatPanel) return;
@@ -554,6 +643,18 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     if (isResizingFloatPanel) return;
     writeChatEditorPanelWidth(floatPanelWidthPx);
   }, [floatPanelWidthPx, isResizingFloatPanel]);
+
+  // Keep a persisted width inside the current stage's 60% docked band.
+  useEffect(() => {
+    if (workbenchWidthPx <= 0 || isResizingFloatPanel) return;
+    setFloatPanelWidthPx((prev) => {
+      const next = clampChatEditorPanelWidth(prev, {
+        contentWidth: workbenchWidthPx,
+        companionOpen: floatCompanionOpen,
+      });
+      return next === prev ? prev : next;
+    });
+  }, [floatCompanionOpen, isResizingFloatPanel, workbenchWidthPx]);
 
   const cleanupActiveEphemeralAssessment = useCallback((widgets: FloatWidget[]) => {
     const activeWidget = widgets[widgets.length - 1];
@@ -593,6 +694,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     setFloatWidgets([]);
     setFloatLayout('docked');
     setFloatCompanionOpen(false);
+    setFloatStageExpanded(false);
     // Keep the Variables floor; only clear the selected-variable deep link.
     if (closingVariableDetail && variableParam) {
       replaceWorkbenchSearchParams((params) => {
@@ -640,7 +742,25 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   }, [expandedContextWidget, hasMessages]);
 
   const openPinnedFloat = useCallback((widgets: FloatWidget[], layout: FloatLayout) => {
-    suppressAssessmentRestoreRef.current = false;
+    const assessmentInstanceId = widgets.find((widget) => (
+      (
+        widget.type === 'assessment_workspace'
+        || widget.type === 'decision_log'
+        || widget.type === 'activity_log'
+        || widget.type === 'document_viewer'
+      )
+      && typeof widget.data?.instance_id === 'string'
+      && widget.data.instance_id
+    ))?.data?.instance_id as string | undefined;
+
+    if (assessmentInstanceId) {
+      // Allow ?assessment= sync/restore for assessment-linked floats.
+      suppressAssessmentRestoreRef.current = false;
+    } else {
+      // Plain docs/files must clear the deep-link or restore will replace this float.
+      dismissAssessmentDeepLink();
+    }
+
     if (layout === 'solo') {
       // Bare landing — float owns the stage; dismiss any stale overlay floor.
       setExpandedContextWidget(null);
@@ -651,8 +771,9 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     }
     setFloatLayout(layout);
     setFloatCompanionOpen(false);
+    setFloatStageExpanded(false);
     setPinnedFloatWidgets(widgets);
-  }, [chatShell, dismissContextPanelParam]);
+  }, [chatShell, dismissAssessmentDeepLink, dismissContextPanelParam]);
 
   /** Open Variables floor (if needed) and dock the selected variable as a float. */
   const handleOpenVariableDetail = useCallback((variable: Variable) => {
@@ -674,6 +795,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     chatShell?.setActiveContextWidget('variables');
     setFloatLayout('docked');
     setFloatCompanionOpen(false);
+    setFloatStageExpanded(false);
     setPinnedFloatWidgets([floatWidgetForVariable(variable)]);
     replaceWorkbenchSearchParams((params) => {
       params.delete('chat');
@@ -883,6 +1005,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
       setFloatWidgets([]);
       setFloatLayout('docked');
       setFloatCompanionOpen(false);
+      setFloatStageExpanded(false);
       didReset = true;
     }
 
@@ -923,6 +1046,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     setPinnedFloatWidgets(null);
     setFloatLayout('docked');
     setFloatCompanionOpen(false);
+    setFloatStageExpanded(false);
     if (widget) {
       setFloatWidgets([]);
     }
@@ -988,24 +1112,98 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
       setFloatWidgets([]);
       setPinnedFloatWidgets(null);
       setFloatLayout('docked');
+      setFloatCompanionOpen(false);
+      setFloatStageExpanded(false);
     };
     window.addEventListener('nitrogen:tour-replay', onReplay);
     return () => window.removeEventListener('nitrogen:tour-replay', onReplay);
   }, [chatShell, dismissContextPanelParam]);
 
-  /** Make Chat the active floor beside any open assessment float (Investigate entry). */
-  const revealChatFloorForInvestigate = useCallback(() => {
+  /**
+   * Reveal the chat floor beside the float (dock solo / collapse companion / dismiss panel).
+   * Chat destination is left alone — callers decide thread vs landing.
+   */
+  const revealChatFloorFromFloat = useCallback(() => {
     if (expandedContextWidget || panelParam) {
       setExpandedContextWidget(null);
       setExpandMotionMode('stack');
       chatShell?.setActiveContextWidget(null);
       dismissContextPanelParam();
     }
+    // True solo uses inset chrome (no width). Hand off to the measured full-width
+    // path first so collapsing can animate width down to the docked size.
     if (floatLayout === 'solo') {
       setFloatLayout('docked');
+      setFloatCompanionOpen(false);
+      setFloatStageExpanded(true);
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          setFloatStageExpanded(false);
+        });
+      });
+      return;
     }
-    setHasMessages(true);
+    setFloatCompanionOpen(false);
+    setFloatStageExpanded(false);
   }, [chatShell, dismissContextPanelParam, expandedContextWidget, floatLayout, panelParam]);
+
+  /** Expand a docked float across the stage via width animation (keeps floatLayout docked). */
+  const expandFloatToStage = useCallback(() => {
+    setFloatStageExpanded(true);
+  }, []);
+
+  /** Reopen the last float from a floor-only stage. */
+  const handleOpenEditorFromFloor = useCallback(() => {
+    if (!lastFloatWidgets?.length) return;
+    openPinnedFloat(lastFloatWidgets, resolveFloatLayoutForOpen());
+  }, [lastFloatWidgets, openPinnedFloat, resolveFloatLayoutForOpen]);
+  const handleOpenChatFromFloat = useCallback(() => {
+    revealChatFloorFromFloat();
+
+    if (activeChatId) {
+      setHasMessages(true);
+      return;
+    }
+
+    const instanceId = urlAssessmentInstanceId;
+    if (!instanceId || !projectId) return;
+
+    const openAssociatedChat = (chatId: string) => {
+      replaceWorkbenchSearchParams((params) => {
+        params.delete(CONTEXT_PANEL_SEARCH_PARAM);
+        params.set('chat', chatId);
+      });
+      setHasMessages(true);
+    };
+
+    const cachedChatId = frameworkAssessmentInstances.find((item) => item.id === instanceId)?.chat_id;
+    if (cachedChatId) {
+      openAssociatedChat(cachedChatId);
+      return;
+    }
+
+    void api.listAssessmentInstances(projectId)
+      .then((instances) => {
+        const chatId = instances.find((item) => item.id === instanceId)?.chat_id;
+        if (chatId) openAssociatedChat(chatId);
+      })
+      .catch(() => {
+        // Leave landing; association lookup is best-effort.
+      });
+  }, [
+    activeChatId,
+    frameworkAssessmentInstances,
+    projectId,
+    replaceWorkbenchSearchParams,
+    revealChatFloorFromFloat,
+    urlAssessmentInstanceId,
+  ]);
+
+  /** Make Chat the active floor beside any open assessment float (Investigate entry). */
+  const revealChatFloorForInvestigate = useCallback(() => {
+    revealChatFloorFromFloat();
+    setHasMessages(true);
+  }, [revealChatFloorFromFloat]);
 
   // Investigate from assessment inputs: auto-send into the chat floor with field context.
   useEffect(() => {
@@ -1149,6 +1347,32 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
         </div>
       </div>
 
+      {/* Landing uses the mini context stack instead of Open Editor. */}
+      {!showFloatLayer
+        && lastFloatWidgets
+        && lastFloatWidgets.length > 0
+        && (hasMessages || Boolean(activeChatId) || expandedContextWidget != null) ? (
+        <div
+          className="absolute bottom-4 z-30 transition-[right] duration-300 ease-in-out"
+          style={{
+            // Sit in the floor stage; clear the mini context stack when it owns the right rail.
+            right: showContextStack && !expandedContextWidget
+              ? CHAT_CONTEXT_STACK_GUTTER
+              : '1rem',
+          }}
+        >
+          <button
+            type="button"
+            className="flex h-8 items-center gap-1.5 rounded-md border border-stroke-subtle bg-white px-2.5 text-[11px] font-medium leading-none text-text-secondary shadow-floating-panel transition-colors hover:bg-black/[0.04] hover:text-text-primary"
+            onClick={handleOpenEditorFromFloor}
+            aria-label="Open Editor"
+          >
+            <PanelRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            Open Editor
+          </button>
+        </div>
+      ) : null}
+
       {showContextStack && (
         <ChatContextStack
           project={selectedProject}
@@ -1178,26 +1402,21 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
           className={
             floatLayoutSolo
               ? SOLO_FLOAT_PANEL_CLASS
-              : `${FLOATING_PANEL_CLASS} ${companionExpanded ? 'z-30' : 'z-20'} ${isResizingFloatPanel ? '' : 'transition-[width] duration-300 ease-in-out'}`
+              : `${FLOATING_PANEL_CLASS} ${(companionExpanded || stageExpanded) ? 'z-30' : 'z-20'} ${isResizingFloatPanel ? '' : 'transition-[width] duration-300 ease-in-out'}`
           }
           style={floatLayoutSolo ? undefined : { width: floatDisplayWidthPx }}
         >
-          {!floatIsSolo ? (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize float panel"
+            onMouseDown={handleFloatResizeStart}
+            className="absolute left-0 top-0 bottom-0 z-10 w-2 cursor-col-resize group"
+          >
             <div
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="Resize float panel"
-              onMouseDown={(event) => {
-                event.preventDefault();
-                setIsResizingFloatPanel(true);
-              }}
-              className={`absolute left-0 top-0 bottom-0 z-10 w-2 cursor-col-resize group ${isResizingFloatPanel ? 'bg-accent/10' : ''}`}
-            >
-              <div
-                className={`absolute left-0 top-0 h-full w-px transition-colors ${isResizingFloatPanel ? 'bg-accent/60' : 'bg-divider group-hover:bg-accent/40'}`}
-              />
-            </div>
-          ) : null}
+              className={`absolute left-0 top-0 h-full w-px transition-colors ${isResizingFloatPanel ? 'bg-accent/60' : 'bg-divider group-hover:bg-accent/40'}`}
+            />
+          </div>
           <FloatLayer
             widgets={effectiveFloatWidgets}
             projectId={projectId}
@@ -1212,6 +1431,29 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
             onOpenDocument={handleOpenDocument}
             onOpenFile={handleOpenProjectFile}
           />
+          <div className="absolute bottom-4 left-4 z-40">
+            {floatIsSolo ? (
+              <button
+                type="button"
+                className="flex h-8 items-center gap-1.5 rounded-md border border-stroke-subtle bg-white px-2.5 text-[11px] font-medium leading-none text-text-secondary shadow-floating-panel transition-colors hover:bg-black/[0.04] hover:text-text-primary"
+                onClick={handleOpenChatFromFloat}
+                aria-label="Open Chat"
+              >
+                <MessageCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                Open Chat
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-stroke-subtle bg-white text-text-secondary shadow-floating-panel transition-colors hover:bg-black/[0.04] hover:text-text-primary"
+                onClick={expandFloatToStage}
+                aria-label="Full screen"
+                title="Full screen"
+              >
+                <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            )}
+          </div>
         </aside>
       )}
 
