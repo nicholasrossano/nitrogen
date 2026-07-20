@@ -297,9 +297,11 @@ async def get_project_status(
 ):
     project = await require_viewer(db, project_id, user)
     categories, result_rows, overrides_by_category, domain = await list_project_status(db, project)
-    # Fill missing/stale short info summaries (backend evaluation lens).
-    if await ensure_category_criteria(db, project, categories):
-        await db.commit()
+    # Seed + evaluation-lens generation both mutate the session; always commit so
+    # parallel /project-status/categories reads see the rows (and so a rolled-back
+    # request does not discard a brand-new project's starter categories).
+    await ensure_category_criteria(db, project, categories)
+    await db.commit()
     return _build_status_response(
         project=project,
         categories=categories,

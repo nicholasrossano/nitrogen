@@ -834,10 +834,15 @@ export function ProjectChatSurface({
 
   // One-time auto-send for the description typed on /projects/new before this
   // project existed — fires exactly once for a brand-new, history-less thread.
+  // Must wait for allowInitialProjectOnboarding: on first mount the parent often
+  // still has project=null, so the flag is false until loadProject resolves. If we
+  // send early the backend skips the upload-prompt short-circuit and answers like
+  // a normal research query.
   const autoSendHandledRef = useRef(false);
   useEffect(() => {
     if (!autoSendOnMount) return;
     if (autoSendHandledRef.current) return;
+    if (!allowInitialProjectOnboarding) return;
     if (loadingChat) return;
     if (initialChatId || currentChatId) return;
     if (localMessages.length > 0) return;
@@ -846,6 +851,7 @@ export function ProjectChatSurface({
     onAutoSendOnMountHandled?.();
     void handleSend(autoSendOnMount);
   }, [
+    allowInitialProjectOnboarding,
     autoSendOnMount,
     currentChatId,
     handleSend,

@@ -288,13 +288,18 @@ export function StatusOverviewTable({
       setIsLoading(true);
     }
     try {
+      // Status owns first-time category seeding; fetch it before configs so a
+      // brand-new project does not race two seeders in parallel.
       const { data } = await swrFetch(
         key,
         async () => {
-          const [response, configs] = await Promise.all([
-            api.getProjectStatus(initiativeId),
-            api.listStatusCategories(initiativeId),
-          ]);
+          const response = await api.getProjectStatus(initiativeId);
+          let configs: ProjectStatusCategoryConfig[] = [];
+          try {
+            configs = await api.listStatusCategories(initiativeId);
+          } catch {
+            // Editor configs are best-effort; status rows still render.
+          }
           return { response, configs };
         },
         { force: options?.force === true },
@@ -370,6 +375,12 @@ export function StatusOverviewTable({
   }, [loadStatus, onRefresh, recomputeOnToken, refreshToken]);
 
   const rows = useMemo(() => statusData?.categories ?? [], [statusData]);
+  const awaitingFirstAssessment = useMemo(
+    () =>
+      rows.length > 0 &&
+      rows.every((row) => row.update_source === 'not_generated'),
+    [rows],
+  );
 
   const openCreateEditor = () => {
     setEditingCategory(null);
@@ -437,7 +448,7 @@ export function StatusOverviewTable({
   };
 
   const showAddCategory = !readOnly;
-  const showRefresh = !hideRefreshButton;
+  const showRefresh = !hideRefreshButton || awaitingFirstAssessment;
   const showActions = showAddCategory || showRefresh;
 
   return (
@@ -448,6 +459,34 @@ export function StatusOverviewTable({
 
           {isLoading ? (
             <p className="px-4 py-4 text-sm text-text-tertiary">Loading status overview...</p>
+          ) : rows.length === 0 && !error ? (
+            <div className="px-4 py-4">
+              <p className="text-sm font-medium text-text-primary">No status categories yet</p>
+              <p className="mt-1 text-sm text-text-tertiary">
+                Add a category to start tracking diligence signals for this project.
+              </p>
+            </div>
+          ) : awaitingFirstAssessment ? (
+            <div className="px-4 py-4">
+              <p className="text-sm font-medium text-text-primary">Status not scored yet</p>
+              <p className="mt-1 text-sm text-text-tertiary">
+                Starter categories are ready. Upload materials, then refresh to score this
+                project from available evidence.
+              </p>
+              <ul className="mt-3 space-y-1.5">
+                {rows.map((row) => (
+                  <li
+                    key={row.category_key}
+                    className="flex items-center justify-between gap-3 text-sm text-text-secondary"
+                  >
+                    <span>{row.label}</span>
+                    <StatusCapsule size="md" className={STATUS_META.unknown.className}>
+                      Not scored
+                    </StatusCapsule>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ) : (
             <div className="divide-y divide-divider">
               {rows.map((row) => {

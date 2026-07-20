@@ -11,6 +11,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import case, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assessments.utils import llm_json
@@ -957,7 +958,7 @@ async def _llm_category_result(
     }
 
 
-async def get_or_seed_status_categories(
+async def _list_active_status_categories(
     db: AsyncSession,
     project: Project,
 ) -> list[ProjectStatusCategory]:
@@ -969,7 +970,14 @@ async def get_or_seed_status_categories(
         )
         .order_by(ProjectStatusCategory.created_at.asc())
     )
-    rows = list(result.scalars().all())
+    return list(result.scalars().all())
+
+
+async def get_or_seed_status_categories(
+    db: AsyncSession,
+    project: Project,
+) -> list[ProjectStatusCategory]:
+    rows = await _list_active_status_categories(db, project)
     if rows:
         return rows
 
@@ -981,22 +989,28 @@ async def get_or_seed_status_categories(
     if existing.scalar_one_or_none() is not None:
         return []
 
+    # Overview loads status + category configs in parallel; both used to seed and
+    # race into uq_project_status_categories_project_key. Seed inside a savepoint
+    # so a concurrent winner just causes a re-fetch instead of a 500.
     defaults = get_default_status_categories()
-    seeded: list[ProjectStatusCategory] = []
-    for item in defaults.categories:
-        row = ProjectStatusCategory(
-            project_id=project.id,
-            category_key=item.category_key,
-            label=item.label,
-            definition_text=item.definition_text,
-            criteria=None,
-            is_active=True,
-        )
-        db.add(row)
-        seeded.append(row)
-    await db.flush()
-    await ensure_category_criteria(db, project, seeded)
-    return seeded
+    try:
+        async with db.begin_nested():
+            for item in defaults.categories:
+                db.add(
+                    ProjectStatusCategory(
+                        project_id=project.id,
+                        category_key=item.category_key,
+                        label=item.label,
+                        definition_text=item.definition_text,
+                        criteria=None,
+                        is_active=True,
+                    )
+                )
+            await db.flush()
+    except IntegrityError:
+        pass
+
+    return await _list_active_status_categories(db, project)
 
 
 async def refresh_project_status(
@@ -1112,16 +1126,9 @@ async def list_status_category_configs(
     db: AsyncSession,
     project: Project,
 ) -> list[ProjectStatusCategory]:
-    await get_or_seed_status_categories(db, project)
-    result = await db.execute(
-        select(ProjectStatusCategory)
-        .where(
-            ProjectStatusCategory.project_id == project.id,
-            ProjectStatusCategory.is_active.is_(True),
-        )
-        .order_by(ProjectStatusCategory.created_at.asc())
-    )
-    return list(result.scalars().all())
+    # Do not seed here — GET /project-status owns first-time seeding so parallel
+    # overview fetches cannot both insert default categories.
+    return await _list_active_status_categories(db, project)
 
 
 async def create_status_category(
