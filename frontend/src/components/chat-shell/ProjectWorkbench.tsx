@@ -326,9 +326,21 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   }, [commitFloatSession, projectId]);
 
   useEffect(() => {
-    void useProjectStore.getState().loadProject(projectId);
-    void useProjectStore.getState().loadMaterials(projectId);
-    writeLastProjectId(projectId);
+    let cancelled = false;
+    void (async () => {
+      await useProjectStore.getState().loadProject(projectId);
+      if (cancelled) return;
+      // Only persist last-project after a successful load — ghost IDs from
+      // another account must not be re-written into localStorage.
+      const loaded = useProjectStore.getState().project;
+      if (loaded?.id === projectId) {
+        writeLastProjectId(projectId);
+        void useProjectStore.getState().loadMaterials(projectId);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [projectId]);
 
   useEffect(() => {
@@ -472,6 +484,25 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
 
   // Prefer live store slot, then by-id cache — never paint "Untitled" for a known id.
   const selectedProject = project?.id === projectId ? project : cachedProject;
+
+  // If auth/demo boundary wipes the store after mount, re-hydrate so Home keeps
+  // the project name / overview chrome instead of an empty composer stage.
+  useEffect(() => {
+    if (selectedProject?.id === projectId) return;
+    if (useProjectStore.getState().loading) return;
+    let cancelled = false;
+    void (async () => {
+      await useProjectStore.getState().loadProject(projectId);
+      if (cancelled) return;
+      const loaded = useProjectStore.getState().project;
+      if (loaded?.id === projectId) {
+        void useProjectStore.getState().loadMaterials(projectId);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, selectedProject?.id]);
 
   const frameworkPlannedAssessmentIds = useMemo(() => {
     const fromProject = selectedProject?.selected_tools ?? project?.selected_tools ?? [];

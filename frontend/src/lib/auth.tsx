@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, useMemo, useCallback, R
 import type { User, Auth } from 'firebase/auth';
 import { isDemoActive } from '@/lib/demo/demoSession';
 import { leaveDemoSession } from '@/lib/demo/demoBoundary';
+import { syncAuthSessionBoundary } from '@/lib/sessionBoundary';
 
 interface AuthContextType {
   user: User | null;
@@ -55,6 +56,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (nextUser && isDemoActive()) {
             leaveDemoSession();
           }
+          // Drop cross-account workspace / last-project / tour prefs when the
+          // Firebase UID changes so new signups never inherit another user's IDs.
+          // Skip store wipe on signed-out auth while demo is active (see sessionBoundary).
+          syncAuthSessionBoundary(nextUser?.uid ?? null);
           setUser(nextUser);
           setLoading(false);
         });
