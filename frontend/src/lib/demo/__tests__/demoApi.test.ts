@@ -1,6 +1,6 @@
 import { resolveDemoRequest, DemoDisabledError } from '@/lib/demo/demoApi';
 import { DEMO_PROJECT_ID, DEMO_WORKSPACE_ID } from '@/lib/demo/demoSession';
-import { DEMO_CHAT_CARBON_ID, DEMO_CHAT_LCOE_ID, DEMO_INSTANCE_LCOE, DEMO_INSTANCE_SOLAR, DEMO_INSTANCE_STAKEHOLDER, DEMO_VAR_CAPACITY_FACTOR } from '@/lib/demo/demoFixtures';
+import { DEMO_CHAT_CARBON_ID, DEMO_CHAT_LCOE_ID, DEMO_CHAT_STAKEHOLDER_ID, DEMO_INSTANCE_LCOE, DEMO_INSTANCE_SOLAR, DEMO_INSTANCE_STAKEHOLDER, DEMO_VAR_CAPACITY_FACTOR } from '@/lib/demo/demoFixtures';
 
 describe('resolveDemoRequest', () => {
   it('returns the demo workspace and project', () => {
@@ -38,6 +38,23 @@ describe('resolveDemoRequest', () => {
     expect(assistant?.content).toMatch(/\[Evidence: Rift Valley Solar Feasibility Study v3, p0\]/);
     expect(assistant?.content).toMatch(/\[Corpus: Kenya grid emission factor guidance\]/);
     expect(assistant?.sources?.length).toBeGreaterThan(0);
+  });
+
+  it('includes a World Bank comparable-project citation in the stakeholder demo chat', () => {
+    const { messages } = resolveDemoRequest<{
+      messages: Array<{ role: string; content: string; sources?: Array<{ source_type: string; chunk_id?: string }> }>;
+    }>(`/api/v1/chats/${DEMO_CHAT_STAKEHOLDER_ID}/messages`);
+    const wb = messages.find(
+      (m) => m.role === 'assistant' && m.content.includes('[Comparable Project:'),
+    );
+    expect(wb?.content).toContain('P180465');
+    expect(wb?.content).toContain('200 MWh');
+    expect(wb?.sources?.[0]).toEqual(
+      expect.objectContaining({
+        source_type: 'worldbank_project',
+        chunk_id: 'P180465',
+      }),
+    );
   });
 
   it('returns assessments associated with a demo chat', () => {
