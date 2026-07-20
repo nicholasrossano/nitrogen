@@ -235,7 +235,17 @@ export function resolveDemoRequest<T>(endpoint: string, options?: RequestInit): 
 
   const chatAssessmentsMatch = match(path, /^\/api\/v1\/chats\/([^/]+)\/assessments$/);
   if (method === 'GET' && chatAssessmentsMatch) {
-    return { assessments: [] } as T;
+    const chatId = chatAssessmentsMatch[1];
+    const assessments = demoAssessmentInstances
+      .filter((inst) => inst.chat_id === chatId)
+      .map((inst) => ({
+        instance_id: inst.id,
+        assessment_id: inst.assessment_id,
+        title: inst.title,
+        status: inst.status,
+        started_at: inst.started_at,
+      }));
+    return { assessments } as T;
   }
 
   // --- Assessment workflow ---
