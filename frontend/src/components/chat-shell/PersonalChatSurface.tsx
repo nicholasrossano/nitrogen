@@ -3,9 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import type { ChatMessage, FieldContext } from '@/lib/api';
+import { SquarePen } from 'lucide-react';
 import { ConversationView } from '@/components/core-chat/ConversationView';
 import { LandingInput } from '@/components/core-chat/LandingInput';
-import { EditorPanelHeader } from '@/components/editor/EditorPanelHeader';
+import {
+  EditorPanelHeader,
+  EditorPanelHeaderIconButton,
+} from '@/components/editor/EditorPanelHeader';
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
 import type { CoreChatMessage } from '@/types/chat';
 
@@ -390,6 +394,11 @@ export function PersonalChatSurface({
         onSaveTitle={handleSaveChatTitle}
         titleSaving={titleSaving}
         onBack={handleLeaveChat}
+        actions={(
+          <EditorPanelHeaderIconButton label="New chat" onClick={handleLeaveChat}>
+            <SquarePen className="h-3.5 w-3.5" />
+          </EditorPanelHeaderIconButton>
+        )}
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <ConversationView
