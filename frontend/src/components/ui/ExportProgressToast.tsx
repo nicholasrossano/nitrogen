@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CheckCircle2, Loader2, X, XCircle } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Ban, CheckCircle2, Loader2, X, XCircle } from 'lucide-react';
 
 export type ExportToastStepStatus = 'pending' | 'active' | 'done' | 'error';
 
@@ -12,7 +13,7 @@ export interface ExportToastStep {
   status: ExportToastStepStatus;
 }
 
-export type ExportToastPhase = 'running' | 'success' | 'error';
+export type ExportToastPhase = 'running' | 'success' | 'error' | 'disabled';
 
 interface ExportProgressToastProps {
   title: string;
@@ -96,12 +97,27 @@ export function ExportProgressToast({
   onDismiss,
   opensInViewer = false,
 }: ExportProgressToastProps) {
+  const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
     const raf = requestAnimationFrame(() => setVisible(true));
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted || phase !== 'disabled') return;
+    const timer = setTimeout(() => {
+      setVisible(false);
+      setTimeout(onDismiss, 200);
+    }, 10_000);
+    return () => clearTimeout(timer);
+  }, [mounted, phase, onDismiss]);
 
   const handleDismiss = () => {
     setVisible(false);
@@ -109,24 +125,32 @@ export function ExportProgressToast({
   };
 
   const headerLabel =
-    phase === 'error'
-      ? (opensInViewer ? 'Report failed' : 'Export failed')
-      : phase === 'success'
-        ? (opensInViewer ? 'Report ready' : 'Export ready')
-        : title;
+    phase === 'disabled'
+      ? (opensInViewer ? 'Report disabled' : 'Export disabled')
+      : phase === 'error'
+        ? (opensInViewer ? 'Report failed' : 'Export failed')
+        : phase === 'success'
+          ? (opensInViewer ? 'Report ready' : 'Export ready')
+          : title;
 
-  return (
+  const showSteps = phase !== 'disabled' && steps.length > 0;
+
+  if (!mounted) return null;
+
+  return createPortal(
     <div
-      className={`fixed bottom-6 right-6 z-50 w-[300px] bg-white border border-divider shadow-xl flex flex-col transition-all duration-200 ease-out ${
+      className={`fixed bottom-6 right-6 z-[110] w-[300px] bg-white border border-divider shadow-xl flex flex-col transition-all duration-200 ease-out ${
         visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'
       }`}
       role="status"
       aria-live="polite"
     >
-      <div className="flex items-start justify-between px-4 pt-4 pb-3 border-b border-divider">
+      <div className={`flex items-start justify-between px-4 pt-4 pb-3 ${showSteps ? 'border-b border-divider' : 'pb-4'}`}>
         <div className="flex items-start gap-2 flex-1 min-w-0 pr-2">
           {phase === 'running' ? (
             <Loader2 className="w-3.5 h-3.5 text-accent animate-spin flex-shrink-0 mt-0.5" />
+          ) : phase === 'disabled' ? (
+            <Ban className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" />
           ) : phase === 'error' ? (
             <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" />
           ) : (
@@ -137,6 +161,9 @@ export function ExportProgressToast({
               {opensInViewer ? 'Assessment report' : 'Assessment export'}
             </p>
             <p className="text-sm font-medium text-text-primary leading-snug">{headerLabel}</p>
+            {phase === 'disabled' && errorMessage && (
+              <p className="text-xs text-text-tertiary mt-1 leading-snug">{errorMessage}</p>
+            )}
             {phase === 'error' && errorMessage && (
               <p className="text-xs text-red-400 mt-1 leading-snug">{errorMessage}</p>
             )}
@@ -157,36 +184,39 @@ export function ExportProgressToast({
         </button>
       </div>
 
-      <div className="px-4 py-3 space-y-2.5 max-h-56 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
-        {steps.map((step) => (
-          <div key={step.id} className="flex items-start gap-2">
-            {step.status === 'active' && (
-              <Loader2 className="w-3 h-3 text-accent animate-spin flex-shrink-0 mt-0.5" />
-            )}
-            {step.status === 'done' && (
-              <CheckCircle2 className="w-3 h-3 text-green-500 flex-shrink-0 mt-0.5" />
-            )}
-            {step.status === 'error' && (
-              <XCircle className="w-3 h-3 text-red-400 flex-shrink-0 mt-0.5" />
-            )}
-            {step.status === 'pending' && (
-              <span className="w-3 h-3 rounded-full border border-stroke-subtle flex-shrink-0 mt-0.5" />
-            )}
-            <div className="min-w-0 flex-1">
-              <p
-                className={`text-xs leading-snug ${
-                  step.status === 'pending' ? 'text-text-tertiary' : 'text-text-primary'
-                }`}
-              >
-                {step.label}
-              </p>
-              {step.detail && (step.status === 'active' || step.status === 'error') && (
-                <p className="text-[10px] text-text-tertiary mt-0.5 leading-snug">{step.detail}</p>
+      {showSteps ? (
+        <div className="px-4 py-3 space-y-2.5 max-h-56 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+          {steps.map((step) => (
+            <div key={step.id} className="flex items-start gap-2">
+              {step.status === 'active' && (
+                <Loader2 className="w-3 h-3 text-accent animate-spin flex-shrink-0 mt-0.5" />
               )}
+              {step.status === 'done' && (
+                <CheckCircle2 className="w-3 h-3 text-green-500 flex-shrink-0 mt-0.5" />
+              )}
+              {step.status === 'error' && (
+                <XCircle className="w-3 h-3 text-red-400 flex-shrink-0 mt-0.5" />
+              )}
+              {step.status === 'pending' && (
+                <span className="w-3 h-3 rounded-full border border-stroke-subtle flex-shrink-0 mt-0.5" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p
+                  className={`text-xs leading-snug ${
+                    step.status === 'pending' ? 'text-text-tertiary' : 'text-text-primary'
+                  }`}
+                >
+                  {step.label}
+                </p>
+                {step.detail && (step.status === 'active' || step.status === 'error') && (
+                  <p className="text-[10px] text-text-tertiary mt-0.5 leading-snug">{step.detail}</p>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-    </div>
+          ))}
+        </div>
+      ) : null}
+    </div>,
+    document.body,
   );
 }

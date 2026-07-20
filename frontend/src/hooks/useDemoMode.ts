@@ -3,9 +3,13 @@
 import { useEffect, useState } from 'react';
 import { DEMO_SESSION_EVENT, isDemoActive } from '@/lib/demo/demoSession';
 
-/** Reactive demo session flag (same-tab + cross-tab). */
+/**
+ * Reactive demo session flag (same-tab + cross-tab).
+ * Starts false on server and first client paint so SSR/hydration match;
+ * sessionStorage is read only after mount.
+ */
 export function useDemoMode(): { isDemo: boolean } {
-  const [isDemo, setIsDemo] = useState(() => isDemoActive());
+  const [isDemo, setIsDemo] = useState(false);
 
   useEffect(() => {
     const sync = () => setIsDemo(isDemoActive());

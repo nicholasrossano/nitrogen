@@ -4,7 +4,6 @@ import { useMemo, useRef } from 'react';
 import {
   CheckCircle2, Download, FileText, History, Loader2, RotateCcw,
 } from 'lucide-react';
-import { EditorPanelHeaderIconButton } from '@/components/editor/EditorPanelHeader';
 import { useRegisterEditorPanelChrome } from '@/components/editor/EditorPanelChromeContext';
 
 interface AssessmentWorkspacePanelChromeProps {
@@ -89,15 +88,19 @@ export function AssessmentWorkspacePanelChrome({
           </button>
         )}
         {showExportAction && exportActionKind !== 'report' && (
-          <EditorPanelHeaderIconButton
-            label="Export assessment"
+          <button
+            type="button"
             onClick={() => onExportRef.current()}
             disabled={isExporting || isApprovingFinal}
+            aria-label="Export"
+            title="Export"
+            className="flex h-8 items-center gap-1.5 rounded-md border border-stroke-subtle bg-white px-2.5 text-[11px] font-medium leading-none text-text-secondary transition-colors hover:bg-black/[0.04] hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isExporting
               ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
               : <Download className="h-3.5 w-3.5" />}
-          </EditorPanelHeaderIconButton>
+            Export
+          </button>
         )}
         {canApproveFinal && (
           <button
