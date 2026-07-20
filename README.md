@@ -24,9 +24,9 @@ The platform helps teams:
 - upload and organize company library and deal-room documents
 - track rubric health across documents, findings, and computed signals
 
-## Screenshots
+## Demo
 
-From the built-in demo (`/demo`) — a sample diligence workspace for **Rift Valley Solar — 40 MW PV + BESS**.
+From the [demo](https://the-nitrogen.ai/demo) (/demo): a sample diligence workspace for a fictional company, Rift Valley Solar.
 
 <p align="center">
   <img src="docs/images/demo-overview.png" alt="Project overview status rubric" width="900" />
