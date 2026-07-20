@@ -1568,7 +1568,11 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
             }
             landingHeaderContent={<></>}
             onLandingStateChange={(onLanding) => {
-              if (panelParam && !activeChatId) {
+              if (pendingInvestigateDraft) {
+                // Investigate just forced the conversation composer open — don't let
+                // landing-state churn hide the chat floor under a URL panel.
+                setHasMessages(true);
+              } else if (panelParam && !activeChatId) {
                 // URL floor is open — keep chat on landing under it.
                 setHasMessages(false);
               } else if (!panelParam) {

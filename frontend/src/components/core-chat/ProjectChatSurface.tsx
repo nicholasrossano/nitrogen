@@ -956,6 +956,9 @@ export function ProjectChatSurface({
     !loadingChat &&
     !initialChatId &&
     localMessages.length === 0 &&
+    // Investigate drafts target ConversationView's composer — leave landing so the
+    // pendingDraft prop can land. Otherwise clicks look like a no-op.
+    !pendingAutoSend &&
     (showLanding || useLandingWhenEmpty);
 
   const associatedAssessments = useMemo(() => {
