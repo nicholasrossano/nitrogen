@@ -3,16 +3,14 @@ import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.database import get_db
 from app.core.auth import AuthUser, get_current_user, _init_firebase
 from app.core.permissions import ensure_user_exists
-from app.core.storage import get_storage
 from app.models.chat import CoreChat
-from app.models.memo import MemoVersion
 from app.models.project import Project
 from app.models.project_share import ProjectShare
 from app.models.user import User
@@ -149,22 +147,18 @@ async def delete_my_account(
     # Projects this user created, anywhere (personal or team workspace).
     # Safe to delete outright — the blocker check above guarantees none of
     # them have other collaborators, so nobody else can reach them.
-    own_projects = (
-        await db.execute(select(Project).where(Project.created_by == user.uid))
-    ).scalars().all()
-
-    export_paths: list[str] = []
-    project_ids: list[str] = []
-    for project in own_projects:
-        project_ids.append(str(project.id))
-        memo_result = await db.execute(
-            select(MemoVersion.export_path).where(
-                MemoVersion.project_id == project.id,
-                MemoVersion.export_path.isnot(None),
-            )
-        )
-        export_paths.extend(p for p in memo_result.scalars().all() if p)
-        await db.delete(project)
+    #
+    # Bulk DELETE (not ORM instance delete) so we don't load relationship
+    # collections like memo_versions — that table is absent in some deployed
+    # DBs and would 500 the whole account-deletion flow.
+    project_ids = [
+        str(pid)
+        for pid in (
+            await db.execute(select(Project.id).where(Project.created_by == user.uid))
+        ).scalars().all()
+    ]
+    if project_ids:
+        await db.execute(delete(Project).where(Project.created_by == user.uid))
 
     # Team workspaces they own — the blocker check above guarantees none had
     # other members at that point, but re-check per-workspace here in case a
@@ -195,11 +189,7 @@ async def delete_my_account(
 
     # Personal (non-project) chat history — core_chats has no DB-level FK to
     # users, so it would otherwise survive account deletion untouched.
-    own_chats = (
-        await db.execute(select(CoreChat).where(CoreChat.user_id == user.uid))
-    ).scalars().all()
-    for chat in own_chats:
-        await db.delete(chat)
+    await db.execute(delete(CoreChat).where(CoreChat.user_id == user.uid))
 
     # Stop billing before the Subscription row is cascade-deleted below.
     await cancel_active_subscription(user.uid, db)
@@ -209,7 +199,9 @@ async def delete_my_account(
         await db.delete(db_user)
     await db.commit()
 
-    # Best-effort storage cleanup — DB rows are already gone either way.
+    # Best-effort local uploads cleanup — DB rows are already gone either way.
+    # Memo/export object cleanup used to read memo_versions; that relation is
+    # not present in production, so we only clear on-disk project uploads here.
     settings = get_settings()
     for project_id in project_ids:
         try:
@@ -219,15 +211,6 @@ async def delete_my_account(
         except Exception:
             logger.warning(
                 "Failed to clean up uploads for deleted project %s", project_id, exc_info=True
-            )
-    if export_paths:
-        try:
-            exports_storage = get_storage()
-            for path in export_paths:
-                await exports_storage.delete(path)
-        except Exception:
-            logger.warning(
-                "Failed to clean up exports for deleted user %s", user.uid, exc_info=True
             )
 
     if _init_firebase():

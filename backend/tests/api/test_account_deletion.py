@@ -46,9 +46,11 @@ class _FakeDb:
         self.scalar_queue = list(scalar_queue or [])
         self.get_map = get_map or {}
         self.deleted = []
+        self.executed = []
         self.committed = False
 
     async def execute(self, statement, *_args, **_kwargs):
+        self.executed.append(statement)
         text = str(statement)
         for marker, rows in self.table_rows.items():
             if marker in text:
@@ -160,14 +162,13 @@ async def test_delete_my_account_deletes_owned_data_when_unblocked(monkeypatch: 
     monkeypatch.setattr(users_api, "cancel_active_subscription", fake_cancel_subscription)
     monkeypatch.setattr(users_api, "_init_firebase", lambda: False)
 
-    project = SimpleNamespace(id=uuid.uuid4(), created_by="user-1")
-    chat = SimpleNamespace(id=uuid.uuid4(), user_id="user-1")
+    project_id = uuid.uuid4()
     db_user = SimpleNamespace(id="user-1")
 
     db = _FakeDb(
         table_rows={
-            "FROM projects": [project],
-            "core_chats": [chat],
+            # Project.id lookup for cleanup paths; workspace join returns empty.
+            "projects.id": [project_id],
         },
         get_map={"user-1": db_user},
     )
@@ -177,7 +178,8 @@ async def test_delete_my_account_deletes_owned_data_when_unblocked(monkeypatch: 
 
     assert result is None
     assert cancel_calls == ["user-1"]
-    assert project in db.deleted
-    assert chat in db.deleted
     assert db_user in db.deleted
     assert db.committed is True
+    executed_sql = [str(stmt) for stmt in db.executed]
+    assert any("projects" in sql.lower() for sql in executed_sql)
+    assert any("core_chats" in sql.lower() for sql in executed_sql)

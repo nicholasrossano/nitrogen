@@ -764,14 +764,21 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     setAccountError('');
     try {
       await api.deleteAccount();
-      await signOut();
-      onClose();
-      router.push('/login');
     } catch (error) {
       setAccountError(error instanceof Error ? error.message : 'Failed to delete account');
-    } finally {
       setAccountDeleting(false);
+      return;
     }
+
+    try {
+      await signOut();
+    } catch {
+      // Firebase identity may already be gone after a successful API delete.
+    }
+    onClose();
+    // Hard navigation so in-flight app requests can't keep a half-dead
+    // session on an authenticated shell after Auth is gone.
+    window.location.assign('/login');
   };
 
   const handleMoveProjectWorkspace = async () => {
