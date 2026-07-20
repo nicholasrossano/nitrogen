@@ -744,25 +744,6 @@ class ChatService(ChatPlanningMixin, ChatGenerationMixin):
             widget_data=widget_data,
         )
 
-    # -----------------------------------------------------------------------
-    # Compare mode
-    # -----------------------------------------------------------------------
-
-    @staticmethod
-    @classmethod
-    @staticmethod
-    @classmethod
-    @classmethod
-    @staticmethod
-    @staticmethod
-    @staticmethod
-    @classmethod
-    @staticmethod
-    @staticmethod
-    @staticmethod
-    @staticmethod
-    @staticmethod
-    @staticmethod
     # ===================================================================
     # PROJECT mode — orchestration logic (migrated from OrchestrationService)
     # ===================================================================
