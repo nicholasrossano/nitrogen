@@ -1,5 +1,5 @@
 import {
-  API_URL,
+  getApiUrl,
   fetchApi,
   getAuthToken,
 } from './client';
@@ -159,7 +159,7 @@ export const chatApi = {
       active_editor_kind: activeEditorContext?.kind ?? null,
     });
 
-    const response = await fetch(`${API_URL}/api/v1/chat/stream`, {
+    const response = await fetch(`${getApiUrl()}/api/v1/chat/stream`, {
       method: 'POST',
       headers,
       body: JSON.stringify({

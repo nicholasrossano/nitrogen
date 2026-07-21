@@ -15,6 +15,7 @@ import type {
   StagedWorkflowState,
 } from '@/lib/api';
 import { api } from '@/lib/api';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { EditableTableStage } from './stages/EditableTableStage';
 import { CategorizedListStage } from './stages/CategorizedListStage';
 import { CategorizedWorkspaceStage } from './stages/CategorizedWorkspaceStage';
@@ -134,7 +135,7 @@ function StageStepper({
   onSelect: (id: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-1 p-1 bg-surface-subtle rounded-lg">
+    <div className="flex items-center gap-1 p-1 bg-surface-subtle rounded-lg max-md:min-w-0 max-md:flex-wrap">
       {stageDefs.map((def, idx) => {
         const stageState = stages[def.id];
         const status = stageState?.status ?? 'pending';
@@ -151,7 +152,7 @@ function StageStepper({
             key={def.id}
             onClick={() => isAccessible && onSelect(def.id)}
             disabled={!isAccessible}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-colors max-md:shrink-0 ${
               isActive
                 ? 'bg-surface text-text-primary shadow-sm'
                 : isConfirmed
@@ -343,6 +344,7 @@ export function AssessmentWorkspace({
   onTitleChange,
   onCompanionSidePanelOpenChange,
 }: AssessmentWorkspaceProps) {
+  const isMobile = useIsMobile();
   const [state, setState] = useState<StagedAssessmentWorkflowState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1075,7 +1077,7 @@ export function AssessmentWorkspace({
       ) : null}
       <div className={useSplitLayout ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 overflow-y-auto'}>
         <div className={useSplitLayout
-          ? 'h-full w-full flex min-h-0 min-w-0'
+          ? 'relative h-full w-full flex min-h-0 min-w-0'
           : 'w-full p-3 flex flex-col'}
         >
           <div className={useSplitLayout
@@ -1092,16 +1094,15 @@ export function AssessmentWorkspace({
               setActivityLogOpen((prev) => !prev);
             }}
           />
-          {/* Workspace controls row (full panel width) */}
-          <div className="mt-3 flex items-center gap-4 justify-between">
+          <div className="mt-3 flex items-center gap-4 justify-between max-md:min-w-0 max-md:flex-wrap max-md:gap-x-4 max-md:gap-y-2">
             <StageStepper
               stageDefs={stageDefs}
               stages={stages}
               currentStageId={activeStageId}
               onSelect={setActiveStageId}
             />
-            <div className="flex items-center gap-2 shrink-0">
-              <div ref={setViewToolbarHost} className="flex items-center gap-2" />
+            <div className="flex items-center gap-2 shrink-0 max-md:min-w-0 max-md:flex-wrap max-md:shrink">
+              <div ref={setViewToolbarHost} className="flex items-center gap-2 max-md:min-w-0 max-md:flex-wrap" />
               {!usePanelHeader ? (
               <>
               {projectId && (
@@ -1293,8 +1294,12 @@ export function AssessmentWorkspace({
           </div>
           {activityLogOpen ? (
             <div
-              className="flex-shrink-0 h-full min-h-0 overflow-hidden"
-              style={{ width: COMPANION_SIDE_PANEL_WIDTH }}
+              className={
+                isMobile
+                  ? 'absolute inset-0 z-20 min-h-0 overflow-hidden'
+                  : 'flex-shrink-0 h-full min-h-0 overflow-hidden'
+              }
+              style={isMobile ? undefined : { width: COMPANION_SIDE_PANEL_WIDTH }}
             >
               <CompanionSidePanel
                 title="Agent log"
@@ -1312,8 +1317,12 @@ export function AssessmentWorkspace({
             </div>
           ) : isAssessmentMapWidget && hostedInspectorState ? (
             <div
-              className="flex-shrink-0 h-full min-h-0 overflow-hidden"
-              style={{ width: COMPANION_SIDE_PANEL_WIDTH }}
+              className={
+                isMobile
+                  ? 'absolute inset-0 z-20 min-h-0 overflow-hidden'
+                  : 'flex-shrink-0 h-full min-h-0 overflow-hidden'
+              }
+              style={isMobile ? undefined : { width: COMPANION_SIDE_PANEL_WIDTH }}
             >
               <PlanInspectorPanel
                 state={hostedInspectorState}

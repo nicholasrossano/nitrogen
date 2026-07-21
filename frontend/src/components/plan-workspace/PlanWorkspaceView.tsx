@@ -256,9 +256,12 @@ export function PlanWorkspaceView({
             setCollapsedPhases(allPhasesCollapsed ? new Set() : new Set(phases.map((phase) => phase.id)));
           }
         }}
-        className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium text-text-primary bg-surface ring-1 ring-inset ring-stroke-subtle hover:bg-surface-subtle transition-colors whitespace-nowrap"
+        className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium text-text-primary bg-surface ring-1 ring-inset ring-stroke-subtle hover:bg-surface-subtle transition-colors whitespace-nowrap max-md:min-h-11"
+        aria-label={(viewMode === 'group' ? allGroupsExpanded : !allPhasesCollapsed) ? 'Collapse all' : 'Expand all'}
       >
-        {(viewMode === 'group' ? allGroupsExpanded : !allPhasesCollapsed) ? 'Collapse all' : 'Expand all'}
+        <span className="hidden md:inline">
+          {(viewMode === 'group' ? allGroupsExpanded : !allPhasesCollapsed) ? 'Collapse all' : 'Expand all'}
+        </span>
         <ChevronsUpDown className="w-3 h-3" />
       </button>
 
@@ -332,14 +335,15 @@ export function PlanWorkspaceView({
                   onViewModeChange?.(mode.id);
                   if (mode.id === 'group') setSelectedFilterId(null);
                 }}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all duration-150 ${
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all duration-150 max-md:min-h-11 max-md:min-w-11 max-md:justify-center ${
                   viewMode === mode.id
                     ? 'bg-white text-text-primary shadow-sm'
                     : 'text-text-tertiary hover:text-text-secondary'
                 }`}
+                aria-label={mode.label}
               >
                 <Icon className="w-3 h-3" />
-                {mode.label}
+                <span className="hidden md:inline">{mode.label}</span>
               </button>
             );
           })}
@@ -390,7 +394,7 @@ export function PlanWorkspaceView({
             {viewToolbarHost
               ? createPortal(toolbarControls, viewToolbarHost)
               : (
-                <div className="flex-shrink-0 px-4 pt-4 pb-2 flex items-center justify-end gap-2">
+                <div className="flex-shrink-0 px-4 pt-4 pb-2 flex items-center justify-end gap-2 max-md:min-w-0 max-md:flex-wrap">
                   {toolbarControls}
                 </div>
               )}

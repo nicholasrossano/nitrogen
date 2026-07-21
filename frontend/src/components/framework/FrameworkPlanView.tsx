@@ -311,7 +311,7 @@ export function FrameworkPlanView({
         )}
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden max-md:overscroll-y-contain max-md:[-webkit-overflow-scrolling:touch]">
         {loading ? (
           <div className="h-full flex items-center justify-center">
             <PageLoader label="" />

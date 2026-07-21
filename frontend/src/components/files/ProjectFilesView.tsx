@@ -373,7 +373,7 @@ export function ProjectFilesView({
   }, [newKnowledgeBankName, newKnowledgeBankUrl, onAddKnowledgeBank]);
 
   return (
-    <div className="h-full overflow-y-auto p-6">
+    <div className="h-full overflow-y-auto p-6 max-md:overscroll-y-contain max-md:[-webkit-overflow-scrolling:touch]">
       <div className="max-w-4xl mx-auto space-y-10">
 
         {/* Header + Toggle */}
@@ -696,10 +696,10 @@ export function ProjectFilesView({
             <>
             <div className={dataTableContainerClass}>
               <div className="overflow-x-auto">
-              <table className={dataTableTableClass}>
+              <table className={`${dataTableTableClass} max-md:min-w-[42rem]`}>
                 <thead>
                   <tr className={dataTableHeaderRowClass}>
-                    <th className={thClass}>Name</th>
+                    <th className={`${thClass} max-md:min-w-[16rem]`}>Name</th>
                     <th className={`${thClass} w-20`}>Type</th>
                     <th className={`${thClass} w-24`}>Size</th>
                     <th className={`${thClass} w-28 whitespace-nowrap`}>Date</th>
@@ -716,7 +716,7 @@ export function ProjectFilesView({
                       onClick={canOpen ? () => onOpenFile?.(mat) : undefined}
                       className={canOpen ? 'cursor-pointer hover:bg-black/[0.02]' : undefined}
                     >
-                      <td className="px-4 py-2.5 max-w-0 w-full">
+                      <td className="px-4 py-2.5 max-w-0 w-full max-md:min-w-[16rem]">
                         <div className="flex items-center gap-2 min-w-0">
                           {isDrive ? (
                             <svg className="w-4 h-4 flex-shrink-0 text-[#4285F4]" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg" aria-label="Google Drive">
@@ -860,10 +860,10 @@ export function ProjectFilesView({
             <>
             <div className={dataTableContainerClass}>
               <div className="overflow-x-auto">
-              <table className={dataTableTableClass}>
+              <table className={`${dataTableTableClass} max-md:min-w-[42rem]`}>
                 <thead>
                   <tr className={dataTableHeaderRowClass}>
-                    <th className={thClass}>Name</th>
+                    <th className={`${thClass} max-md:min-w-[16rem]`}>Name</th>
                     <th className={`${thClass} w-20`}>Type</th>
                     <th className={`${thClass} w-24`}>Size</th>
                     <th className={`${thClass} w-28 whitespace-nowrap`}>Date</th>
@@ -883,7 +883,7 @@ export function ProjectFilesView({
                       }
                       className={canOpen ? 'cursor-pointer hover:bg-black/[0.02]' : undefined}
                     >
-                      <td className="px-4 py-2.5 max-w-0 w-full">
+                      <td className="px-4 py-2.5 max-w-0 w-full max-md:min-w-[16rem]">
                         <div className="flex items-center gap-2 min-w-0">
                           {file.source === 'material' ? (
                             <FileText className="w-4 h-4 text-text-tertiary flex-shrink-0" />

@@ -849,7 +849,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       </div>
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        <aside className="w-40 shrink-0 border-r border-stroke-subtle px-3 py-4 overflow-y-auto">
+        <aside className="w-40 shrink-0 border-r border-stroke-subtle px-3 py-4 overflow-y-auto max-md:w-max max-md:px-2">
           {([
             { id: 'workspace' as const, label: 'Workspace', disabled: false, disabledReason: '' },
             { id: 'project' as const, label: 'Project', disabled: false, disabledReason: '' },
@@ -864,7 +864,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                   setActiveSettingsTab(item.id);
                 }}
                 aria-disabled={item.disabled}
-                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors max-md:whitespace-nowrap max-md:px-2.5 ${
                   item.disabled
                     ? 'text-text-tertiary/70 cursor-not-allowed'
                     : activeSettingsTab === item.id
@@ -892,8 +892,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           })}
         </aside>
 
-        <div className="flex-1 min-h-0 flex flex-col">
-          <div className="px-5 py-4 space-y-5 overflow-y-auto flex-1 min-h-0">
+        <div className="flex-1 min-h-0 flex flex-col max-md:min-w-0">
+          <div className="px-5 py-4 space-y-5 overflow-y-auto flex-1 min-h-0 max-md:overflow-x-hidden">
             {activeSettingsTab === 'workspace' ? (
               <>
               <SettingsSection title="Workspace">

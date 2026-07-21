@@ -197,7 +197,7 @@ export function AssistantMessageToolbar({
             ].join(' ')}
           >
             <BookMarked className="w-3.5 h-3.5" />
-            <span>Sources</span>
+            <span className="hidden md:inline">Sources</span>
           </button>
 
           {sourcesOpen && (

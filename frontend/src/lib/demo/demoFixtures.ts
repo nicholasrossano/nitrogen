@@ -1550,7 +1550,7 @@ export function buildCarbonWorkflowState(): StagedAssessmentWorkflowState {
     const baseline = genMwh * 0.48;
     return {
       year,
-      devices: 1,
+      devices_active: 1,
       baseline_emissions: Math.round(baseline * 100) / 100,
       project_emissions: 0,
       leakage: 0,

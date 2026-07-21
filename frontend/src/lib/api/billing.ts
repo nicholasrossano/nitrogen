@@ -1,5 +1,4 @@
 import {
-  API_URL,
   fetchApi,
   fetchApiWithTimeout,
   getAuthToken,

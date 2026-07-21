@@ -7,6 +7,8 @@ import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel
 import type { Variable, ProjectMaterial } from '@/lib/api';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import { floatTabDedupeKey } from '@/lib/floatTabSession';
+import { useIsMobile } from '@/hooks/useIsMobile';
+import { MOBILE_NAV_CHIP_HEADER_PADDING_LEFT } from '@/components/ui/chatSidebarLayout';
 import { EditorPanelHeader } from './EditorPanelHeader';
 import {
   EditorPanelChromeProvider,
@@ -166,6 +168,7 @@ export function FloatLayer({
   onOpenDocument,
   onOpenFile,
 }: FloatLayerProps) {
+  const isMobile = useIsMobile();
   const [childChrome, setChildChrome] = useState<EditorPanelChrome | null>(null);
 
   const handleChromeChange = useCallback((chrome: EditorPanelChrome | null) => {
@@ -235,10 +238,12 @@ export function FloatLayer({
       titleEditable={headerTitleEditable}
       onSaveTitle={headerOnSaveTitle}
       titleSaving={headerTitleSaving}
-      suffix={headerSuffix}
+      suffix={isMobile ? null : headerSuffix}
       onClose={onClose}
       onBack={handleBack}
       actions={headerActions}
+      // Clear the collapsed nav chip that overlays the float's top-left on mobile.
+      style={isMobile ? { paddingLeft: MOBILE_NAV_CHIP_HEADER_PADDING_LEFT } : undefined}
     />
   );
 

@@ -1,6 +1,8 @@
 export * from './types';
 export {
   API_URL,
+  getApiUrl,
+  resolveApiUrlForHost,
   fetchApi,
   fetchApiWithTimeout,
   getAuthToken,

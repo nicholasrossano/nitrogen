@@ -30,6 +30,7 @@ import {
   SHELL_SURFACE_HEADER_HEIGHT,
 } from './chatSidebarLayout';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 export type NavItem = 'portfolio' | 'plan' | 'variables' | 'files' | 'chat' | 'research' | 'workspace';
 
@@ -68,7 +69,20 @@ export function SideDrawer() {
 
   const chatShell = useChatShell();
   const { chatSidebarCollapsed, toggleChatSidebar } = useChatSidebar();
+  const isMobile = useIsMobile();
   const isChatShell = pathname.startsWith('/chat') || pathname === '/' || pathname.startsWith('/projects/');
+  const mobileNavOpen = isMobile && isChatShell && !chatSidebarCollapsed;
+
+  // Close the off-canvas nav after in-drawer navigations (capsules, deep links)
+  // that bypass handleNav — e.g. DrawerChatTree panel capsules.
+  const mobileNavPathKey = `${pathname}?${searchParams.toString()}`;
+  const prevMobileNavPathKeyRef = useRef(mobileNavPathKey);
+  useEffect(() => {
+    const prev = prevMobileNavPathKeyRef.current;
+    prevMobileNavPathKeyRef.current = mobileNavPathKey;
+    if (!mobileNavOpen || prev === mobileNavPathKey) return;
+    toggleChatSidebar();
+  }, [mobileNavOpen, mobileNavPathKey, toggleChatSidebar]);
 
   const projectId = useMemo(() => {
     const m = PROJECT_RE.exec(pathname);
@@ -145,46 +159,58 @@ export function SideDrawer() {
   const chatProjectId = projectId ?? searchParams.get('project') ?? readLastProjectId();
 
   const handleNav = useCallback((item: NavItem) => {
-    if (navHandlerRef.current?.(item)) return;
+    if (navHandlerRef.current?.(item)) {
+      if (mobileNavOpen) toggleChatSidebar();
+      return;
+    }
     if (isChatShell) {
       if (item === 'chat') {
         router.push(chatProjectId ? `/projects/${chatProjectId}` : '/chat');
+        if (mobileNavOpen) toggleChatSidebar();
         return;
       }
       if (item === 'files') {
         if (chatProjectId) {
           router.push(`/projects/${chatProjectId}?panel=files`);
+          if (mobileNavOpen) toggleChatSidebar();
           return;
         }
         router.push('/chat');
+        if (mobileNavOpen) toggleChatSidebar();
         return;
       }
       if (item === 'plan' && chatProjectId) {
         router.push(`/projects/${chatProjectId}?panel=assessments`);
+        if (mobileNavOpen) toggleChatSidebar();
         return;
       }
       if (item === 'variables' && chatProjectId) {
         router.push(`/projects/${chatProjectId}?panel=variables`);
+        if (mobileNavOpen) toggleChatSidebar();
         return;
       }
       if (item === 'research' && chatProjectId) {
         router.push(`/projects/${chatProjectId}?panel=overview`);
+        if (mobileNavOpen) toggleChatSidebar();
         return;
       }
       if (item === 'workspace' && chatProjectId) {
         router.push(`/projects/${chatProjectId}?panel=assessments`);
+        if (mobileNavOpen) toggleChatSidebar();
         return;
       }
       if (item === 'portfolio') {
         router.push(chatProjectId ? `/projects/${chatProjectId}` : '/chat');
+        if (mobileNavOpen) toggleChatSidebar();
         return;
       }
     }
     if (item === 'portfolio') {
       router.push('/');
+      if (mobileNavOpen) toggleChatSidebar();
       return;
     }
-  }, [chatProjectId, isChatShell, navHandlerRef, router]);
+  }, [chatProjectId, isChatShell, mobileNavOpen, navHandlerRef, router, toggleChatSidebar]);
 
   const renderNavButton = useCallback(({ key, label, Icon, disabled, disabledReason }: NavRenderConfig) => {
     // Assessments floor tips use surface=floor on FloorLayer. Sidebar wrappers share the
@@ -523,19 +549,28 @@ export function SideDrawer() {
   const gridOpen = 'grid-rows-[1fr] opacity-100';
   const gridClosed = 'grid-rows-[0fr] opacity-0 pointer-events-none';
 
+  // Collapsed chip stays above mobile floors (z-90) so it remains tappable beside Back.
   const chatShellAsideClass = chatSidebarCollapsed
-    ? `absolute z-20 left-3 top-3 flex overflow-hidden ${CHAT_FLOATING_PANEL_CHROME} transition-[width,height] duration-300 ease-in-out`
-    : `absolute z-20 left-3 top-3 flex flex-col overflow-hidden ${CHAT_FLOATING_PANEL_CHROME} pb-2 transition-[width,height] duration-300 ease-in-out`;
+    ? `absolute ${isMobile ? 'z-[120]' : 'z-20'} left-3 top-3 flex overflow-hidden ${CHAT_FLOATING_PANEL_CHROME} transition-[width,height] duration-300 ease-in-out`
+    : mobileNavOpen
+      // Same floating panel chrome as desktop — just sized to fill the stage (with margins).
+      ? `absolute z-[110] left-3 top-3 flex flex-col overflow-hidden ${CHAT_FLOATING_PANEL_CHROME} pb-2 transition-[width,height] duration-300 ease-in-out`
+      : `absolute z-20 left-3 top-3 flex flex-col overflow-hidden ${CHAT_FLOATING_PANEL_CHROME} pb-2 transition-[width,height] duration-300 ease-in-out`;
 
   const chatShellAsideStyle: CSSProperties = chatSidebarCollapsed
     ? {
         width: CHAT_SIDEBAR_COLLAPSED_WIDTH,
         height: CHAT_SIDEBAR_COLLAPSED_WIDTH,
       }
-    : {
-        width: CHAT_SIDEBAR_EXPANDED_WIDTH,
-        height: `calc(100vh - (2 * ${CHAT_SIDEBAR_MARGIN}))`,
-      };
+    : mobileNavOpen
+      ? {
+          width: `calc(100vw - (2 * ${CHAT_SIDEBAR_MARGIN}))`,
+          height: `calc(100dvh - (2 * ${CHAT_SIDEBAR_MARGIN}))`,
+        }
+      : {
+          width: CHAT_SIDEBAR_EXPANDED_WIDTH,
+          height: `calc(100vh - (2 * ${CHAT_SIDEBAR_MARGIN}))`,
+        };
 
   const drawerBody = (
     <>
@@ -556,8 +591,14 @@ export function SideDrawer() {
           <div className="flex-1 min-h-0 overflow-hidden">
             <DrawerChatTree
               activeChatId={chatShell?.activeChatId ?? null}
-              onSelectChat={chatShell?.onSelectChat ?? (() => {})}
-              onNewChat={chatShell?.onNewChat ?? (() => {})}
+              onSelectChat={(chatId, projectIdArg) => {
+                chatShell?.onSelectChat?.(chatId, projectIdArg);
+                if (mobileNavOpen) toggleChatSidebar();
+              }}
+              onNewChat={(projectIdArg) => {
+                chatShell?.onNewChat?.(projectIdArg);
+                if (mobileNavOpen) toggleChatSidebar();
+              }}
               refreshKey={chatShell?.drawerRefreshKey ?? 0}
             />
           </div>
@@ -786,6 +827,14 @@ export function SideDrawer() {
   if (isChatShell) {
     return (
       <>
+        {mobileNavOpen ? (
+          <button
+            type="button"
+            aria-label="Close navigation"
+            className="absolute inset-0 z-[105] bg-black/30 transition-opacity duration-300"
+            onClick={toggleChatSidebar}
+          />
+        ) : null}
         <aside
           data-open={isGlobalDragging || undefined}
           className={`${chatShellAsideClass} relative`}

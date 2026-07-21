@@ -9,6 +9,7 @@ import { CitationChip } from '@/components/ui/CitationChip';
 import { CompanionSidePanel, COMPANION_SIDE_PANEL_WIDTH } from '@/components/ui/CompanionSidePanel';
 import { CustomDropdown } from '@/components/ui/CustomDropdown';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import { formatVariableValue } from '@/lib/formatVariableValue';
 import {
@@ -291,6 +292,7 @@ export function VariablesWorkspaceTab({
   onOpenFile,
   onCompanionSidePanelOpenChange,
 }: VariablesWorkspaceTabProps) {
+  const isMobile = useIsMobile();
   const [status, setStatus] = useState<'' | VariableStatus>('');
   const [rows, setRows] = useState<Variable[]>(
     () => getCached<Variable[]>(swrKeys.variables(projectId)) ?? [],
@@ -653,7 +655,7 @@ export function VariablesWorkspaceTab({
       </div>
 
       {embedded ? (
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto max-md:overscroll-y-contain max-md:[-webkit-overflow-scrolling:touch]">
           <ReadOnlyDataTable
             columns={columns}
             rows={rows}
@@ -690,14 +692,18 @@ export function VariablesWorkspaceTab({
 
   if (embedded) {
     return (
-      <div className="flex h-full min-h-0 w-full min-w-0">
+      <div className="relative flex h-full min-h-0 w-full min-w-0">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-4">
           {tableBlock}
         </div>
         {detailOpen && selected ? (
           <div
-            className="flex-shrink-0 h-full min-h-0 overflow-hidden"
-            style={{ width: COMPANION_SIDE_PANEL_WIDTH }}
+            className={
+              isMobile
+                ? 'absolute inset-0 z-20 min-h-0 overflow-hidden'
+                : 'flex-shrink-0 h-full min-h-0 overflow-hidden'
+            }
+            style={isMobile ? undefined : { width: COMPANION_SIDE_PANEL_WIDTH }}
           >
             <CompanionSidePanel
               title={selected.label}

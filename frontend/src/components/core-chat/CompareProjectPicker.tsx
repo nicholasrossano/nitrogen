@@ -170,14 +170,15 @@ export function CompareProjectPicker({
         disabled={disabled}
         onClick={handleOpen}
         title={selected ? `Compare against ${selected.title}` : 'Compare against another project'}
-        className={`h-6 inline-flex items-center gap-1.5 px-2 rounded-md border text-[11px] font-medium transition-colors duration-150 disabled:opacity-40 disabled:cursor-default ${
+        aria-label={selected ? `Compare against ${selected.title}` : 'Compare against another project'}
+        className={`h-6 inline-flex items-center gap-1.5 px-2 rounded-md border text-[11px] font-medium transition-colors duration-150 disabled:opacity-40 disabled:cursor-default max-md:min-h-11 max-md:min-w-11 max-md:justify-center ${
           selected
             ? 'border-accent/30 bg-accent/10 text-accent enabled:hover:bg-accent/20'
             : 'border-stroke-subtle text-text-tertiary enabled:hover:text-text-secondary enabled:hover:border-stroke-muted enabled:hover:bg-surface-subtle'
         }`}
       >
         <Scale className="w-3 h-3 shrink-0" />
-        <span className="truncate max-w-[14rem]">
+        <span className="truncate max-w-[14rem] hidden md:inline">
           Compare against...
         </span>
       </button>

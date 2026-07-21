@@ -7,6 +7,7 @@ import { ALL_MODULES } from '@/components/chat/AssessmentPicker';
 import { TourAnchor } from '@/components/tour/TourAnchor';
 import { ChatTrialHint } from '@/components/ui/ChatTrialHint';
 import { useVisibleAssessments } from '@/hooks/useFeatureFlag';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 
 interface LandingInputProps {
@@ -80,6 +81,7 @@ export function LandingInput({
   hideComposer = false,
   showAttachments = true,
 }: LandingInputProps) {
+  const isMobile = useIsMobile();
   const visibleAssessments = useVisibleAssessments(ALL_MODULES);
   const [input, setInput] = useState('');
   const [focused, setFocused] = useState(false);
@@ -213,13 +215,19 @@ export function LandingInput({
             }}
             onFocus={() => {
               setFocused(true);
+              // iOS can leave a horizontal scroll offset after keyboard open.
+              if (window.matchMedia('(max-width: 767px)').matches) {
+                window.requestAnimationFrame(() => {
+                  window.scrollTo({ left: 0, top: window.scrollY });
+                });
+              }
             }}
             onBlur={() => setFocused(false)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             disabled={disabled}
             rows={1}
-            className="no-global-focus-style w-full resize-none bg-transparent px-5 py-3.5 pb-11 pr-5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary overflow-hidden"
+            className="no-global-focus-style w-full resize-none bg-transparent px-5 py-3.5 pb-11 pr-5 text-base text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary overflow-hidden md:text-sm max-md:min-w-0"
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           />
           {extraInputActions && (
@@ -243,22 +251,23 @@ export function LandingInput({
                   type="button"
                   disabled={disabled}
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
+                  className="relative flex h-5 w-5 items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary disabled:opacity-40 disabled:cursor-default max-md:h-4 max-md:w-4 max-md:before:absolute max-md:before:-inset-2.5 max-md:before:content-['']"
                   aria-label="Attach files"
                 >
-                  <Paperclip className="w-[13px] h-[13px]" />
+                  <Paperclip className="w-[13px] h-[13px] max-md:h-3 max-md:w-3" />
                 </button>
               </>
             )}
             <button
               type="submit"
               disabled={disabled || sendDisabled || uploading || !input.trim()}
-              className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent"
+              className="relative flex h-5 w-5 items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent max-md:h-4 max-md:w-4 max-md:before:absolute max-md:before:-inset-2.5 max-md:before:content-['']"
+              aria-label="Send"
             >
               {uploading ? (
-                <Loader2 className="w-[11px] h-[11px] text-white animate-spin" />
+                <Loader2 className="w-[11px] h-[11px] text-white animate-spin max-md:h-2.5 max-md:w-2.5" />
               ) : (
-                <ArrowUp className="w-[11px] h-[11px] text-white" />
+                <ArrowUp className="w-[11px] h-[11px] text-white max-md:h-2.5 max-md:w-2.5" />
               )}
             </button>
           </div>
@@ -341,6 +350,52 @@ export function LandingInput({
     );
   }
 
+  // Mobile-only stacked landing (2×2 context widgets under composer). Desktop keeps the prior layout.
+  if (hasBelowComposerContent && isMobile) {
+    return (
+      <div className="flex h-full min-h-0 min-w-0 w-full max-w-full flex-col overflow-x-hidden px-4">
+        <div className={`mx-auto flex h-full min-h-0 w-full min-w-0 flex-col ${contentMaxWidth}`}>
+          {/* Sit title + composer between the prior mid-stage and top-third marks. */}
+          <div className="flex h-[40%] shrink-0 flex-col justify-end pb-3 pt-2">
+            {headerContent}
+            {!hideTiles && (
+              <div className="mb-4 grid w-full grid-cols-1 gap-3">
+                {visibleAssessments.map((assessment) => (
+                  <button
+                    key={assessment.id}
+                    type="button"
+                    disabled={disabled || sendDisabled}
+                    onClick={() => onSend(`Generate ${assessment.name}`, assessment.id)}
+                    className="relative flex items-center gap-3 border border-black/[0.04] px-4 py-3.5 card-interactive disabled:cursor-default disabled:opacity-40"
+                  >
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded bg-accent-wash">
+                      <span className="text-accent [&>svg]:h-5 [&>svg]:w-5">{assessment.icon}</span>
+                    </div>
+                    <span className="text-left text-xs font-medium leading-snug text-text-secondary">
+                      {assessment.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {renderComposerTitle('mb-3 min-w-0 truncate pl-6 pr-2 text-left text-lg font-medium leading-tight tracking-tight text-text-primary sm:mb-4 sm:text-2xl')}
+            {renderComposer('min-w-0 w-full max-w-full')}
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col gap-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <div className="min-h-0 flex-1">
+              {belowComposerContent}
+            </div>
+            {sessions.length > 0 ? (
+              <div className={`max-h-24 shrink-0 ${hiddenScrollbarClassName}`}>
+                {renderHistory('w-full', true)}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (hasBelowComposerContent) {
     return (
       <div className="flex h-full min-h-0 flex-col items-center px-4">
@@ -380,11 +435,11 @@ export function LandingInput({
   }
 
   return (
-    <div className="flex h-full flex-col items-center px-4">
-      <div className={`flex flex-1 flex-col items-center justify-end w-full ${contentMaxWidth}`}>
+    <div className="flex h-full flex-col items-center px-4 max-md:min-w-0 max-md:w-full max-md:max-w-full max-md:overflow-x-hidden">
+      <div className={`flex flex-1 flex-col items-center justify-end w-full ${contentMaxWidth} max-md:min-w-0`}>
         {headerContent}
         {!hideTiles && (
-        <div className="mb-12 grid w-[70%] grid-cols-3 gap-3">
+        <div className="mb-12 grid w-[70%] grid-cols-3 gap-3 max-md:w-full max-md:grid-cols-1">
           {visibleAssessments.map((assessment) => {
             return (
               <button
@@ -405,9 +460,9 @@ export function LandingInput({
         )}
       </div>
 
-      <div className={`relative w-full ${contentMaxWidth}`}>
-        {renderComposerTitle('absolute bottom-full left-0 mb-6 min-w-0 pl-6 text-left text-lg font-medium leading-tight tracking-tight text-text-primary sm:text-2xl')}
-        {renderComposer('w-full')}
+      <div className={`relative w-full ${contentMaxWidth} max-md:min-w-0 max-md:max-w-full`}>
+        {renderComposerTitle('absolute bottom-full left-0 mb-6 min-w-0 pl-6 text-left text-lg font-medium leading-tight tracking-tight text-text-primary sm:text-2xl max-md:right-0 max-md:truncate max-md:pr-2')}
+        {renderComposer('w-full max-md:min-w-0 max-md:max-w-full')}
       </div>
 
       {renderHistory()}

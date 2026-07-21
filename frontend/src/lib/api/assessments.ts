@@ -1,5 +1,5 @@
 import {
-  API_URL,
+  getApiUrl,
   fetchApi,
   fetchApiWithTimeout,
   getAuthToken,
@@ -80,7 +80,7 @@ export const assessmentsApi = {
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(
-      `${API_URL}/api/v1/assessment-workflow/${instanceId}/output/export`,
+      `${getApiUrl()}/api/v1/assessment-workflow/${instanceId}/output/export`,
       { headers }
     );
     if (!res.ok) throw new Error('Export failed');
@@ -203,7 +203,7 @@ export const assessmentsApi = {
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(
-      `${API_URL}/api/v1/assessment-workflow/${instanceId}/export`,
+      `${getApiUrl()}/api/v1/assessment-workflow/${instanceId}/export`,
       { headers }
     );
     if (!res.ok) {
@@ -294,7 +294,7 @@ export const assessmentsApi = {
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(
-      `${API_URL}/api/v1/assessment-workflow/${instanceId}/decision-log/export.xlsx`,
+      `${getApiUrl()}/api/v1/assessment-workflow/${instanceId}/decision-log/export.xlsx`,
       { headers }
     );
     if (!res.ok) throw new Error('History export failed');
@@ -325,7 +325,7 @@ export const assessmentsApi = {
     });
   },
   async exportLCOEExcel(inputs: Record<string, any>): Promise<Blob> {
-    const url = `${API_URL}/api/v1/lcoe/export`;
+    const url = `${getApiUrl()}/api/v1/lcoe/export`;
     const token = await getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -369,7 +369,7 @@ export const assessmentsApi = {
     });
   },
   async exportCarbonExcel(inputs: Record<string, any>): Promise<Blob> {
-    const url = `${API_URL}/api/v1/carbon/export`;
+    const url = `${getApiUrl()}/api/v1/carbon/export`;
     const token = await getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -422,7 +422,7 @@ export const assessmentsApi = {
     const token = await getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const response = await fetch(`${API_URL}/api/v1/pvwatts/export`, {
+    const response = await fetch(`${getApiUrl()}/api/v1/pvwatts/export`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ inputs, result }),

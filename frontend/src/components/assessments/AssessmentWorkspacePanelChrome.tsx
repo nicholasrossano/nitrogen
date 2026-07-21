@@ -67,10 +67,10 @@ export function AssessmentWorkspacePanelChrome({
           onClick={() => onDecisionLogOpenRef.current()}
           aria-label="History"
           title="History"
-          className="flex h-8 items-center gap-1.5 rounded-md border border-stroke-subtle bg-white px-2.5 text-[11px] font-medium leading-none text-text-secondary transition-colors hover:bg-black/[0.04] hover:text-text-primary"
+          className="flex h-8 items-center gap-1.5 rounded-md border border-stroke-subtle bg-white px-2.5 text-[11px] font-medium leading-none text-text-secondary transition-colors hover:bg-black/[0.04] hover:text-text-primary max-md:min-h-11 max-md:min-w-11 max-md:justify-center max-md:px-2"
         >
           <History className="h-3.5 w-3.5" />
-          History
+          <span className="hidden md:inline">History</span>
         </button>
         {showExportAction && exportActionKind === 'report' && (
           <button
@@ -79,12 +79,12 @@ export function AssessmentWorkspacePanelChrome({
             disabled={isExporting || isApprovingFinal}
             aria-label="Report"
             title="Report"
-            className="flex h-8 items-center gap-1.5 rounded-md border border-stroke-subtle bg-white px-2.5 text-[11px] font-medium leading-none text-text-secondary transition-colors hover:bg-black/[0.04] hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-8 items-center gap-1.5 rounded-md border border-stroke-subtle bg-white px-2.5 text-[11px] font-medium leading-none text-text-secondary transition-colors hover:bg-black/[0.04] hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-11 max-md:min-w-11 max-md:justify-center max-md:px-2"
           >
             {isExporting
               ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
               : <FileText className="h-3.5 w-3.5" />}
-            Report
+            <span className="hidden md:inline">Report</span>
           </button>
         )}
         {showExportAction && exportActionKind !== 'report' && (
@@ -94,12 +94,12 @@ export function AssessmentWorkspacePanelChrome({
             disabled={isExporting || isApprovingFinal}
             aria-label="Export"
             title="Export"
-            className="flex h-8 items-center gap-1.5 rounded-md border border-stroke-subtle bg-white px-2.5 text-[11px] font-medium leading-none text-text-secondary transition-colors hover:bg-black/[0.04] hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-8 items-center gap-1.5 rounded-md border border-stroke-subtle bg-white px-2.5 text-[11px] font-medium leading-none text-text-secondary transition-colors hover:bg-black/[0.04] hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-11 max-md:min-w-11 max-md:justify-center max-md:px-2"
           >
             {isExporting
               ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
               : <Download className="h-3.5 w-3.5" />}
-            Export
+            <span className="hidden md:inline">Export</span>
           </button>
         )}
         {canApproveFinal && (
@@ -109,12 +109,12 @@ export function AssessmentWorkspacePanelChrome({
             disabled={isApprovingFinal}
             aria-label="Confirm assessment"
             title="Confirm assessment"
-            className="btn-primary !h-8 !gap-1.5 !rounded-md !px-2.5 !py-0 !text-[11px] !font-medium !leading-none disabled:cursor-not-allowed"
+            className="btn-primary !h-8 !gap-1.5 !rounded-md !px-2.5 !py-0 !text-[11px] !font-medium !leading-none disabled:cursor-not-allowed max-md:!min-h-11 max-md:!min-w-11 max-md:!justify-center max-md:!px-2"
           >
             {isApprovingFinal
               ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
               : <CheckCircle2 className="h-3.5 w-3.5" />}
-            Confirm
+            <span className="hidden md:inline">Confirm</span>
           </button>
         )}
         {finalApproved && (
@@ -124,7 +124,7 @@ export function AssessmentWorkspacePanelChrome({
             disabled={isApprovingFinal}
             title="Confirmed — click to revoke"
             aria-label="Confirmed — click to revoke"
-            className="group flex h-8 items-center gap-1.5 rounded-md border border-accent bg-accent px-2.5 text-white leading-none transition-colors hover:bg-accent/90 disabled:opacity-100"
+            className="group flex h-8 items-center gap-1.5 rounded-md border border-accent bg-accent px-2.5 text-white leading-none transition-colors hover:bg-accent/90 disabled:opacity-100 max-md:min-h-11 max-md:px-2"
           >
             {isApprovingFinal ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
@@ -134,7 +134,7 @@ export function AssessmentWorkspacePanelChrome({
                 <RotateCcw className="absolute inset-0 h-3.5 w-3.5 text-white opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100" />
               </span>
             )}
-            <span className="text-[11px] font-medium leading-none">Confirmed</span>
+            <span className="text-[11px] font-medium leading-none hidden md:inline">Confirmed</span>
           </button>
         )}
       </>

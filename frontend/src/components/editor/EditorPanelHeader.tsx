@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { ArrowLeft, Check, Loader2, Pencil, X } from 'lucide-react';
 import { SHELL_SURFACE_HEADER_CLASS } from '@/components/ui/chatSidebarLayout';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 type WidgetHeaderIconButtonOptions = {
   size?: 'sm' | 'md';
@@ -25,6 +26,8 @@ export function widgetHeaderIconButtonClassName(
     'hover:bg-black/[0.06] active:bg-black/[0.09]',
     bordered ? 'hover:border-text-tertiary/30' : '',
     dimension,
+    // Mobile: enlarge hit target without changing desktop chrome size.
+    'max-md:min-h-11 max-md:min-w-11',
     border,
     tone,
   ].filter(Boolean).join(' ');
@@ -36,11 +39,15 @@ interface EditorPanelHeaderProps {
   onSaveTitle?: (title: string) => void | Promise<void>;
   titleSaving?: boolean;
   suffix?: string | null;
-  /** Dismiss the panel / float layer. Always rendered on the right when provided. */
+  /** Keep title fully visible; truncate suffix instead (floor headers: Overview • project). */
+  truncateSuffix?: boolean;
+  /** Dismiss the panel / float layer. Rendered on the right, before `actions` when both are set. */
   onClose?: () => void;
   /** Optional one-level-up navigation. Rendered on the left when provided. */
   onBack?: () => void;
   actions?: ReactNode;
+  className?: string;
+  style?: CSSProperties;
 }
 
 function EditablePanelTitle({
@@ -49,12 +56,15 @@ function EditablePanelTitle({
   onSaveTitle,
   titleSaving = false,
   suffix,
+  truncateSuffix = false,
 }: {
   title: string;
   titleEditable?: boolean;
   onSaveTitle?: (title: string) => void | Promise<void>;
   titleSaving?: boolean;
   suffix?: string | null;
+  /** When true, keep the title fully visible and truncate the suffix (e.g. project name). */
+  truncateSuffix?: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(title);
@@ -131,12 +141,23 @@ function EditablePanelTitle({
 
   return (
     <div className="flex min-w-0 max-w-full items-center gap-1.5 group">
-      <span className="min-w-0 truncate">{title}</span>
+      <span className={truncateSuffix ? 'shrink-0' : 'min-w-0 truncate'}>{title}</span>
       {suffix ? (
-        <span className="shrink-0 whitespace-nowrap text-text-tertiary">
-          {' • '}
-          {suffix}
-        </span>
+        truncateSuffix ? (
+          <>
+            <span className="shrink-0 text-text-tertiary" aria-hidden>
+              •
+            </span>
+            <span className="min-w-0 truncate font-normal text-text-tertiary" title={suffix}>
+              {suffix}
+            </span>
+          </>
+        ) : (
+          <span className="shrink-0 whitespace-nowrap text-text-tertiary">
+            {' • '}
+            {suffix}
+          </span>
+        )
       ) : null}
       {titleEditable ? (
         <button
@@ -158,12 +179,36 @@ export function EditorPanelHeader({
   onSaveTitle,
   titleSaving = false,
   suffix,
+  truncateSuffix = false,
   onClose,
   onBack,
   actions,
+  className = '',
+  style,
 }: EditorPanelHeaderProps) {
+  const isMobile = useIsMobile();
+  // Mobile: dismiss X sits before actions so it stays left of CTAs. Desktop: actions then close.
+  const closeButton = onClose ? (
+    <button
+      type="button"
+      onClick={onClose}
+      aria-label="Close editor"
+      className={widgetHeaderIconButtonClassName({ bordered: true })}
+    >
+      <X className="h-3.5 w-3.5" />
+    </button>
+  ) : null;
+  const actionsNode = actions ? (
+    <div className="flex shrink-0 items-center gap-1">
+      {actions}
+    </div>
+  ) : null;
+
   return (
-    <header className={`${SHELL_SURFACE_HEADER_CLASS} gap-2.5 border-b border-divider bg-white px-3`}>
+    <header
+      style={style}
+      className={`${SHELL_SURFACE_HEADER_CLASS} gap-2.5 border-b border-divider bg-white px-3 ${className}`.trim()}
+    >
       {onBack ? (
         <button
           type="button"
@@ -181,23 +226,20 @@ export function EditorPanelHeader({
           onSaveTitle={onSaveTitle}
           titleSaving={titleSaving}
           suffix={suffix}
+          truncateSuffix={truncateSuffix}
         />
       </div>
-      {actions ? (
-        <div className="flex shrink-0 items-center gap-1">
-          {actions}
-        </div>
-      ) : null}
-      {onClose ? (
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close editor"
-          className={widgetHeaderIconButtonClassName({ bordered: true })}
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      ) : null}
+      {isMobile ? (
+        <>
+          {closeButton}
+          {actionsNode}
+        </>
+      ) : (
+        <>
+          {actionsNode}
+          {closeButton}
+        </>
+      )}
     </header>
   );
 }

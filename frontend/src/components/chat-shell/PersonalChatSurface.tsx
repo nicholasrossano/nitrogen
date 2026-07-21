@@ -11,6 +11,8 @@ import {
   EditorPanelHeaderIconButton,
 } from '@/components/editor/EditorPanelHeader';
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
+import { useIsMobile } from '@/hooks/useIsMobile';
+import { MOBILE_NAV_CHIP_HEADER_PADDING_LEFT } from '@/components/ui/chatSidebarLayout';
 import type { CoreChatMessage } from '@/types/chat';
 
 interface PersonalChatSurfaceProps {
@@ -54,6 +56,7 @@ export function PersonalChatSurface({
   composerLeadingActions,
 }: PersonalChatSurfaceProps) {
   const chatShell = useChatShell();
+  const isMobile = useIsMobile();
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
@@ -391,9 +394,11 @@ export function PersonalChatSurface({
       <EditorPanelHeader
         title={sessionTitle || 'Untitled'}
         titleEditable={Boolean(currentChatId)}
-        onSaveTitle={handleSaveChatTitle}
         titleSaving={titleSaving}
-        onBack={handleLeaveChat}
+        // Mobile: X on the right before New chat. Desktop: back control on the left.
+        {...(isMobile ? { onClose: handleLeaveChat } : { onBack: handleLeaveChat })}
+        // Clear the collapsed nav chip that overlays the chat header on mobile.
+        style={isMobile ? { paddingLeft: MOBILE_NAV_CHIP_HEADER_PADDING_LEFT } : undefined}
         actions={(
           <EditorPanelHeaderIconButton label="New chat" onClick={handleLeaveChat}>
             <SquarePen className="h-3.5 w-3.5" />

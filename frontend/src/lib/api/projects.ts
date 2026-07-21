@@ -1,5 +1,5 @@
 import {
-  API_URL,
+  getApiUrl,
   fetchApi,
   getAuthToken,
 } from './client';
@@ -74,7 +74,7 @@ export const projectsApi = {
       method: 'POST',
     }),
   deleteProject: async (id: string) => {
-    const url = `${API_URL}/api/v1/projects/${id}`;
+    const url = `${getApiUrl()}/api/v1/projects/${id}`;
     const token = await getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) {
@@ -110,7 +110,7 @@ export const projectsApi = {
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
-    const response = await fetch(`${API_URL}/api/v1/exports/${memoId}`, { headers });
+    const response = await fetch(`${getApiUrl()}/api/v1/exports/${memoId}`, { headers });
     
     if (!response.ok) {
       throw new Error('Failed to download export');

@@ -4,7 +4,8 @@ import { useDemoMode } from '@/hooks/useDemoMode';
 import { leaveDemoForSignup } from '@/lib/demo/demoBoundary';
 
 /**
- * Fixed floating disclaimer for demo mode — bottom-right over the workbench.
+ * Desktop demo disclaimer (bottom-right card).
+ * Mobile chip lives in MobileShellChrome next to the desktop-optimization notice.
  */
 export function DemoBanner() {
   const { isDemo } = useDemoMode();
@@ -19,7 +20,7 @@ export function DemoBanner() {
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-none fixed bottom-4 right-4 z-[100] w-[min(36rem,calc(100vw-2rem))]"
+      className="pointer-events-none fixed bottom-4 right-4 z-[100] w-[min(36rem,calc(100vw-2rem))] max-md:hidden"
     >
       <div className="pointer-events-auto flex flex-col items-stretch gap-2 rounded-xl border border-stroke-subtle bg-white/95 px-4 py-3 shadow-lg backdrop-blur-sm sm:flex-row sm:items-center sm:gap-3">
         <div className="min-w-0 flex-1">
@@ -38,7 +39,7 @@ export function DemoBanner() {
         <button
           type="button"
           onClick={goToSignup}
-          className="h-8 shrink-0 rounded-lg bg-accent px-3 text-xs font-medium text-white transition-colors hover:bg-accent-hover"
+          className="h-8 shrink-0 rounded-lg bg-accent px-3 text-xs font-medium text-white transition-colors hover:bg-accent-hover max-md:min-h-11 max-md:px-3.5"
         >
           Sign up
         </button>

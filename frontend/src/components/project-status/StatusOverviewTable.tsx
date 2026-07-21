@@ -499,70 +499,65 @@ export function StatusOverviewTable({
                 const infoSummary = (row.criteria_summary || '').trim();
                 return (
                   <div key={row.category_key} className="px-4 py-3">
-                    <div className="flex items-stretch gap-4">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1">
-                          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">
-                            {row.label}
-                          </p>
-                          <div className="flex items-center">
-                            {infoSummary ? (
-                              <Tooltip content={infoSummary} width={280}>
-                                <button
-                                  type="button"
-                                  className="rounded-lg p-1.5 text-text-tertiary hover:bg-surface-subtle hover:text-text-primary"
-                                  aria-label={`About ${row.label}`}
-                                >
-                                  <Info className="h-3.5 w-3.5" />
-                                </button>
-                              </Tooltip>
-                            ) : null}
-                            {!readOnly ? (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => void openEditEditor(row)}
-                                  className="rounded-lg p-1.5 text-text-tertiary hover:bg-surface-subtle hover:text-text-primary"
-                                  aria-label={`Edit ${row.label}`}
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setPendingDelete(row)}
-                                  disabled={deletingKey === row.category_key}
-                                  className="rounded-lg p-1.5 text-text-tertiary hover:bg-surface-subtle hover:text-red-600"
-                                  aria-label={`Delete ${row.label}`}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </>
-                            ) : null}
-                          </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-1">
+                        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">
+                          {row.label}
+                        </p>
+                        <div className="flex items-center">
+                          {infoSummary ? (
+                            <Tooltip content={infoSummary} width={280}>
+                              <button
+                                type="button"
+                                className="rounded-lg p-1.5 text-text-tertiary hover:bg-surface-subtle hover:text-text-primary"
+                                aria-label={`About ${row.label}`}
+                              >
+                                <Info className="h-3.5 w-3.5" />
+                              </button>
+                            </Tooltip>
+                          ) : null}
+                          {!readOnly ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => void openEditEditor(row)}
+                                className="rounded-lg p-1.5 text-text-tertiary hover:bg-surface-subtle hover:text-text-primary"
+                                aria-label={`Edit ${row.label}`}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPendingDelete(row)}
+                                disabled={deletingKey === row.category_key}
+                                className="rounded-lg p-1.5 text-text-tertiary hover:bg-surface-subtle hover:text-red-600"
+                                aria-label={`Delete ${row.label}`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          ) : null}
                         </div>
-                        <DecisionSignalList
-                          signals={row.decision_signals}
-                          fallbackText={row.critical_insight || row.rationale}
-                        />
                       </div>
-
-                      <div className="flex shrink-0 flex-col items-end self-stretch">
-                        <div className="flex flex-col items-end gap-1.5 pt-0.5">
-                          <StatusCapsule size="md" className={meta.className}>{meta.label}</StatusCapsule>
-                          <StatusCapsule size="md" className={confidenceMeta.className}>{confidenceMeta.label}</StatusCapsule>
-                        </div>
-                        {(sourceEntries.length > 0 || assessmentEntries.length > 0) ? (
-                          <div className="mt-auto pt-2">
-                            <StatusSourcesMenu
-                              sources={sourceEntries}
-                              assessments={assessmentEntries}
-                              onOpenDocument={onOpenDocument}
-                              onOpenAssessment={onOpenWorkspaceAssessment}
-                            />
-                          </div>
-                        ) : null}
+                      <div className="flex shrink-0 flex-col items-end gap-1.5 pt-0.5">
+                        <StatusCapsule size="md" className={meta.className}>{meta.label}</StatusCapsule>
+                        <StatusCapsule size="md" className={confidenceMeta.className}>{confidenceMeta.label}</StatusCapsule>
                       </div>
                     </div>
+                    <DecisionSignalList
+                      signals={row.decision_signals}
+                      fallbackText={row.critical_insight || row.rationale}
+                    />
+                    {(sourceEntries.length > 0 || assessmentEntries.length > 0) ? (
+                      <div className="mt-2 flex justify-end">
+                        <StatusSourcesMenu
+                          sources={sourceEntries}
+                          assessments={assessmentEntries}
+                          onOpenDocument={onOpenDocument}
+                          onOpenAssessment={onOpenWorkspaceAssessment}
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}

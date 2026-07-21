@@ -1,5 +1,5 @@
 import {
-  API_URL,
+  getApiUrl,
   fetchApi,
   getAuthToken,
 } from './client';
@@ -52,7 +52,7 @@ export const workspacesApi = {
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const response = await fetch(
-      `${API_URL}/api/v1/workspaces/${workspaceId}/evidence`,
+      `${getApiUrl()}/api/v1/workspaces/${workspaceId}/evidence`,
       {
         method: 'POST',
         headers,

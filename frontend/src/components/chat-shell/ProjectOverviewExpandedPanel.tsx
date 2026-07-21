@@ -85,7 +85,7 @@ export function ProjectOverviewExpandedPanel({
 
   return (
     <>
-    <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
+    <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 max-md:overscroll-y-contain max-md:[-webkit-overflow-scrolling:touch]">
       <div className="mx-auto w-full max-w-3xl space-y-8">
         <TourAnchor id="feature-overview" as="div" className="w-full" surface="floor">
           <section>

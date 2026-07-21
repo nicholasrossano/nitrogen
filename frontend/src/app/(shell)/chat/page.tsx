@@ -27,7 +27,7 @@ function ChatLandingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const chatShell = useChatShell();
-  const { activeWorkspace, loadWorkspaces } = useWorkspaceStore();
+  const { loadWorkspaces } = useWorkspaceStore();
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [projectsError, setProjectsError] = useState<string | null>(null);
@@ -40,53 +40,61 @@ function ChatLandingContent() {
   const assessmentParam = parseAssessmentParam(searchParams.get('assessment'));
 
   useEffect(() => {
-    if (isDemoActive()) {
-      router.replace(buildDemoProjectPath({
-        chat: activeChatId,
-        panel: panelParam,
-      }));
-    }
+    if (!isDemoActive()) return;
+    // Demo never uses the real workspace list — leave /chat immediately.
+    router.replace(buildDemoProjectPath({
+      chat: activeChatId,
+      panel: panelParam,
+    }));
   }, [activeChatId, panelParam, router]);
 
   useEffect(() => {
     if (isDemoActive()) return;
-    if (!activeWorkspace) void loadWorkspaces();
-  }, [activeWorkspace, loadWorkspaces]);
 
-  useEffect(() => {
-    if (isDemoActive()) return;
-    if (!activeWorkspace?.id) {
-      setProjects([]);
+    let cancelled = false;
+
+    void (async () => {
+      // Always resolve workspace before listing projects — avoids the
+      // activeWorkspace-null soft-lock that spun /chat forever after login.
+      if (!useWorkspaceStore.getState().activeWorkspace) {
+        await loadWorkspaces();
+      }
+      if (cancelled) return;
+
+      const workspace = useWorkspaceStore.getState().activeWorkspace;
+      const wsError = useWorkspaceStore.getState().error;
+      if (!workspace?.id) {
+        setProjects([]);
+        setProjectsLoaded(true);
+        setProjectsError(wsError);
+        return;
+      }
+
       setProjectsLoaded(false);
       setProjectsError(null);
-      return;
-    }
-    let cancelled = false;
-    setProjectsLoaded(false);
-    setProjectsError(null);
-    api.listProjects(100, 0, false, activeWorkspace.id)
-      .then((rows) => {
+      try {
+        const rows = await api.listProjects(100, 0, false, workspace.id);
         if (cancelled) return;
         setProjects(rows);
-      })
-      .catch((err) => {
+      } catch (err) {
         if (cancelled) return;
         // A failed request is not evidence the workspace is empty. Treating it
         // as "no projects" would bounce an existing user into onboarding —
         // surface a retry instead of guessing.
         setProjectsError(err instanceof Error ? err.message : 'Failed to load projects');
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setProjectsLoaded(true);
-      });
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
-  }, [activeWorkspace?.id, chatShell?.drawerRefreshKey, retryNonce]);
+  }, [chatShell?.drawerRefreshKey, retryNonce, loadWorkspaces]);
 
   useEffect(() => {
     if (isDemoActive()) return;
-    if (!activeWorkspace?.id) return;
+    if (!projectsLoaded) return;
 
     const decision = decideChatLandingNavigation({
       projectsLoaded,
@@ -117,7 +125,6 @@ function ChatLandingContent() {
     setResolving(false);
   }, [
     activeChatId,
-    activeWorkspace?.id,
     assessmentParam,
     legacyProjectParam,
     panelParam,
@@ -127,6 +134,14 @@ function ChatLandingContent() {
     router,
   ]);
 
+  if (isDemoActive()) {
+    return (
+      <div className="flex h-full flex-1 items-center justify-center bg-surface">
+        <PageLoader label="" />
+      </div>
+    );
+  }
+
   if (projectsError) {
     return (
       <div className="flex h-full flex-1 flex-col items-center justify-center gap-3 bg-surface px-4 text-center">
@@ -134,7 +149,11 @@ function ChatLandingContent() {
         <p className="text-xs text-text-tertiary">{projectsError}</p>
         <button
           type="button"
-          onClick={() => setRetryNonce((n) => n + 1)}
+          onClick={() => {
+            setProjectsError(null);
+            setProjectsLoaded(false);
+            setRetryNonce((n) => n + 1);
+          }}
           className="rounded-full border border-stroke-subtle px-3 py-1.5 text-xs font-medium text-text-primary hover:border-black/20"
         >
           Try again

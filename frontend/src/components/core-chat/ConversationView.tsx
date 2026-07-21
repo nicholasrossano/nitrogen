@@ -339,10 +339,17 @@ export function ConversationView({
           setInput(ctx ? e.target.value + ctx : e.target.value);
         }}
         onKeyDown={handleKeyDown}
+        onFocus={() => {
+          if (window.matchMedia('(max-width: 767px)').matches) {
+            window.requestAnimationFrame(() => {
+              window.scrollTo({ left: 0, top: window.scrollY });
+            });
+          }
+        }}
         placeholder="Ask anything"
         disabled={inputDisabled}
         rows={1}
-        className="no-global-focus-style w-full resize-none bg-transparent px-5 pt-3 pb-4 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
+        className="no-global-focus-style w-full resize-none bg-transparent px-5 pt-3 pb-4 text-base text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden md:text-sm max-md:min-w-0"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', minHeight: '2.25rem' }}
       />
 
@@ -366,22 +373,23 @@ export function ConversationView({
                 type="button"
                 disabled={inputDisabled}
                 onClick={() => fileInputRef.current?.click()}
-                className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
+                className="relative flex h-5 w-5 items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary disabled:opacity-40 disabled:cursor-default max-md:h-4 max-md:w-4 max-md:before:absolute max-md:before:-inset-2.5 max-md:before:content-['']"
                 aria-label="Attach files"
               >
-                <Paperclip className="w-[13px] h-[13px]" />
+                <Paperclip className="w-[13px] h-[13px] max-md:h-3 max-md:w-3" />
               </button>
             </>
           )}
           <button
             type="submit"
             disabled={inputDisabled || sendDisabled || uploading || !input.trim()}
-            className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent"
+            className="relative flex h-5 w-5 items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent max-md:h-4 max-md:w-4 max-md:before:absolute max-md:before:-inset-2.5 max-md:before:content-['']"
+            aria-label="Send"
           >
             {uploading ? (
-              <Loader2 className="w-[11px] h-[11px] text-white animate-spin" />
+              <Loader2 className="w-[11px] h-[11px] text-white animate-spin max-md:h-2.5 max-md:w-2.5" />
             ) : (
-              <ArrowUp className="w-[11px] h-[11px] text-white" />
+              <ArrowUp className="w-[11px] h-[11px] text-white max-md:h-2.5 max-md:w-2.5" />
             )}
           </button>
         </div>
@@ -400,8 +408,8 @@ export function ConversationView({
   const composer = !hideTextInput ? (
     <div className="flex-shrink-0 relative">
       <div className="pointer-events-none absolute -top-12 inset-x-0 h-12 bg-gradient-to-t from-white to-transparent" />
-      <div className="max-w-[52rem] mx-auto w-full pb-4 px-4">
-        <div className="relative w-full">
+      <div className="max-w-[52rem] mx-auto w-full pb-4 px-4 max-md:min-w-0 max-md:pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className="relative w-full max-md:min-w-0">
           {hasComposerTray ? (
             <div className="chat-composer-stack">
               {topComposerContent}

@@ -47,10 +47,11 @@ export function FloatTabBar({
           return (
             <div
               key={tabId}
+              // Hover styles only on fine pointers — touch sticky-hover otherwise eats the first tap.
               className={`group relative flex h-8 max-w-[11rem] shrink-0 items-center rounded-lg border transition-colors ${
                 isActive
                   ? 'border-stroke-subtle bg-white text-text-primary shadow-floating-panel'
-                  : 'border-transparent bg-black/[0.04] text-text-secondary hover:bg-black/[0.07] hover:text-text-primary'
+                  : 'border-transparent bg-black/[0.04] text-text-secondary [@media(hover:hover)]:hover:bg-black/[0.07] [@media(hover:hover)]:hover:text-text-primary'
               }`}
             >
               <button
@@ -59,7 +60,11 @@ export function FloatTabBar({
                 role="tab"
                 aria-selected={isActive}
                 title={title}
-                onMouseDown={(event) => event.preventDefault()}
+                // Avoid stealing focus from editors on desktop; preventDefault on touch delays click.
+                onPointerDown={(event) => {
+                  if (event.pointerType === 'touch') return;
+                  event.preventDefault();
+                }}
                 onClick={() => onActivate(tabId)}
                 onAuxClick={(event) => {
                   if (event.button === 1) {
@@ -75,13 +80,19 @@ export function FloatTabBar({
                 type="button"
                 aria-label={`Close ${title}`}
                 title="Close"
-                onMouseDown={(event) => event.preventDefault()}
+                onPointerDown={(event) => {
+                  if (event.pointerType === 'touch') return;
+                  event.preventDefault();
+                }}
                 onClick={(event) => {
                   event.stopPropagation();
                   onClose(tabId);
                 }}
-                className={`absolute right-0.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-md text-text-tertiary transition-opacity hover:bg-black/[0.08] hover:text-text-primary ${
-                  isActive ? 'opacity-70' : 'opacity-0 group-hover:opacity-100'
+                className={`absolute right-0.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-md text-text-tertiary transition-opacity [@media(hover:hover)]:hover:bg-black/[0.08] [@media(hover:hover)]:hover:text-text-primary ${
+                  isActive
+                    ? 'opacity-70'
+                    // Hidden inactive close must not intercept taps (opacity-0 still hit-tests).
+                    : 'pointer-events-none opacity-0 max-md:pointer-events-auto max-md:opacity-70 [@media(hover:hover)]:group-hover:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100'
                 }`}
               >
                 <X className="h-3 w-3" aria-hidden="true" />

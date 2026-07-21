@@ -26,6 +26,7 @@ import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel
 import { FilesScopeToggle, type FilesScope } from '@/components/files';
 import { TourAnchor } from '@/components/tour/TourAnchor';
 import { FrameworkPlanView } from '@/components/framework/FrameworkPlanView';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 export type { ChatContextExpandedWidget, ExpandedWidgetChangeOptions };
 
@@ -107,19 +108,171 @@ function ContextStackWidgetSlot({
   widgetId,
   expandedWidget,
   renderedWidget,
+  layout,
   children,
 }: {
   widgetId: ChatContextExpandedWidget;
   expandedWidget: ChatContextExpandedWidget | null;
   renderedWidget: ChatContextExpandedWidget | null;
+  layout: 'rail' | 'grid';
   children: ReactNode;
 }) {
+  const motionClass = contextStackWidgetMotionClass(expandedWidget, widgetId, renderedWidget);
+  if (layout === 'grid') {
+    return (
+      <div
+        className={`pointer-events-auto flex min-h-0 min-w-0 flex-col overflow-hidden ${contextStackTransitionClass} ${motionClass}`}
+      >
+        {children}
+      </div>
+    );
+  }
   return (
     <div
-      className={`pointer-events-auto flex min-h-[7rem] min-w-0 flex-1 basis-0 flex-col overflow-hidden ${contextStackTransitionClass} ${contextStackWidgetMotionClass(expandedWidget, widgetId, renderedWidget)}`}
+      className={`pointer-events-auto flex min-h-[7rem] min-w-0 flex-1 basis-0 flex-col overflow-hidden ${contextStackTransitionClass} ${motionClass}`}
     >
       {children}
     </div>
+  );
+}
+
+export type ChatContextMiniLaunchersProps = {
+  project: Project | null;
+  projectId: string;
+  refreshKey?: number;
+  expandedWidget: ChatContextExpandedWidget | null;
+  renderedWidget?: ChatContextExpandedWidget | null;
+  layout: 'rail' | 'grid';
+  onExpandOverview: () => void;
+  onExpandVariables: () => void;
+  onExpandAssessments: () => void;
+  onExpandFiles: () => void;
+  onOpenVariableDetail?: (variable: Variable) => void;
+  onOpenFile?: (file: ProjectMaterial) => void;
+  onOpenWorkspaceAssessment?: (assessment: {
+    instanceId: string;
+    assessmentId: string;
+    title?: string | null;
+  }) => void;
+  frameworkPlannedAssessmentIds?: string[];
+  frameworkAssessmentInstances?: AssessmentInstance[];
+  frameworkAssessmentsLoading?: boolean;
+  onCreateAssessmentInstanceInAssessmentsView?: (assessmentId: string, assessmentName: string) => Promise<void>;
+  frameworkReadOnly?: boolean;
+  className?: string;
+};
+
+/** Mini Overview / Variables / Assessments / Files launchers — desktop rail or mobile 2×2 grid. */
+export function ChatContextMiniLaunchers({
+  project,
+  projectId,
+  refreshKey = 0,
+  expandedWidget,
+  renderedWidget = null,
+  layout,
+  onExpandOverview,
+  onExpandVariables,
+  onExpandAssessments,
+  onExpandFiles,
+  onOpenVariableDetail,
+  onOpenFile,
+  onOpenWorkspaceAssessment,
+  frameworkPlannedAssessmentIds = [],
+  frameworkAssessmentInstances = [],
+  frameworkAssessmentsLoading = false,
+  onCreateAssessmentInstanceInAssessmentsView,
+  frameworkReadOnly = false,
+  className,
+}: ChatContextMiniLaunchersProps) {
+  const handleVariableSelect = useCallback((variable: Variable) => {
+    onOpenVariableDetail?.(variable);
+  }, [onOpenVariableDetail]);
+
+  const slots = (
+    <>
+      <ContextStackWidgetSlot
+        widgetId="overview"
+        expandedWidget={expandedWidget}
+        renderedWidget={renderedWidget}
+        layout={layout}
+      >
+        <ProjectContextPanel
+          variant="stacked"
+          project={project}
+          projectId={projectId}
+          refreshKey={refreshKey}
+          onViewAll={onExpandOverview}
+        />
+      </ContextStackWidgetSlot>
+
+      <ContextStackWidgetSlot
+        widgetId="variables"
+        expandedWidget={expandedWidget}
+        renderedWidget={renderedWidget}
+        layout={layout}
+      >
+        <ProjectVariablesPanel
+          projectId={projectId}
+          refreshKey={refreshKey}
+          onVariableSelect={handleVariableSelect}
+          onViewAll={onExpandVariables}
+        />
+      </ContextStackWidgetSlot>
+
+      <ContextStackWidgetSlot
+        widgetId="assessments"
+        expandedWidget={expandedWidget}
+        renderedWidget={renderedWidget}
+        layout={layout}
+      >
+        <ProjectAssessmentsPanel
+          plannedAssessmentIds={frameworkPlannedAssessmentIds}
+          assessmentInstances={frameworkAssessmentInstances}
+          loading={frameworkAssessmentsLoading}
+          readOnly={frameworkReadOnly}
+          onViewAll={onExpandAssessments}
+          onOpenAssessment={onOpenWorkspaceAssessment}
+          onStartAssessment={frameworkReadOnly ? undefined : onCreateAssessmentInstanceInAssessmentsView}
+        />
+      </ContextStackWidgetSlot>
+
+      <ContextStackWidgetSlot
+        widgetId="files"
+        expandedWidget={expandedWidget}
+        renderedWidget={renderedWidget}
+        layout={layout}
+      >
+        <ProjectFilesPanel
+          projectId={projectId}
+          refreshKey={refreshKey}
+          onOpenFile={onOpenFile}
+          onViewAll={onExpandFiles}
+        />
+      </ContextStackWidgetSlot>
+    </>
+  );
+
+  if (layout === 'grid') {
+    return (
+      <TourAnchor
+        id="welcome-context-stack"
+        as="div"
+        className={`grid h-full min-h-[12rem] w-full grid-cols-2 gap-2.5 ${className ?? ''}`.trim()}
+      >
+        {slots}
+      </TourAnchor>
+    );
+  }
+
+  return (
+    <TourAnchor
+      id="welcome-context-stack"
+      as="div"
+      className={`pointer-events-none absolute z-20 right-3 top-3 bottom-3 flex flex-col gap-3 ${contextStackTransitionClass} ${className ?? ''}`.trim()}
+      style={{ width: CHAT_CONTEXT_STACK_WIDTH }}
+    >
+      {slots}
+    </TourAnchor>
   );
 }
 
@@ -144,6 +297,7 @@ export function ChatContextStack({
   onOpenExistingAssessmentInstanceInAssessmentsView,
   frameworkReadOnly = false,
 }: ChatContextStackProps) {
+  const isMobile = useIsMobile();
   const { renderedWidget, visible } = useExpandedPanelVisibility(expandedWidget);
   const [shellMotion, setShellMotion] = useState<ContextPanelExpandMotion>('stack');
   const uploadMaterial = useProjectStore((state) => state.uploadMaterial);
@@ -258,78 +412,34 @@ export function ChatContextStack({
     onExpandedWidgetChange(null);
   }, [onExpandedWidgetChange]);
 
-  const handleVariableSelect = useCallback((variable: Variable) => {
-    onOpenVariableDetail?.(variable);
-  }, [onOpenVariableDetail]);
-
   if (!projectId) return null;
+
+  const showMiniRail = !isMobile && (shellMotion === 'stack' || !expandedWidget);
 
   return (
     <>
-      {(shellMotion === 'stack' || !expandedWidget) && (
-      <TourAnchor
-        id="welcome-context-stack"
-        as="div"
-        className={`pointer-events-none absolute z-20 right-3 top-3 bottom-3 flex flex-col gap-3 ${contextStackTransitionClass}`}
-        style={{ width: CHAT_CONTEXT_STACK_WIDTH }}
-      >
-        <ContextStackWidgetSlot
-          widgetId="overview"
+      {showMiniRail ? (
+        <ChatContextMiniLaunchers
+          layout="rail"
+          project={project}
+          projectId={projectId}
+          refreshKey={refreshKey}
           expandedWidget={expandedWidget}
           renderedWidget={renderedWidget}
-        >
-          <ProjectContextPanel
-            variant="stacked"
-            project={project}
-            projectId={projectId}
-            refreshKey={refreshKey}
-            onViewAll={handleExpandOverview}
-          />
-        </ContextStackWidgetSlot>
-
-        <ContextStackWidgetSlot
-          widgetId="variables"
-          expandedWidget={expandedWidget}
-          renderedWidget={renderedWidget}
-        >
-          <ProjectVariablesPanel
-            projectId={projectId}
-            refreshKey={refreshKey}
-            onVariableSelect={handleVariableSelect}
-            onViewAll={handleExpandVariables}
-          />
-        </ContextStackWidgetSlot>
-
-        <ContextStackWidgetSlot
-          widgetId="assessments"
-          expandedWidget={expandedWidget}
-          renderedWidget={renderedWidget}
-        >
-          <ProjectAssessmentsPanel
-            plannedAssessmentIds={frameworkPlannedAssessmentIds}
-            assessmentInstances={frameworkAssessmentInstances}
-            loading={frameworkAssessmentsLoading}
-            readOnly={frameworkReadOnly}
-            onViewAll={handleExpandAssessments}
-            onOpenAssessment={onOpenWorkspaceAssessment}
-            onStartAssessment={frameworkReadOnly ? undefined : onCreateAssessmentInstanceInAssessmentsView}
-          />
-        </ContextStackWidgetSlot>
-
-        <ContextStackWidgetSlot
-          widgetId="files"
-          expandedWidget={expandedWidget}
-          renderedWidget={renderedWidget}
-        >
-          <ProjectFilesPanel
-            projectId={projectId}
-            refreshKey={refreshKey}
-            onOpenFile={onOpenFile}
-            onViewAll={handleExpandFiles}
-          />
-        </ContextStackWidgetSlot>
-      </TourAnchor>
-      )}
+          onExpandOverview={handleExpandOverview}
+          onExpandVariables={handleExpandVariables}
+          onExpandAssessments={handleExpandAssessments}
+          onExpandFiles={handleExpandFiles}
+          onOpenVariableDetail={onOpenVariableDetail}
+          onOpenFile={onOpenFile}
+          onOpenWorkspaceAssessment={onOpenWorkspaceAssessment}
+          frameworkPlannedAssessmentIds={frameworkPlannedAssessmentIds}
+          frameworkAssessmentInstances={frameworkAssessmentInstances}
+          frameworkAssessmentsLoading={frameworkAssessmentsLoading}
+          onCreateAssessmentInstanceInAssessmentsView={onCreateAssessmentInstanceInAssessmentsView}
+          frameworkReadOnly={frameworkReadOnly}
+        />
+      ) : null}
 
       {renderedWidget === 'overview' && project && (
         <FloorLayer
@@ -346,10 +456,11 @@ export function ChatContextStack({
               <button
                 type="button"
                 onClick={() => setOverviewShareModalOpen(true)}
-                className="flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg border border-stroke-subtle bg-white text-text-secondary hover:border-accent hover:text-accent transition-colors"
+                className="flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg border border-stroke-subtle bg-white text-text-secondary hover:border-accent hover:text-accent transition-colors max-md:min-h-11 max-md:min-w-11 max-md:justify-center max-md:px-2"
+                aria-label="Share"
               >
                 <Users className="w-3.5 h-3.5" />
-                Share
+                <span className="hidden md:inline">Share</span>
               </button>
             ) : undefined
           }

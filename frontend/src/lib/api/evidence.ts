@@ -1,5 +1,5 @@
 import {
-  API_URL,
+  getApiUrl,
   fetchApi,
   getAuthToken,
 } from './client';
@@ -28,7 +28,7 @@ export const evidenceApi = {
 
     try {
       const response = await fetch(
-        `${API_URL}/api/v1/projects/${projectId}/evidence`,
+        `${getApiUrl()}/api/v1/projects/${projectId}/evidence`,
         {
           method: 'POST',
           headers,
@@ -89,7 +89,7 @@ export const evidenceApi = {
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
-    const response = await fetch(`${API_URL}/api/v1/evidence/${evidenceId}`, {
+    const response = await fetch(`${getApiUrl()}/api/v1/evidence/${evidenceId}`, {
       method: 'DELETE',
       headers,
     });
@@ -115,7 +115,7 @@ export const evidenceApi = {
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const response = await fetch(`${API_URL}/api/v1/projects/${projectId}/materials`, {
+    const response = await fetch(`${getApiUrl()}/api/v1/projects/${projectId}/materials`, {
       method: 'POST',
       headers,
       body: formData,
@@ -133,7 +133,7 @@ export const evidenceApi = {
     const token = await getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const response = await fetch(`${API_URL}/api/v1/materials/${materialId}`, {
+    const response = await fetch(`${getApiUrl()}/api/v1/materials/${materialId}`, {
       method: 'DELETE',
       headers,
     });
@@ -154,7 +154,7 @@ export const evidenceApi = {
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const response = await fetch(
-      `${API_URL}/api/v1/projects/${projectId}/deliverables/${toolId}/export`,
+      `${getApiUrl()}/api/v1/projects/${projectId}/deliverables/${toolId}/export`,
       { headers }
     );
     if (!response.ok) {
@@ -176,7 +176,7 @@ export const evidenceApi = {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const response = await fetch(
-      `${API_URL}/api/v1/projects/${projectId}/deliverables/${toolId}`,
+      `${getApiUrl()}/api/v1/projects/${projectId}/deliverables/${toolId}`,
       { method: 'DELETE', headers }
     );
     if (!response.ok) {
@@ -189,7 +189,7 @@ export const evidenceApi = {
     const token = await getAuthToken();
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const response = await fetch(`${API_URL}/api/v1/materials/${materialId}/download`, {
+    const response = await fetch(`${getApiUrl()}/api/v1/materials/${materialId}/download`, {
       headers,
     });
     if (!response.ok) {
@@ -209,7 +209,7 @@ export const evidenceApi = {
     const token = await getAuthToken();
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const response = await fetch(`${API_URL}/api/v1/evidence/${evidenceId}/download`, {
+    const response = await fetch(`${getApiUrl()}/api/v1/evidence/${evidenceId}/download`, {
       headers,
     });
     if (!response.ok) {
@@ -229,7 +229,7 @@ export const evidenceApi = {
     const token = await getAuthToken();
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const response = await fetch(`${API_URL}/api/v1/evidence/${evidenceId}/download`, {
+    const response = await fetch(`${getApiUrl()}/api/v1/evidence/${evidenceId}/download`, {
       headers,
     });
     if (!response.ok) {
@@ -241,7 +241,7 @@ export const evidenceApi = {
     const token = await getAuthToken();
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const response = await fetch(`${API_URL}/api/v1/materials/${materialId}/download`, {
+    const response = await fetch(`${getApiUrl()}/api/v1/materials/${materialId}/download`, {
       headers,
     });
     if (!response.ok) {
@@ -253,7 +253,7 @@ export const evidenceApi = {
     const token = await getAuthToken();
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const response = await fetch(`${API_URL}/api/v1/evidence/${evidenceId}/chunks/${chunkId}/preview`, {
+    const response = await fetch(`${getApiUrl()}/api/v1/evidence/${evidenceId}/chunks/${chunkId}/preview`, {
       headers,
     });
     if (!response.ok) {
@@ -268,7 +268,7 @@ export const evidenceApi = {
       headers['Authorization'] = `Bearer ${token}`;
     }
     const response = await fetch(
-      `${API_URL}/api/v1/projects/${projectId}/export-checklist`,
+      `${getApiUrl()}/api/v1/projects/${projectId}/export-checklist`,
       {
         method: 'POST',
         headers,

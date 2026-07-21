@@ -3,6 +3,22 @@ export const CHAT_SIDEBAR_EXPANDED_WIDTH = '18rem';
 export const CHAT_SIDEBAR_COLLAPSED_WIDTH = '2.75rem';
 export const CHAT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'nitrogen-chat-sidebar-collapsed';
 
+/**
+ * Mobile header left padding so titles clear the collapsed nav chip (left-3 margin +
+ * chip width + gap). Applied via inline `style.paddingLeft` at call sites — reliable
+ * regardless of Tailwind's arbitrary-value scanning, and only touches the left inset
+ * (leaves height / vertical padding untouched).
+ */
+export const MOBILE_NAV_CHIP_HEADER_PADDING_LEFT =
+  `calc(${CHAT_SIDEBAR_MARGIN} + ${CHAT_SIDEBAR_COLLAPSED_WIDTH} + 0.5rem)`;
+
+/**
+ * Mobile header left padding so titles clear the collapsed nav chip (left-3 + chip width + gap).
+ * Use on chat / floor / float headers that sit under the chip.
+ */
+export const MOBILE_NAV_CHIP_HEADER_PADDING_CLASS =
+  `!pl-[calc(${CHAT_SIDEBAR_MARGIN}+${CHAT_SIDEBAR_COLLAPSED_WIDTH}+0.5rem)]`;
+
 /** Right-side floating panels (context stack, variables detail). */
 export const CHAT_CONTEXT_STACK_WIDTH = 'min(22rem, 34vw)';
 export const CHAT_CONTEXT_STACK_GUTTER = `calc(${CHAT_SIDEBAR_MARGIN} + ${CHAT_CONTEXT_STACK_WIDTH} + ${CHAT_SIDEBAR_MARGIN})`;

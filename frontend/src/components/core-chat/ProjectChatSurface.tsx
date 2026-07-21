@@ -28,6 +28,8 @@ import type { ProposedValueApplyRequest } from '@/components/widgets/ProposedVal
 import { debugChatFlow } from '@/lib/chatDebug';
 import type { AssessmentProgressData } from '@/components/ui/ReadinessProgressBar';
 import { useDemoMode } from '@/hooks/useDemoMode';
+import { useIsMobile } from '@/hooks/useIsMobile';
+import { MOBILE_NAV_CHIP_HEADER_PADDING_LEFT } from '@/components/ui/chatSidebarLayout';
 
 const DELIVERABLE_WIDGET_TYPES = ['memo_viewer', 'checklist_viewer'];
 const CHAT_MODULE_WIDGET_TYPES = new Set([
@@ -56,6 +58,8 @@ interface ProjectChatSurfaceProps {
   showComposerModulePicker?: boolean;
   /** Custom content rendered above the landing composer */
   landingHeaderContent?: React.ReactNode;
+  /** Content rendered below the landing composer (e.g. mobile 2×2 context widgets) */
+  landingBelowComposerContent?: React.ReactNode;
   /** Large serif project title above the landing composer */
   landingComposerTitle?: string | null;
   /** Landing layout override */
@@ -174,6 +178,7 @@ export function ProjectChatSurface({
   hideTiles = false,
   showComposerModulePicker = false,
   landingHeaderContent,
+  landingBelowComposerContent,
   landingComposerTitle,
   landingLayoutMode,
   hideLandingComposer = false,
@@ -211,6 +216,7 @@ export function ProjectChatSurface({
 }: ProjectChatSurfaceProps) {
   const chatShell = useChatShell();
   const { isDemo } = useDemoMode();
+  const isMobile = useIsMobile();
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
@@ -1233,25 +1239,28 @@ export function ProjectChatSurface({
                 {overviewGenerating ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Refreshing...
+                    <span className="hidden md:inline">Refreshing...</span>
                   </>
                 ) : (
                   <>
                     <RefreshCw className="w-3.5 h-3.5" />
-                    Refresh
+                    <span className="hidden md:inline">Refresh</span>
                   </>
                 )}
               </button>
               <Link
                 href={`/projects/${project.id}?panel=assessments`}
-                className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors hover:bg-accent-hover hover:border-accent-hover"
+                className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors hover:bg-accent-hover hover:border-accent-hover max-md:min-h-11"
+                aria-label="View Assessments"
               >
-                View Assessments
+                <span className="hidden md:inline">View Assessments</span>
+                <span className="md:hidden">Assessments</span>
               </Link>
             </>
           ) : undefined}
           extraInputActions={composerToolbarLeading}
           topComposerContent={associatedAssessmentsTray}
+          belowComposerContent={landingBelowComposerContent}
           inputChips={inputChips}
           hideComposer={hideLandingComposer}
         />
@@ -1264,10 +1273,12 @@ export function ProjectChatSurface({
       <EditorPanelHeader
         title={sessionTitle || 'Untitled'}
         titleEditable={Boolean(currentChatId)}
-        onSaveTitle={handleSaveChatTitle}
         titleSaving={titleSaving}
-        suffix={project ? projectDisplayName(project) : null}
-        onBack={handleLeaveChat}
+        // Mobile: X on the right before New chat. Desktop: back control on the left.
+        {...(isMobile ? { onClose: handleLeaveChat } : { onBack: handleLeaveChat })}
+        // Clear the collapsed nav chip that overlays the chat header on mobile.
+        style={isMobile ? { paddingLeft: MOBILE_NAV_CHIP_HEADER_PADDING_LEFT } : undefined}
+        suffix={isMobile ? null : (project ? projectDisplayName(project) : null)}
         actions={(
           <EditorPanelHeaderIconButton label="New chat" onClick={handleLeaveChat}>
             <SquarePen className="h-3.5 w-3.5" />

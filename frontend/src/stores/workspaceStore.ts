@@ -93,8 +93,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
 
     const requestId = ++loadWorkspacesRequestSeq;
-    loadWorkspacesPromise = (async () => {
-      set({ loading: true, error: null });
+    // Sync so consumers (e.g. /chat) do not treat "not started" as "empty workspace".
+    set({ loading: true, error: null });
+    let pending!: Promise<void>;
+    pending = (async () => {
       try {
         const workspaces = await api.listWorkspaces();
         if (requestId !== loadWorkspacesRequestSeq) return;
@@ -126,13 +128,16 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           loading: false,
         });
       } finally {
-        if (requestId === loadWorkspacesRequestSeq) {
+        // Clear by identity so a superseded request cannot leave a resolved
+        // promise latched forever (callers would await + return without fetch).
+        if (loadWorkspacesPromise === pending) {
           loadWorkspacesPromise = null;
         }
       }
     })();
+    loadWorkspacesPromise = pending;
 
-    await loadWorkspacesPromise;
+    await pending;
   },
 
   setActiveWorkspace: async (workspaceId: string) => {

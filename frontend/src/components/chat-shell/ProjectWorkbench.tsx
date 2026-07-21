@@ -7,6 +7,7 @@ import { ProjectChatSurface } from '@/components/core-chat/ProjectChatSurface';
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
 import { readLastProjectId, useChatShellLandingReset, writeLastProjectId } from '@/components/chat-shell/ChatShellProvider';
 import {
+  ChatContextMiniLaunchers,
   ChatContextStack,
   type ChatContextExpandedWidget,
 } from '@/components/chat-shell/ChatContextStack';
@@ -48,6 +49,7 @@ import { activeEditorContextFromWidget } from '@/lib/activeEditorContext';
 import { debugChatFlow } from '@/lib/chatDebug';
 import { api, type AssessmentInstance, type FieldContext, type ProjectMaterial, type Variable } from '@/lib/api';
 import { projectDisplayName } from '@/lib/projectDisplayName';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { shouldShowFloatLayer } from '@/lib/floatLayerVisibility';
 import { discardEphemeralAssessmentInstance } from '@/lib/assessmentEngagement';
 import { assessmentHeaderTitle } from '@/lib/assessmentDisplay';
@@ -58,6 +60,8 @@ import {
   CHAT_CONTEXT_STACK_GUTTER,
   CHAT_EDITOR_PANEL_MAX_CONTENT_RATIO,
   CHAT_FLOATING_PANEL_CHROME,
+  CHAT_SIDEBAR_MARGIN,
+  MOBILE_NAV_CHIP_HEADER_PADDING_LEFT,
   clampChatEditorPanelWidth,
   chatEditorPanelGutter,
   readChatEditorPanelWidth,
@@ -75,7 +79,10 @@ import {
 const FLOATING_STACK_CLASS = 'absolute right-3 bottom-3 flex flex-col min-h-0';
 /** Bare-landing solo: fill the stage with insets (no measured width required). */
 const SOLO_FLOAT_STACK_CLASS = 'absolute z-30 inset-y-3 left-0 right-3 flex flex-col min-h-0';
+/** Mobile: same floating full-stage treatment as the expanded side nav (tabs inside chrome). */
+const MOBILE_FLOAT_STACK_CLASS = `absolute z-[110] left-3 top-3 flex flex-col min-h-0 overflow-hidden ${CHAT_FLOATING_PANEL_CHROME}`;
 const FLOAT_CARD_CLASS = `flex min-h-0 flex-1 flex-col overflow-hidden ${CHAT_FLOATING_PANEL_CHROME}`;
+const MOBILE_FLOAT_CARD_CLASS = 'relative flex min-h-0 flex-1 flex-col overflow-hidden bg-surface';
 const RIGHT_MARGIN_PX = 12;
 
 /** Docked = companion beside an active floor (Chat / Overview / Variables / Files / Assessments). Solo = float owns the stage. */
@@ -124,6 +131,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const chatShell = useChatShell();
+  const isMobile = useIsMobile();
 
   const [hasMessages, setHasMessages] = useState(false);
   /** Browser-like float session — open adds/focuses a tab; nested nav replaces the active tab. */
@@ -796,17 +804,19 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   // side nav lives outside this workbench and is unaffected.
   // Companion columns and the Full screen control both grow the docked float via
   // measured width so docked ↔ full can animate (true `solo` layout uses insets and jumps).
-  const floatLayoutSolo = showFloatLayer && floatLayout === 'solo';
-  const companionExpanded = showFloatLayer && floatCompanionOpen && !floatLayoutSolo;
-  const stageExpanded = showFloatLayer && floatStageExpanded && !floatLayoutSolo;
+  const floatLayoutSolo = showFloatLayer && (isMobile || floatLayout === 'solo');
+  const companionExpanded = showFloatLayer && floatCompanionOpen && !floatLayoutSolo && !isMobile;
+  const stageExpanded = showFloatLayer && floatStageExpanded && !floatLayoutSolo && !isMobile;
   const floatIsSolo = floatLayoutSolo || companionExpanded || stageExpanded;
   const floatIsDocked = showFloatLayer && !floatIsSolo;
   const floatFullWidthPx = workbenchWidthPx > 0
     ? Math.max(floatPanelWidthPx, workbenchWidthPx - RIGHT_MARGIN_PX)
     : floatPanelWidthPx;
   const floatDisplayWidthPx = (companionExpanded || stageExpanded) ? floatFullWidthPx : floatPanelWidthPx;
-  const reserveRightSpace = (showContextStack && !expandedContextWidget) || floatIsDocked;
-  const rightGutter = floatIsSolo
+  // Mobile: never reserve side gutters — floats/floors are full-screen sheets.
+  const reserveRightSpace = !isMobile
+    && ((showContextStack && !expandedContextWidget) || floatIsDocked);
+  const rightGutter = isMobile || floatIsSolo
     ? undefined
     : showFloatLayer
       ? chatEditorPanelGutter(floatPanelWidthPx)
@@ -814,7 +824,11 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
         ? CHAT_CONTEXT_STACK_GUTTER
         : undefined;
   // Overlay floors shrink to leave room for a docked FloatLayer.
-  const floorRightInset = floatIsDocked ? chatEditorPanelGutter(floatPanelWidthPx) : '0.75rem';
+  const floorRightInset = isMobile
+    ? '0.75rem'
+    : floatIsDocked
+      ? chatEditorPanelGutter(floatPanelWidthPx)
+      : '0.75rem';
   // A docked float's card top must line up with whatever it's sitting beside: a
   // FloorLayer overlay (Overview/Variables/Files/Assessments) is inset-y-3, so the
   // float mirrors that 0.75rem top gap; Chat itself renders flush with no inset, so
@@ -1369,6 +1383,10 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     searchParams,
   ]);
 
+  const expandContextFromLandingGrid = useCallback((widget: ChatContextExpandedWidget) => {
+    handleExpandedContextWidgetChange(widget, { motion: 'stack' });
+  }, [handleExpandedContextWidgetChange]);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const bumpRefresh = () => setContextRefreshKey((k) => k + 1);
@@ -1403,6 +1421,7 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
   /**
    * Reveal the chat floor beside the float (dock solo / collapse companion / dismiss panel).
    * Chat destination is left alone — callers decide thread vs landing.
+   * On mobile there is no side-by-side stage, so hide the float sheet instead.
    */
   const revealChatFloorFromFloat = useCallback(() => {
     if (expandedContextWidget || panelParam) {
@@ -1410,6 +1429,10 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
       setExpandMotionMode('stack');
       chatShell?.setActiveContextWidget(null);
       dismissContextPanelParam();
+    }
+    if (isMobile) {
+      handleHideFloatLayer();
+      return;
     }
     // True solo uses inset chrome (no width). Hand off to the measured full-width
     // path first so collapsing can animate width down to the docked size.
@@ -1426,7 +1449,15 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
     }
     setFloatCompanionOpen(false);
     setFloatStageExpanded(false);
-  }, [chatShell, dismissContextPanelParam, expandedContextWidget, floatLayout, panelParam]);
+  }, [
+    chatShell,
+    dismissContextPanelParam,
+    expandedContextWidget,
+    floatLayout,
+    handleHideFloatLayer,
+    isMobile,
+    panelParam,
+  ]);
 
   /** Expand a docked float across the stage via width animation (keeps floatLayout docked). */
   const expandFloatToStage = useCallback(() => {
@@ -1640,6 +1671,29 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
                   : (projectId ? 'Loading project…' : undefined)
             }
             landingHeaderContent={<></>}
+            landingBelowComposerContent={
+              isMobile && showContextStack && !expandedContextWidget && projectId ? (
+                <ChatContextMiniLaunchers
+                  layout="grid"
+                  project={selectedProject}
+                  projectId={projectId}
+                  refreshKey={contextRefreshKey}
+                  expandedWidget={expandedContextWidget}
+                  onExpandOverview={() => expandContextFromLandingGrid('overview')}
+                  onExpandVariables={() => expandContextFromLandingGrid('variables')}
+                  onExpandAssessments={() => expandContextFromLandingGrid('assessments')}
+                  onExpandFiles={() => expandContextFromLandingGrid('files')}
+                  onOpenVariableDetail={handleOpenVariableDetail}
+                  onOpenFile={handleOpenProjectFile}
+                  onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
+                  frameworkPlannedAssessmentIds={frameworkPlannedAssessmentIds}
+                  frameworkAssessmentInstances={frameworkAssessmentInstances}
+                  frameworkAssessmentsLoading={frameworkAssessmentsLoading}
+                  onCreateAssessmentInstanceInAssessmentsView={handleCreateAssessmentInstanceInAssessmentsView}
+                  frameworkReadOnly={project?.shared_role === 'viewer'}
+                />
+              ) : undefined
+            }
             onLandingStateChange={(onLanding) => {
               if (pendingInvestigateDraft) {
                 // Investigate just forced the conversation composer open — don't let
@@ -1680,22 +1734,22 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
         && lastFloatSession.tabs.length > 0
         && (hasMessages || Boolean(activeChatId) || expandedContextWidget != null) ? (
         <div
-          className="absolute bottom-4 z-30 transition-[right] duration-300 ease-in-out"
+          className="absolute bottom-4 z-30 transition-[right] duration-300 ease-in-out max-md:bottom-[max(1rem,env(safe-area-inset-bottom))]"
           style={{
             // Sit in the floor stage; clear the mini context stack when it owns the right rail.
-            right: showContextStack && !expandedContextWidget
+            right: !isMobile && showContextStack && !expandedContextWidget
               ? CHAT_CONTEXT_STACK_GUTTER
               : '1rem',
           }}
         >
           <button
             type="button"
-            className="flex h-8 items-center gap-1.5 rounded-md border border-stroke-subtle bg-white px-2.5 text-[11px] font-medium leading-none text-text-secondary shadow-floating-panel transition-colors hover:bg-black/[0.04] hover:text-text-primary"
+            className="flex h-8 items-center gap-1.5 rounded-md border border-stroke-subtle bg-white px-2.5 text-[11px] font-medium leading-none text-text-secondary shadow-floating-panel transition-colors hover:bg-black/[0.04] hover:text-text-primary max-md:min-h-11"
             onClick={handleOpenEditorFromFloor}
             aria-label="Open Editor"
           >
             <PanelRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            Open Editor
+            <span className="hidden md:inline">Open Editor</span>
           </button>
         </div>
       ) : null}
@@ -1727,30 +1781,49 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
       {showFloatLayer && (
         <aside
           className={
-            floatLayoutSolo
-              ? SOLO_FLOAT_STACK_CLASS
-              : `${FLOATING_STACK_CLASS} ${(companionExpanded || stageExpanded) ? 'z-30' : 'z-20'} ${isResizingFloatPanel ? '' : 'transition-[width,top] duration-300 ease-in-out'}`
+            isMobile
+              ? MOBILE_FLOAT_STACK_CLASS
+              : floatLayoutSolo
+                ? SOLO_FLOAT_STACK_CLASS
+                : `${FLOATING_STACK_CLASS} ${(companionExpanded || stageExpanded) ? 'z-30' : 'z-20'} ${isResizingFloatPanel ? '' : 'transition-[width,top] duration-300 ease-in-out'}`
           }
-          style={floatLayoutSolo ? undefined : { width: floatDisplayWidthPx, top: floatDockedTopInset }}
+          style={
+            isMobile
+              ? {
+                  width: `calc(100vw - (2 * ${CHAT_SIDEBAR_MARGIN}))`,
+                  height: `calc(100dvh - (2 * ${CHAT_SIDEBAR_MARGIN}))`,
+                }
+              : floatLayoutSolo
+                ? undefined
+                : { width: floatDisplayWidthPx, top: floatDockedTopInset }
+          }
         >
-          <FloatTabBar
-            tabs={floatTabs}
-            activeTabId={activeFloatTabId}
-            onActivate={activateFloatTab}
-            onClose={handleCloseFloatTab}
-          />
-          <div className={`relative ${FLOAT_CARD_CLASS}`}>
-            <div
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="Resize float panel"
-              onMouseDown={handleFloatResizeStart}
-              className="absolute left-0 top-0 bottom-0 z-10 w-2 cursor-col-resize group"
-            >
+          <div
+            className={isMobile ? 'pr-2' : undefined}
+            // Clear the collapsed nav chip that overlays the float's top-left on mobile.
+            style={isMobile ? { paddingLeft: MOBILE_NAV_CHIP_HEADER_PADDING_LEFT } : undefined}
+          >
+            <FloatTabBar
+              tabs={floatTabs}
+              activeTabId={activeFloatTabId}
+              onActivate={activateFloatTab}
+              onClose={handleCloseFloatTab}
+            />
+          </div>
+          <div className={isMobile ? MOBILE_FLOAT_CARD_CLASS : `relative ${FLOAT_CARD_CLASS}`}>
+            {!isMobile ? (
               <div
-                className={`absolute left-0 top-0 h-full w-px transition-colors ${isResizingFloatPanel ? 'bg-accent/60' : 'bg-divider group-hover:bg-accent/40'}`}
-              />
-            </div>
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize float panel"
+                onMouseDown={handleFloatResizeStart}
+                className="absolute left-0 top-0 bottom-0 z-10 w-2 cursor-col-resize group"
+              >
+                <div
+                  className={`absolute left-0 top-0 h-full w-px transition-colors ${isResizingFloatPanel ? 'bg-accent/60' : 'bg-divider group-hover:bg-accent/40'}`}
+                />
+              </div>
+            ) : null}
             <FloatLayer
               widgets={floatTabs}
               activeTabId={activeFloatTabId}

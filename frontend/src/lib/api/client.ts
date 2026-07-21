@@ -2,7 +2,34 @@ import { isStoredFeatureFlagEnabled } from '@/lib/featureFlags';
 import { isDemoActive } from '@/lib/demo/demoSession';
 import { tryResolveDemoRequest } from '@/lib/demo/demoApi';
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const CONFIGURED_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+/**
+ * Resolve API base for a browser hostname.
+ *
+ * On LAN/phone hosts (anything other than localhost), return '' so requests
+ * stay same-origin and Next.js rewrites proxy to the Mac backend. A baked-in
+ * `http://localhost:8000` would hit the phone itself and fail with Safari's
+ * "Load failed" after login.
+ */
+export function resolveApiUrlForHost(
+  hostname: string | null | undefined,
+  configured: string = CONFIGURED_API_URL,
+): string {
+  if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+    return '';
+  }
+  return configured;
+}
+
+/** Browser API base URL — see `resolveApiUrlForHost`. */
+export function getApiUrl(): string {
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : undefined;
+  return resolveApiUrlForHost(hostname);
+}
+
+/** Static configured URL (SSR / tooling). Prefer `getApiUrl()` for browser fetches. */
+export const API_URL = CONFIGURED_API_URL;
 
 /** Thrown by fetchApi with the HTTP status attached so callers can tell a
  * permanent "not found / no access" (404/403) from a transient failure
@@ -46,7 +73,7 @@ export async function fetchApi<T>(
     return tryResolveDemoRequest<T>(endpoint, options) as T;
   }
 
-  const url = `${API_URL}${endpoint}`;
+  const url = `${getApiUrl()}${endpoint}`;
 
   const token = await getAuthToken();
   const useBillingTestHeaders = isStoredFeatureFlagEnabled('billing_test_headers');
