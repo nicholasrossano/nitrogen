@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Ban, CheckCircle2, Loader2, X, XCircle } from 'lucide-react';
+import { SHORT_DILIGENCE_DISCLAIMER } from '@/lib/legalCopy';
 
 export type ExportToastStepStatus = 'pending' | 'active' | 'done' | 'error';
 
@@ -170,6 +171,11 @@ export function ExportProgressToast({
             {phase === 'success' && !opensInViewer && (
               <p className="text-xs text-text-tertiary mt-1 leading-snug">
                 Your download should start automatically.
+              </p>
+            )}
+            {phase === 'success' && (
+              <p className="text-[10px] text-text-tertiary mt-1.5 leading-snug">
+                {SHORT_DILIGENCE_DISCLAIMER}
               </p>
             )}
           </div>

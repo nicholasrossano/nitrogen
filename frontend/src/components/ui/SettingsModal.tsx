@@ -1267,6 +1267,27 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                   </a>
                 </SettingsSection>
 
+                <SettingsSection title="Legal">
+                  <a
+                    href="/legal/terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-surface-subtle/60 transition-colors"
+                  >
+                    <span className="text-sm text-text-primary">Terms of Service</span>
+                    <ExternalLink className="w-3.5 h-3.5 shrink-0 text-text-tertiary" />
+                  </a>
+                  <a
+                    href="/legal/privacy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-surface-subtle/60 transition-colors"
+                  >
+                    <span className="text-sm text-text-primary">Privacy Policy</span>
+                    <ExternalLink className="w-3.5 h-3.5 shrink-0 text-text-tertiary" />
+                  </a>
+                </SettingsSection>
+
                 <FeedbackFormSection />
 
                 <div className="space-y-1">

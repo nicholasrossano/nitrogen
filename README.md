@@ -24,6 +24,8 @@ The platform helps teams:
 - upload and organize company library and deal-room documents
 - track rubric health across documents, findings, and computed signals
 
+> **Not investment advice.** Nitrogen AI is a diligence-support tool, not an adviser. AI-generated output (including status ratings and memo recommendations) requires independent verification before you rely on it or share it with investors, donors, or other third parties. See [TERMS.md](TERMS.md#4-not-investment-financial-legal-or-tax-advice).
+
 ## Demo
 
 From the [demo](https://the-nitrogen.ai/demo) (/demo): a sample diligence workspace for a fictional company, Rift Valley Solar.
@@ -122,3 +124,7 @@ bash scripts/github_post_public_setup.sh
 ## License
 
 Code: [GNU Affero General Public License v3.0](LICENSE). Forks and self-hosting: [forking](docs/forking.md). Name/branding: [TRADEMARKS.md](TRADEMARKS.md). Other terms: [commercial license](COMMERCIAL_LICENSE.md).
+
+## Legal
+
+Hosted product: [Terms of Service](TERMS.md) · [Privacy Policy](PRIVACY.md).

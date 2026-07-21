@@ -27,6 +27,7 @@ import {
 } from '@/lib/api';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import { StatusCategoryEditorModal } from '@/components/project-status/StatusCategoryEditorModal';
+import { DiligenceNotice } from '@/components/ui/DiligenceNotice';
 import { ModalShell } from '@/components/ui/ModalShell';
 import { StatusCapsule } from '@/components/ui/StatusCapsule';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -589,6 +590,7 @@ export function StatusOverviewTable({
             ) : null}
           </div>
         ) : null}
+        <DiligenceNotice className="mt-2 text-center" />
       </div>
 
       {editorOpen ? (

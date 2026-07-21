@@ -499,6 +499,12 @@ function LoginPageContent() {
               </>
             )}
           </div>
+
+          <p className="mt-6 text-center text-xs text-text-tertiary">
+            <a href="/legal/terms" className="hover:text-accent transition-colors">Terms</a>
+            {' · '}
+            <a href="/legal/privacy" className="hover:text-accent transition-colors">Privacy</a>
+          </p>
         </div>
       </main>
     </div>

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { MemoContent, Citation } from '@/lib/api';
 import { PanelHeader } from '@/components/ui';
+import { DiligenceNotice } from '@/components/ui/DiligenceNotice';
 
 interface MemoViewerWidgetProps {
   data: Record<string, any>;
@@ -351,7 +352,7 @@ export function MemoViewerWidget({ data, projectId, isActive = true }: MemoViewe
           </div>
 
           {/* Actions */}
-          <div className="flex-shrink-0 p-4 border-t border-divider bg-surface-header flex justify-center">
+          <div className="flex-shrink-0 p-4 border-t border-divider bg-surface-header flex flex-col items-center gap-2">
             <button
               onClick={handleExport}
               disabled={loading}
@@ -370,6 +371,7 @@ export function MemoViewerWidget({ data, projectId, isActive = true }: MemoViewe
                 </>
               )}
             </button>
+            <DiligenceNotice className="text-center" />
           </div>
     </div>
   );

@@ -1,5 +1,6 @@
 export { Button } from './Button';
 export { ConfirmButton } from './ConfirmButton';
+export { DiligenceNotice } from './DiligenceNotice';
 export { ExportButton, ReportButton } from './ExportButton';
 export { PanelHeader } from './PanelHeader';
 export { SideDrawer } from './SideDrawer';

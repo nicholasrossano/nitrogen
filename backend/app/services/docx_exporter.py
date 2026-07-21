@@ -3,6 +3,31 @@ from pathlib import Path
 
 from app.schemas.memo import MemoContent
 
+# Kept in sync with frontend/src/lib/legalCopy.ts EXPORT_DISCLAIMER_FOOTER — these
+# documents leave the app (shared with investors/donors) with no other app context
+# attached, so the caveat has to travel with the file itself.
+EXPORT_DISCLAIMER_FOOTER = (
+    "This document was generated with AI assistance to support internal diligence and is "
+    "provided for informational purposes only. Nitrogen AI is not a registered investment "
+    "adviser, broker-dealer, or provider of investment, financial, legal, or tax advice, and "
+    "this document does not constitute a recommendation to buy, sell, or hold any investment, "
+    "or an offer or solicitation of any kind. Recipients should independently verify all "
+    "information and consult qualified professionals before making any investment or business "
+    "decision."
+)
+
+
+def _append_disclaimer_footer(doc) -> None:
+    """Append the diligence-tool disclaimer as a small italic paragraph at document end."""
+    from docx.shared import Pt, RGBColor
+
+    doc.add_paragraph()
+    para = doc.add_paragraph()
+    run = para.add_run(EXPORT_DISCLAIMER_FOOTER)
+    run.italic = True
+    run.font.size = Pt(8)
+    run.font.color.rgb = RGBColor(120, 120, 128)
+
 
 class DocxExporterService:
     """Service for exporting memos to DOCX format"""
@@ -93,7 +118,9 @@ class DocxExporterService:
                     if excerpt:
                         excerpt_para = doc.add_paragraph(f'"{excerpt}"')
                         excerpt_para.paragraph_format.left_indent = Inches(0.5)
-            
+
+            _append_disclaimer_footer(doc)
+
             # Save to bytes
             output = io.BytesIO()
             doc.save(output)
@@ -235,6 +262,8 @@ class DocxExporterService:
                             run.font.size = Pt(9)
                             run.font.color.rgb = RGBColor(90, 90, 96)
 
+            _append_disclaimer_footer(doc)
+
             output = io.BytesIO()
             doc.save(output)
             output.seek(0)
@@ -303,7 +332,9 @@ class DocxExporterService:
                 )
                 excerpt_para = doc.add_paragraph(f'"{citation.excerpt}"')
                 excerpt_para.paragraph_format.left_indent = Inches(0.5)
-        
+
+        _append_disclaimer_footer(doc)
+
         # Save to bytes
         output = io.BytesIO()
         doc.save(output)
