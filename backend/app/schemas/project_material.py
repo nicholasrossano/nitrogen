@@ -10,7 +10,10 @@ class ProjectMaterialResponse(BaseModel):
     file_type: str
     file_size: Optional[int] = None
     created_at: datetime
-    source: str = "material"  # "material" or "evidence"
+    source: str = "material"  # "material" or "evidence" (storage table)
+    # "upload" | "generated" — user-provided vs tool/assessment output.
+    # Evidence rows are always treated as upload.
+    origin: str = "upload"
     # Only meaningful for source == "evidence"; plain project materials have no
     # background processing lifecycle and are treated as immediately ready.
     processing_status: Optional[str] = None
@@ -36,6 +39,9 @@ class GeneratedFileResponse(BaseModel):
     exported: bool = False
     download_url: Optional[str] = None
     export_data: Optional[dict[str, Any]] = None
+    # "deliverable" = assessment deliverable card; "material" = generated Files row
+    source: str = "deliverable"
+    file_size: Optional[int] = None
 
 
 class ProjectFilesResponse(BaseModel):

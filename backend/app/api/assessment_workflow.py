@@ -1791,6 +1791,7 @@ async def publish_assessment_report(
             file_size=material.file_size,
             created_at=material.created_at,
             source="material",
+            origin=getattr(material, "origin", None) or "generated",
         ),
         message=(
             f"Report '{material.filename}' saved to Files"

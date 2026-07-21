@@ -644,6 +644,8 @@ export interface ProjectMaterial {
   file_size: number | null;
   created_at: string;
   source?: string; // "material" | "evidence"
+  /** "upload" = user/Drive provided; "generated" = tool/assessment output */
+  origin?: 'upload' | 'generated' | string;
   processing_status?: EvidenceProcessingStatus;
   processing_error?: string | null;
 }
@@ -658,6 +660,9 @@ export interface GeneratedFile {
   exported: boolean;
   download_url: string | null;
   export_data?: Record<string, unknown> | null;
+  /** "deliverable" = assessment output card; "material" = generated Files row */
+  source?: 'deliverable' | 'material' | string;
+  file_size?: number | null;
 }
 
 export interface ProjectFilesResponse {

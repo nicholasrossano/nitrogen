@@ -32,6 +32,8 @@ class ProjectMaterial(Base):
     storage_path: Mapped[str | None] = mapped_column(String(500))
     file_size: Mapped[int | None] = mapped_column(BigInteger)
     content_text: Mapped[str | None] = mapped_column(Text)
+    # "upload" = user/Drive provided; "generated" = tool/assessment output (reports, etc.)
+    origin: Mapped[str] = mapped_column(String(32), nullable=False, default="upload")
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -51,6 +51,7 @@ interface ProjectFilesViewProps {
   title?: string;
   description?: string;
   materials: ProjectMaterial[];
+  onOpenFile?: (file: ProjectMaterial) => void;
   onDeleteMaterial?: (materialId: string, source?: string) => Promise<void>;
   onUploadFile?: (file: File) => Promise<void>;
   onImportFromDrive?: () => Promise<void>;
@@ -104,12 +105,25 @@ function formatDate(dateStr: string | null): string {
   });
 }
 
+function generatedFileAsMaterial(file: GeneratedFile): ProjectMaterial {
+  return {
+    id: file.id,
+    filename: file.title,
+    file_type: file.export_format ?? 'docx',
+    file_size: file.file_size ?? null,
+    created_at: file.created_at ?? new Date().toISOString(),
+    source: 'material',
+    origin: 'generated',
+  };
+}
+
 export function ProjectFilesView({
   projectId,
   scope = 'project',
   title,
   description,
   materials,
+  onOpenFile,
   onDeleteMaterial,
   onUploadFile,
   onImportFromDrive,
@@ -201,11 +215,15 @@ export function ProjectFilesView({
     if (!file.exportable || !projectId) return;
     setDownloadingId(file.id);
     try {
-      const ext = file.export_format ?? 'docx';
-      const filename = safeFilename(file.title, ext);
-      await api.downloadDeliverable(projectId, file.id, filename);
-      // If this was an unexported memo, refresh so the row shows "Exported"
-      if (file.output_type === 'memo' && !file.exported) loadFiles();
+      if (file.source === 'material') {
+        await api.downloadMaterial(file.id, file.title);
+      } else {
+        const ext = file.export_format ?? 'docx';
+        const filename = safeFilename(file.title, ext);
+        await api.downloadDeliverable(projectId, file.id, filename);
+        // If this was an unexported memo, refresh so the row shows "Exported"
+        if (file.output_type === 'memo' && !file.exported) loadFiles();
+      }
     } catch (err) {
       console.error('Download failed:', err);
     } finally {
@@ -235,7 +253,15 @@ export function ProjectFilesView({
       return next;
     });
     try {
-      await api.deleteGeneratedFile(projectId, file.id);
+      if (file.source === 'material') {
+        if (onDeleteMaterial) {
+          await onDeleteMaterial(file.id, 'material');
+        } else {
+          await api.deleteMaterial(file.id);
+        }
+      } else {
+        await api.deleteGeneratedFile(projectId, file.id);
+      }
     } catch (err) {
       console.error('Delete failed:', err);
       // Rollback
@@ -317,14 +343,15 @@ export function ProjectFilesView({
     }
   }, [onImportFromDrive]);
 
-  const hasUploaded = materials.length > 0;
+  const uploadedMaterials = materials.filter((m) => m.origin !== 'generated');
+  const hasUploaded = uploadedMaterials.length > 0;
   const hasGenerated = generatedFiles.length > 0;
   const showGeneratedTab = scope === 'project';
   const actionButtonClass = 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-text-secondary bg-surface-subtle ring-1 ring-inset ring-black/[0.08] enabled:hover:bg-black/[0.07] disabled:opacity-50 disabled:cursor-not-allowed transition-colors';
 
-  const uploadedTotalPages = Math.max(1, Math.ceil(materials.length / PAGE_SIZE));
+  const uploadedTotalPages = Math.max(1, Math.ceil(uploadedMaterials.length / PAGE_SIZE));
   const generatedTotalPages = Math.max(1, Math.ceil(generatedFiles.length / PAGE_SIZE));
-  const pagedMaterials = materials.slice((uploadedPage - 1) * PAGE_SIZE, uploadedPage * PAGE_SIZE);
+  const pagedMaterials = uploadedMaterials.slice((uploadedPage - 1) * PAGE_SIZE, uploadedPage * PAGE_SIZE);
   const pagedGenerated = generatedFiles.slice((generatedPage - 1) * PAGE_SIZE, generatedPage * PAGE_SIZE);
 
   const thClass = dataTableHeaderCellClass;
@@ -682,8 +709,13 @@ export function ProjectFilesView({
                 <tbody className={dataTableBodyClass}>
                   {pagedMaterials.map((mat) => {
                     const isDrive = driveLinkedIds.has(mat.id);
+                    const canOpen = Boolean(onOpenFile);
                     return (
-                    <tr key={mat.id}>
+                    <tr
+                      key={mat.id}
+                      onClick={canOpen ? () => onOpenFile?.(mat) : undefined}
+                      className={canOpen ? 'cursor-pointer hover:bg-black/[0.02]' : undefined}
+                    >
                       <td className="px-4 py-2.5 max-w-0 w-full">
                         <div className="flex items-center gap-2 min-w-0">
                           {isDrive ? (
@@ -741,7 +773,7 @@ export function ProjectFilesView({
                       <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">
                         {formatDate(mat.created_at)}
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1 justify-center">
                           <button
                             onClick={() => handleDownloadMaterial(mat)}
@@ -784,7 +816,7 @@ export function ProjectFilesView({
             {uploadedTotalPages > 1 && (
               <div className="flex items-center justify-between pt-2">
                 <p className="text-xs text-text-tertiary">
-                  {(uploadedPage - 1) * PAGE_SIZE + 1}–{Math.min(uploadedPage * PAGE_SIZE, materials.length)} of {materials.length}
+                  {(uploadedPage - 1) * PAGE_SIZE + 1}–{Math.min(uploadedPage * PAGE_SIZE, uploadedMaterials.length)} of {uploadedMaterials.length}
                 </p>
                 <div className="flex items-center gap-1">
                   <button
@@ -839,12 +871,33 @@ export function ProjectFilesView({
                   </tr>
                 </thead>
                 <tbody className={dataTableBodyClass}>
-                  {pagedGenerated.map((file) => (
-                    <tr key={file.id}>
+                  {pagedGenerated.map((file) => {
+                    const canOpen = Boolean(onOpenFile && file.source === 'material');
+                    return (
+                    <tr
+                      key={`${file.source ?? 'deliverable'}:${file.id}`}
+                      onClick={
+                        canOpen
+                          ? () => onOpenFile?.(generatedFileAsMaterial(file))
+                          : undefined
+                      }
+                      className={canOpen ? 'cursor-pointer hover:bg-black/[0.02]' : undefined}
+                    >
                       <td className="px-4 py-2.5 max-w-0 w-full">
                         <div className="flex items-center gap-2 min-w-0">
-                          <Zap className="w-4 h-4 text-text-tertiary flex-shrink-0" />
-                          <span className="text-text-primary truncate min-w-0">{file.title}</span>
+                          {file.source === 'material' ? (
+                            <FileText className="w-4 h-4 text-text-tertiary flex-shrink-0" />
+                          ) : (
+                            <Zap className="w-4 h-4 text-text-tertiary flex-shrink-0" />
+                          )}
+                          <span className="text-text-primary truncate min-w-0" title={file.title}>
+                            {file.title}
+                          </span>
+                          {file.source === 'material' && (
+                            <span className="text-[9px] font-medium text-text-tertiary bg-black/[0.04] rounded px-1 py-0.5 flex-shrink-0">
+                              Report
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-2.5">
@@ -855,19 +908,23 @@ export function ProjectFilesView({
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">
-                        {formatFileSize(null)}
+                        {formatFileSize(file.file_size ?? null)}
                       </td>
                       <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">
                         {formatDate(file.created_at)}
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1 justify-center">
                           {file.exportable ? (
                             <button
                               onClick={() => handleDownloadGenerated(file)}
                               disabled={downloadingId === file.id || deletingId === file.id}
                               className="p-1 rounded text-text-tertiary enabled:hover:text-text-secondary enabled:hover:bg-black/[0.04] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                              title={`Export as ${file.export_format?.toUpperCase()}`}
+                              title={
+                                file.source === 'material'
+                                  ? 'Download'
+                                  : `Export as ${file.export_format?.toUpperCase()}`
+                              }
                             >
                               {downloadingId === file.id ? (
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -893,7 +950,8 @@ export function ProjectFilesView({
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
               </div>

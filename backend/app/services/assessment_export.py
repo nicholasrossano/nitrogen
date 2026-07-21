@@ -160,6 +160,8 @@ async def generate_assessment_export_bytes(
 
 
 REPORT_MATERIAL_ID_KEY = "report_material_id"
+MATERIAL_ORIGIN_GENERATED = "generated"
+MATERIAL_ORIGIN_UPLOAD = "upload"
 
 
 async def upsert_assessment_report_material(
@@ -175,6 +177,8 @@ async def upsert_assessment_report_material(
 
     Returns ``(material, created)``. The material id is stored on workflow state so
     re-running Report updates the same Files row instead of creating duplicates.
+    Generated reports are tagged ``origin=generated`` so Files lists them under
+    Generated rather than Uploaded.
     """
     from sqlalchemy import select
 
@@ -213,6 +217,7 @@ async def upsert_assessment_report_material(
         material.file_size = len(content)
         material.file_type = "docx"
         material.content_text = content_text
+        material.origin = MATERIAL_ORIGIN_GENERATED
         if old_path and old_path != storage_path:
             await storage.delete(old_path)
         await db.flush()
@@ -227,6 +232,7 @@ async def upsert_assessment_report_material(
         storage_path=storage_path,
         file_size=len(content),
         content_text=content_text,
+        origin=MATERIAL_ORIGIN_GENERATED,
     )
     db.add(material)
     await db.flush()

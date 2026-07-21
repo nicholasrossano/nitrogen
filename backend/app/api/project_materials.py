@@ -38,6 +38,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+MATERIAL_ORIGIN_UPLOAD = "upload"
+MATERIAL_ORIGIN_GENERATED = "generated"
+
 ALLOWED_CONTENT_TYPES = {
     **DOCUMENT_CONTENT_TYPES,
     "text/plain": "txt",
@@ -47,6 +50,47 @@ ALLOWED_CONTENT_TYPES = {
 }
 
 _PROJECT_UPLOAD_TYPE_LABEL = "PDF, DOCX, PPTX, TXT, CSV, Excel, Pages, Keynote, PNG, or JPG"
+
+
+def _material_response(m: ProjectMaterial) -> ProjectMaterialResponse:
+    return ProjectMaterialResponse(
+        id=m.id,
+        filename=m.filename,
+        file_type=m.file_type,
+        file_size=m.file_size,
+        created_at=m.created_at,
+        source="material",
+        origin=m.origin or MATERIAL_ORIGIN_UPLOAD,
+    )
+
+
+def _evidence_response(e: EvidenceDoc) -> ProjectMaterialResponse:
+    return ProjectMaterialResponse(
+        id=e.id,
+        filename=e.filename or "Untitled",
+        file_type=e.file_type or "unknown",
+        file_size=e.file_size,
+        created_at=e.created_at,
+        source="evidence",
+        origin=MATERIAL_ORIGIN_UPLOAD,
+        processing_status=e.processing_status,
+        processing_error=e.processing_error,
+    )
+
+
+def _generated_material_response(m: ProjectMaterial) -> GeneratedFileResponse:
+    return GeneratedFileResponse(
+        id=str(m.id),
+        title=m.filename,
+        output_type="report",
+        created_at=m.created_at,
+        exportable=True,
+        export_format=m.file_type,
+        exported=True,
+        download_url=f"/api/v1/materials/{m.id}/download",
+        source="material",
+        file_size=m.file_size,
+    )
 
 
 def _resolve_material_file_type(content_type: str | None, filename: str | None) -> str | None:
@@ -168,6 +212,7 @@ async def upload_material(
         storage_path=storage_path,
         file_size=len(prepared.content),
         content_text=content_text,
+        origin=MATERIAL_ORIGIN_UPLOAD,
     )
     db.add(material)
 
@@ -194,13 +239,7 @@ async def upload_material(
 
     return ProjectMaterialUploadResponse(
         success=True,
-        material=ProjectMaterialResponse(
-            id=material.id,
-            filename=material.filename,
-            file_type=material.file_type,
-            file_size=material.file_size,
-            created_at=material.created_at,
-        ),
+        material=_material_response(material),
         message=f"Material '{material.filename}' uploaded",
     )
 
@@ -236,25 +275,9 @@ async def list_materials(
 
     rows: list[ProjectMaterialResponse] = []
     for m in mat_result.scalars().all():
-        rows.append(ProjectMaterialResponse(
-            id=m.id,
-            filename=m.filename,
-            file_type=m.file_type,
-            file_size=m.file_size,
-            created_at=m.created_at,
-            source="material",
-        ))
+        rows.append(_material_response(m))
     for e in ev_result.scalars().all():
-        rows.append(ProjectMaterialResponse(
-            id=e.id,
-            filename=e.filename or "Untitled",
-            file_type=e.file_type or "unknown",
-            file_size=e.file_size,
-            created_at=e.created_at,
-            source="evidence",
-            processing_status=e.processing_status,
-            processing_error=e.processing_error,
-        ))
+        rows.append(_evidence_response(e))
 
     rows.sort(key=lambda r: r.created_at, reverse=True)
     return rows
@@ -340,29 +363,16 @@ async def list_project_files(
         .order_by(EvidenceDoc.created_at.desc())
     )
     uploaded: list[ProjectMaterialResponse] = []
+    generated: list[GeneratedFileResponse] = []
     for m in mat_result.scalars().all():
-        uploaded.append(ProjectMaterialResponse(
-            id=m.id,
-            filename=m.filename,
-            file_type=m.file_type,
-            file_size=m.file_size,
-            created_at=m.created_at,
-            source="material",
-        ))
+        if (m.origin or MATERIAL_ORIGIN_UPLOAD) == MATERIAL_ORIGIN_GENERATED:
+            generated.append(_generated_material_response(m))
+        else:
+            uploaded.append(_material_response(m))
     for e in ev_result.scalars().all():
-        uploaded.append(ProjectMaterialResponse(
-            id=e.id,
-            filename=e.filename or "Untitled",
-            file_type=e.file_type or "unknown",
-            file_size=e.file_size,
-            created_at=e.created_at,
-            source="evidence",
-            processing_status=e.processing_status,
-            processing_error=e.processing_error,
-        ))
+        uploaded.append(_evidence_response(e))
     uploaded.sort(key=lambda r: r.created_at, reverse=True)
 
-    generated: list[GeneratedFileResponse] = []
     deliverables = initiative.get_deliverables_dict()
 
     memo_result = await db.execute(
@@ -415,7 +425,13 @@ async def list_project_files(
             exported=exported,
             download_url=download_url,
             export_data=export_data,
+            source="deliverable",
         ))
+
+    generated.sort(
+        key=lambda r: r.created_at or initiative.updated_at,
+        reverse=True,
+    )
 
     return ProjectFilesResponse(uploaded=uploaded, generated=generated)
 

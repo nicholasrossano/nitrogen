@@ -415,6 +415,7 @@ export function ChatContextStack({
               title="Workspace files"
               description="Shared guidance and reusable context for this workspace."
               materials={workspaceMaterials}
+              onOpenFile={onOpenFile}
               knowledgeBanks={knowledgeBanks}
               onUploadFile={
                 workspaceId
@@ -435,6 +436,7 @@ export function ChatContextStack({
               projectId={projectId}
               title={`${projectDisplayName(project)} files`}
               materials={projectMaterials}
+              onOpenFile={onOpenFile}
               onUploadFile={async (file) => {
                 await uploadMaterial(projectId, file);
                 await loadProjectMaterials();

@@ -54,6 +54,7 @@ async def test_upsert_assessment_report_material_updates_same_row(_save):
         file_type="docx",
         file_size=10,
         content_text="old",
+        origin="upload",
     )
     inst = SimpleNamespace(id=uuid4(), project_id=project_id, workflow_state={})
     state = {REPORT_MATERIAL_ID_KEY: str(material_id)}
@@ -86,6 +87,7 @@ async def test_upsert_assessment_report_material_updates_same_row(_save):
     assert material is existing
     assert existing.storage_path == "new/path.docx"
     assert existing.file_size == len(b"docx-bytes")
+    assert existing.origin == "generated"
     storage.delete.assert_awaited_once_with("old/path.docx")
 
 
