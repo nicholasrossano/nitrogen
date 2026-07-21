@@ -73,7 +73,7 @@ def test_broad_multi_theme_project_can_exceed_two():
         project_description=(
             "Solar PV mini-grid with LCOE economics, carbon emission reductions, "
             "stakeholder engagement, landscape ecosystem mapping, implementation roadmap, "
-            "and an memo for funding recommendation."
+            "and a risk-summary memo for the diligence file."
         ),
         project_type="energy_access",
     )

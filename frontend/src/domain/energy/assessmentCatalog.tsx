@@ -55,8 +55,8 @@ export const ALL_MODULES: AssessmentOption[] = [
   },
   {
     id: 'memo',
-    name: 'memo',
-    description: 'Confirm an outline, then draft a cited investment recommendation memo',
+    name: 'Memo',
+    description: 'Confirm an outline, then draft a cited risk-summary memo (not an investment recommendation)',
     icon: <FileText className="w-3.5 h-3.5" />,
   },
 ];

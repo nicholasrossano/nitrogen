@@ -151,7 +151,7 @@ You cannot ask clarifying questions. Apply these conservative defaults by projec
 
 ## Capital Route Inclusion Rule
 
-A Capital pillar item (funding application, grant, memo component) may be included ONLY if you can state all three of the following in the rationale:
+A Capital pillar item (funding application, grant, diligence memo component) may be included ONLY if you can state all three of the following in the rationale:
 1. **Who applies**: direct applicant vs. requires accredited/intermediary entity.
 2. **Scale fit**: does the fund/mechanism match the implied project scale (small pilot, programmatic, blended)?
 3. **Burden**: light (1-2 page application) vs. heavy (full proposal, multi-year process).

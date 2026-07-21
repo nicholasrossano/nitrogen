@@ -1,10 +1,10 @@
 /**
  * Shared investment-advice / diligence-tool disclaimer copy.
  *
- * Nitrogen AI generates recommendation-bearing content (e.g. the memo
- * assessment's proceed/hold/reject call). Keep this language consistent everywhere
- * it appears — in-app notices, exported documents, and legal pages — since exported
- * files travel outside the app with no other context attached.
+ * Nitrogen AI generates AI-assisted diligence content (status ratings, risk-summary
+ * memos, financial models) that requires independent verification. Keep this language
+ * consistent everywhere it appears — in-app notices, exported documents, and legal
+ * pages — since exported files travel outside the app with no other context attached.
  */
 
 export const SHORT_DILIGENCE_DISCLAIMER =

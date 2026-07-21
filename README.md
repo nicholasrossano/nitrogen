@@ -24,7 +24,7 @@ The platform helps teams:
 - upload and organize company library and deal-room documents
 - track rubric health across documents, findings, and computed signals
 
-> **Not investment advice.** Nitrogen AI is a diligence-support tool, not an adviser. AI-generated output (including status ratings and memo recommendations) requires independent verification before you rely on it or share it with investors, donors, or other third parties. See [TERMS.md](TERMS.md#4-not-investment-financial-legal-or-tax-advice).
+> **Not investment advice.** Nitrogen AI is a diligence-support tool, not an adviser. AI-generated output (including status ratings and diligence memos) requires independent verification before you rely on it or share it with investors, donors, or other third parties. See [TERMS.md](TERMS.md#4-not-investment-financial-legal-or-tax-advice).
 
 ## Demo
 

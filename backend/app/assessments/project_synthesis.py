@@ -1,8 +1,8 @@
 """Cross-assessment project synthesis context for narrative assessments.
 
 Builds a soft-consume pack from approved (preferred) or confirmed assessments,
-core variables, project status judgments, and the project plan. Used by
-memo so writeups stay consistent with the rest of the project.
+core variables, project status judgments, and the project plan. Used by the
+Memo assessment so writeups stay consistent with the rest of the project.
 """
 
 from __future__ import annotations

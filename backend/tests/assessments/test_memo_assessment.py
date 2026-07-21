@@ -1,10 +1,10 @@
-"""Tests for the memo staged assessment."""
+"""Tests for the Memo staged assessment (risk summary, not an investment recommendation)."""
 
 import pytest
 
 from app.assessments import get_assessment_registry
 from app.assessments.utils import make_build_item
-from app.domain.energy.assessments.memo import (
+from app.domain.energy.assessments.memo_assessment import (
     DEFAULT_MEMO_SECTIONS,
     MemoAssessment,
 )
@@ -22,6 +22,15 @@ def test_memo_registered_and_stage_flow():
     assert assessment.manifest.produced_outputs == ["memo", "memo_citations"]
 
 
+def test_memo_drafts_stage_has_no_recommendation_field():
+    """This memo summarizes risk; it must never carry a proceed/hold/reject field."""
+    assessment = MemoAssessment()
+    drafts_stage = next(stage for stage in assessment.stage_defs if stage.id == "drafts")
+    field_names = {field.name for field in drafts_stage.fields}
+    assert "recommendation" not in field_names
+    assert "confidence" not in field_names
+
+
 @pytest.mark.asyncio
 async def test_generate_outline_falls_back_to_defaults(monkeypatch):
     assessment = MemoAssessment()
@@ -34,7 +43,7 @@ async def test_generate_outline_falls_back_to_defaults(monkeypatch):
 
     monkeypatch.setattr(assessment, "_synthesis_pack", fake_synthesis)
     monkeypatch.setattr(
-        "app.domain.energy.assessments.memo.llm_json",
+        "app.domain.energy.assessments.memo_assessment.llm_json",
         fake_llm_json,
     )
 
@@ -63,13 +72,13 @@ async def test_generate_outline_adapts_and_keeps_core_sections(monkeypatch):
                     "section_key": "executive_summary",
                     "label": "Executive Summary",
                     "description": "Adapted overview",
-                    "key_points": "Ask; impact; recommendation",
+                    "key_points": "Ask; context; overall risk posture",
                 },
                 {
-                    "section_key": "recommendation",
-                    "label": "Recommendation",
-                    "description": "Decision",
-                    "key_points": "proceed/hold/reject",
+                    "section_key": "risk_summary",
+                    "label": "Risk Summary",
+                    "description": "Key risks",
+                    "key_points": "technical; financial; operational",
                 },
                 # Intentionally omit other core sections — implementation should restore them.
             ]
@@ -77,7 +86,7 @@ async def test_generate_outline_adapts_and_keeps_core_sections(monkeypatch):
 
     monkeypatch.setattr(assessment, "_synthesis_pack", fake_synthesis)
     monkeypatch.setattr(
-        "app.domain.energy.assessments.memo.llm_json",
+        "app.domain.energy.assessments.memo_assessment.llm_json",
         fake_llm_json,
     )
 
@@ -90,7 +99,7 @@ async def test_generate_outline_adapts_and_keeps_core_sections(monkeypatch):
     keys = {item["section_key"] for item in items}
     assert "executive_summary" in keys
     assert "open_questions" in keys
-    assert "risks_and_assumptions" in keys
+    assert "evidence_summary" in keys
     exec_row = next(i for i in items if i["section_key"] == "executive_summary")
     assert exec_row["description"] == "Adapted overview"
 
@@ -101,10 +110,10 @@ async def test_generate_drafts_maps_to_outline_categories(monkeypatch):
     sections = [
         make_build_item(
             {
-                "section_key": "recommendation",
-                "label": "Recommendation",
-                "description": "Decision",
-                "key_points": "proceed/hold/reject",
+                "section_key": "risk_summary",
+                "label": "Risk Summary",
+                "description": "Key risks",
+                "key_points": "technical; financial; operational",
             }
         ),
         make_build_item(
@@ -131,16 +140,14 @@ async def test_generate_drafts_maps_to_outline_categories(monkeypatch):
         return {
             "drafts": [
                 {
-                    "section_key": "recommendation",
-                    "title": "Recommendation",
-                    "body": "Hold pending risk register. [1]",
-                    "recommendation": "hold",
-                    "confidence": "medium",
+                    "section_key": "risk_summary",
+                    "title": "Risk Summary",
+                    "body": "Key technical and financial risks pending the risk register. [1]",
                 },
                 {
                     "section_key": "open_questions",
                     "title": "Open Questions",
-                    "body": "Complete risk assessment before proceeding.",
+                    "body": "Complete risk assessment for a full picture.",
                 },
             ]
         }
@@ -148,7 +155,7 @@ async def test_generate_drafts_maps_to_outline_categories(monkeypatch):
     monkeypatch.setattr(assessment, "_synthesis_pack", fake_synthesis)
     monkeypatch.setattr(assessment, "_evidence_for_memo", fake_evidence)
     monkeypatch.setattr(
-        "app.domain.energy.assessments.memo.llm_json",
+        "app.domain.energy.assessments.memo_assessment.llm_json",
         fake_llm_json,
     )
 
@@ -159,14 +166,15 @@ async def test_generate_drafts_maps_to_outline_categories(monkeypatch):
         {"sections": {"data": {"items": sections}}},
     )
     assert len(drafts) == 2
-    rec = next(d for d in drafts if d["section_key"] == "recommendation")
-    assert rec["category"] == "Recommendation"
-    assert rec["recommendation"] == "hold"
-    assert "Hold" in rec["body"]
+    risk_row = next(d for d in drafts if d["section_key"] == "risk_summary")
+    assert risk_row["category"] == "Risk Summary"
+    assert "recommendation" not in risk_row
+    assert "confidence" not in risk_row
+    assert "technical" in risk_row["body"]
 
 
 @pytest.mark.asyncio
-async def test_generate_writeup_assembles_from_confirmed_drafts(monkeypatch):
+async def test_generate_writeup_assembles_from_confirmed_drafts_without_recommendation(monkeypatch):
     assessment = MemoAssessment()
     drafts = [
         make_build_item(
@@ -174,17 +182,15 @@ async def test_generate_writeup_assembles_from_confirmed_drafts(monkeypatch):
                 "section_key": "executive_summary",
                 "title": "Executive Summary",
                 "category": "Executive Summary",
-                "body": "Pilot overview and hold recommendation.",
+                "body": "Pilot overview and risk posture.",
             }
         ),
         make_build_item(
             {
-                "section_key": "recommendation",
-                "title": "Recommendation",
-                "category": "Recommendation",
-                "body": "Hold pending diligence.",
-                "recommendation": "hold",
-                "confidence": "medium",
+                "section_key": "risk_summary",
+                "title": "Risk Summary",
+                "category": "Risk Summary",
+                "body": "Key risks pending diligence.",
             }
         ),
     ]
@@ -201,20 +207,18 @@ async def test_generate_writeup_assembles_from_confirmed_drafts(monkeypatch):
 
     async def fake_llm_json(**_kwargs):
         return {
-            "title": "memo — Pilot",
-            "executive_summary": "Hold pending risk work.",
-            "recommendation": "hold",
-            "confidence": "medium",
+            "title": "Memo — Pilot",
+            "executive_summary": "Overview of risk posture pending diligence.",
             "sections": [
-                {"theme": "Recommendation", "body": "Hold pending diligence."},
-                {"theme": "Rationale", "body": "Stakeholder map is strong; risk register missing."},
+                {"theme": "Risk Summary", "body": "Key risks pending diligence."},
+                {"theme": "Evidence", "body": "Stakeholder map is strong; risk register missing."},
             ],
         }
 
     monkeypatch.setattr(assessment, "_synthesis_pack", fake_synthesis)
     monkeypatch.setattr(assessment, "_evidence_for_memo", fake_evidence)
     monkeypatch.setattr(
-        "app.domain.energy.assessments.memo.llm_json",
+        "app.domain.energy.assessments.memo_assessment.llm_json",
         fake_llm_json,
     )
 
@@ -225,7 +229,8 @@ async def test_generate_writeup_assembles_from_confirmed_drafts(monkeypatch):
         },
         {"project_title": "Pilot"},
     )
-    assert content["recommendation"] == "hold"
+    assert "recommendation" not in content
+    assert "confidence" not in content
     assert content["citations"][0]["source_title"] == "Doc A"
     assert "risk_assessment" in content["sources_missing"]
     assert content["sections"]

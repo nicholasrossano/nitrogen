@@ -8,7 +8,7 @@ The legacy **initiative** model, onboarding chat table, and `/initiatives/*` UI 
 
 Energy-specific calculators (carbon, LCOE, solar) remain as **signal providers** and assessment tooling inside the example domain pack — they are not the core abstraction.
 
-**Not investment advice.** This is a diligence-support reference architecture, not an adviser. The worked example ships an memo assessment that outputs a proceed/hold/reject recommendation — that output (like all assessment output) is an AI-assisted draft requiring independent verification, not investment, financial, legal, or tax advice. See [TERMS.md](../TERMS.md#4-not-investment-financial-legal-or-tax-advice).
+**Not investment advice.** This is a diligence-support reference architecture, not an adviser. The worked example ships a Memo assessment that summarizes risk and evidence from confirmed sibling assessments — it deliberately does not output a proceed/hold/reject call or any other investment decision. All assessment output is an AI-assisted draft requiring independent verification, not investment, financial, legal, or tax advice. See [TERMS.md](../TERMS.md#4-not-investment-financial-legal-or-tax-advice).
 
 ## Core primitives
 

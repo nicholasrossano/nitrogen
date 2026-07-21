@@ -1,4 +1,9 @@
-"""memo Assessment.
+"""Memo Assessment.
+
+A cited risk summary memo — NOT an investment recommendation. It synthesizes
+approved sibling assessments, variables, status, and evidence into a written
+diligence memo that surfaces risks, evidence, and open questions for the
+reader's own decision-making. It never outputs a proceed/hold/reject call.
 
 Stage workflow:
   1. Sections  (list / categorized_list) — confirmable outline
@@ -36,28 +41,19 @@ DEFAULT_MEMO_SECTIONS: list[dict[str, Any]] = [
     {
         "section_key": "executive_summary",
         "label": "Executive Summary",
-        "description": "2-3 paragraph overview of the project and key recommendation",
+        "description": "2-3 paragraph overview of the project and its overall risk profile",
         "key_points": (
-            "Project overview and context; Investment ask and use of funds; "
-            "Key value proposition; Summary recommendation"
+            "Project overview and context; What is being asked/proposed; "
+            "Overall risk posture in one or two sentences"
         ),
     },
     {
-        "section_key": "recommendation",
-        "label": "Recommendation",
-        "description": "Clear recommendation (proceed, hold, or reject) with confidence level",
+        "section_key": "risk_summary",
+        "label": "Risk Summary",
+        "description": "Consolidated summary of key risks and critical assumptions to validate",
         "key_points": (
-            "Decision: proceed / hold / reject; Confidence level and key factors; "
-            "Conditions or prerequisites"
-        ),
-    },
-    {
-        "section_key": "recommendation_rationale",
-        "label": "Rationale",
-        "description": "Detailed justification for the recommendation with evidence",
-        "key_points": (
-            "Strategic alignment; Track record and team capacity; "
-            "Market opportunity; Path to impact and sustainability"
+            "Technical risks; Financial/market risks; Operational risks; "
+            "Key assumptions to validate; Severity and likelihood where evidence supports it"
         ),
     },
     {
@@ -70,67 +66,56 @@ DEFAULT_MEMO_SECTIONS: list[dict[str, Any]] = [
         ),
     },
     {
-        "section_key": "risks_and_assumptions",
-        "label": "Risks & Assumptions",
-        "description": "Critical risks and key assumptions underlying the analysis",
-        "key_points": (
-            "Technical risks; Financial/market risks; Operational risks; "
-            "Key assumptions to validate"
-        ),
-    },
-    {
         "section_key": "open_questions",
         "label": "Open Questions",
         "description": "Outstanding questions that need to be addressed",
         "key_points": (
-            "Information gaps; Due diligence items; Clarifications needed; "
+            "Information gaps; Diligence items; Clarifications needed; "
             "Missing assessments or variables"
         ),
     },
 ]
 
-RECOMMENDATION_OPTIONS = ("proceed", "hold", "reject")
-
 MEMO_SYSTEM_RULES = (
-    "You are an expert analyst writing memos for development initiatives "
+    "You are an expert risk analyst writing diligence memos for development initiatives "
     "(clean cooking, energy access, and related climate/development finance).\n\n"
+    "PURPOSE: This memo summarizes risk and evidence for the reader's own diligence process. "
+    "It is NOT an investment recommendation. Never output or imply a proceed/hold/reject "
+    "decision, a buy/sell/hold call, or any directive telling the reader what to do with "
+    "their money. Present risks, evidence, and open questions; let the reader draw their own "
+    "conclusion.\n\n"
     "CITATION RULES:\n"
     "- Ground factual claims in provided synthesis context and retrieved sources.\n"
     "- Cite retrieved sources inline as [1], [2], etc.\n"
     "- When citing confirmed assessments, name them explicitly "
     "(e.g. 'per the approved Risk Assessment').\n"
     "- If evidence is limited, acknowledge uncertainty; do not invent facts.\n\n"
-    "RECOMMENDATION CRITERIA:\n"
-    "- proceed: Strong evidence of need, feasible approach, reasonable risk profile\n"
-    "- hold: Promising but key questions remain unanswered\n"
-    "- reject: Significant concerns about viability, impact, or approach\n\n"
-    "TONE: Professional, balanced, thorough, action-oriented."
+    "TONE: Professional, balanced, thorough, and neutral — analytical rather than prescriptive."
 )
 
 
 class MemoAssessment(BaseAssessment):
-    """memo — outline confirmation then cited, project-consistent writeup."""
+    """Memo — outline confirmation then cited, project-consistent risk-summary writeup."""
 
     @property
     def definition(self) -> AssessmentDefinition:
         return AssessmentDefinition(
             id="memo",
-            name="memo",
+            name="Memo",
             description=(
-                "Structured memo with confirmed outline, recommendation, "
-                "and evidence-backed citations"
+                "Structured risk-summary memo with confirmed outline "
+                "and evidence-backed citations — not an investment recommendation"
             ),
             icon="FileText",
             output_type="assessment_document",
             category="assessment",
             keywords=[
-                "investment",
                 "memo",
-                "recommendation",
+                "risk summary",
+                "diligence memo",
                 "funding",
                 "grant",
-                "decision",
-                "ic memo",
+                "write-up",
             ],
             export_format="docx",
         )
@@ -140,8 +125,8 @@ class MemoAssessment(BaseAssessment):
         return AssessmentManifest(
             **self.definition.__dict__,
             goal=(
-                "Produce an memo consistent with approved project assessments, "
-                "core variables, status, and cited evidence."
+                "Produce a risk-summary memo consistent with approved project assessments, "
+                "core variables, status, and cited evidence. Not an investment recommendation."
             ),
             primary_ui_object="categorized_workspace",
             export_artifact_types=["docx"],
@@ -205,13 +190,6 @@ class MemoAssessment(BaseAssessment):
                     FieldDef("category", "text", required=True, label="Outline Section"),
                     FieldDef("section_key", "text", label="Section Key"),
                     FieldDef("body", "long_text", label="Draft"),
-                    FieldDef(
-                        "recommendation",
-                        "select",
-                        label="Recommendation",
-                        options=list(RECOMMENDATION_OPTIONS),
-                    ),
-                    FieldDef("confidence", "text", label="Confidence"),
                 ],
                 population=[
                     PopulationStep("read_confirmed_prior_stage", {"stage_id": "sections"}),
@@ -255,8 +233,8 @@ class MemoAssessment(BaseAssessment):
 
         system = (
             MEMO_SYSTEM_RULES
-            + "\n\nReturn JSON with keys: title, executive_summary, recommendation, "
-            "confidence, sections (list of {theme, body}), open_questions_summary. "
+            + "\n\nReturn JSON with keys: title, executive_summary, "
+            "sections (list of {theme, body}), open_questions_summary. "
             "Preserve the confirmed draft substance; polish for consistency and citation "
             "hygiene. Do not drop material findings from confirmed assessments."
         )
@@ -307,37 +285,13 @@ class MemoAssessment(BaseAssessment):
             ]
         if not result.get("title"):
             title = context.get("project_title") or "Project"
-            result["title"] = f"memo — {title}"
+            result["title"] = f"Memo — {title}"
         if not result.get("executive_summary"):
             for item in draft_items:
                 content = item.get("content") if isinstance(item, dict) else None
                 if isinstance(content, dict) and content.get("section_key") == "executive_summary":
                     result["executive_summary"] = content.get("body") or ""
                     break
-        if not result.get("recommendation"):
-            for item in draft_items:
-                content = item.get("content") if isinstance(item, dict) else None
-                if isinstance(content, dict) and content.get("recommendation"):
-                    result["recommendation"] = content.get("recommendation")
-                    result.setdefault("confidence", content.get("confidence") or "")
-                    break
-
-        # Ensure recommendation appears as its own section heading when present.
-        rec = (result.get("recommendation") or "").strip().lower()
-        if rec in RECOMMENDATION_OPTIONS:
-            conf = result.get("confidence") or ""
-            rec_body = f"Recommendation: {rec}" + (f" (confidence: {conf})" if conf else "")
-            sections = result.get("sections") if isinstance(result.get("sections"), list) else []
-            has_rec_heading = any(
-                isinstance(s, dict)
-                and "recommend" in str(s.get("theme") or s.get("category") or "").lower()
-                for s in sections
-            )
-            if not has_rec_heading:
-                result["sections"] = [
-                    {"theme": "Recommendation", "body": rec_body},
-                    *sections,
-                ]
 
         if citations:
             result["citations"] = citations
@@ -377,10 +331,12 @@ class MemoAssessment(BaseAssessment):
         defaults_json = json.dumps(DEFAULT_MEMO_SECTIONS, indent=2)
         data = await llm_json(
             system=(
-                "You are an expert at structuring memos for development finance. "
-                "Adapt the default memo outline to this project. Keep all six core sections "
-                "unless the project clearly needs a renamed/extra section. "
-                "Return JSON with key 'sections': list of objects with "
+                "You are an expert at structuring risk-summary diligence memos for "
+                "development finance. Adapt the default memo outline to this project. "
+                "This memo summarizes risk and evidence; it does not make an investment "
+                "recommendation, so do not add a recommendation/decision section. "
+                "Keep all core sections unless the project clearly needs a renamed/extra "
+                "section. Return JSON with key 'sections': list of objects with "
                 "section_key, label, description, key_points (string)."
             ),
             user_msg=(
@@ -439,9 +395,8 @@ class MemoAssessment(BaseAssessment):
                 + "\n\nWrite thorough draft bodies for each confirmed outline section. "
                 "Stay consistent with approved/confirmed assessments and variables. "
                 "For open_questions, explicitly include material gaps from sources_missing. "
-                "For recommendation, set recommendation to proceed|hold|reject and a short confidence. "
                 "Return JSON with key 'drafts': list of objects with "
-                "section_key, title, category, body, recommendation (optional), confidence (optional)."
+                "section_key, title, category, body."
             ),
             user_msg=(
                 f"Project: {context.get('project_title', '')}\n"
@@ -465,8 +420,6 @@ class MemoAssessment(BaseAssessment):
                     "title": (item.get("content") or {}).get("label") or "Section",
                     "category": (item.get("content") or {}).get("label") or "Section",
                     "body": "",
-                    "recommendation": "",
-                    "confidence": "",
                 }
                 for item in section_items
                 if isinstance(item, dict)
@@ -499,17 +452,12 @@ class MemoAssessment(BaseAssessment):
                 or "Section"
             )
             section_key = key or (outline or {}).get("section_key") or _slugify(label)
-            recommendation = str(raw.get("recommendation") or "").strip().lower()
-            if recommendation and recommendation not in RECOMMENDATION_OPTIONS:
-                recommendation = ""
             out.append(
                 {
                     "section_key": section_key,
                     "title": title or label,
                     "category": label,
                     "body": str(raw.get("body") or "").strip(),
-                    "recommendation": recommendation,
-                    "confidence": str(raw.get("confidence") or "").strip(),
                 }
             )
 
@@ -528,8 +476,6 @@ class MemoAssessment(BaseAssessment):
                         "title": label,
                         "category": label,
                         "body": "",
-                        "recommendation": "",
-                        "confidence": "",
                     }
                 )
         return out
@@ -566,7 +512,7 @@ class MemoAssessment(BaseAssessment):
         project_type = context.get("project_type") or ""
         title = context.get("project_title") or ""
         queries = [
-            f"{title} investment recommendation {geography} {project_type}".strip(),
+            f"{title} risk summary {geography} {project_type}".strip(),
             f"evidence summary {title} {geography}".strip(),
             f"risks assumptions {title} {project_type} {geography}".strip(),
             f"comparable case studies {project_type} {geography}".strip(),
@@ -615,11 +561,6 @@ class MemoAssessment(BaseAssessment):
                 continue
             title = content.get("title") or content.get("category") or "Section"
             lines.append(f"### {title} ({content.get('section_key') or ''})")
-            if content.get("recommendation"):
-                lines.append(
-                    f"Recommendation: {content.get('recommendation')} "
-                    f"(confidence: {content.get('confidence') or 'n/a'})"
-                )
             lines.append(content.get("body") or "")
         return "\n".join(lines)
 

@@ -2,9 +2,9 @@
 
 The pre-launch legacy memo-generation flow (MemoGeneratorService,
 MemoGenerationAdapter, MemoViewerWidget) is unreachable from any current
-user action — memos are now produced by the staged
-memo assessment and exported via generate_assessment_docx into
-project Files (ProjectMaterial). No code writes to these tables anymore.
+user action — memos are now produced by the staged memo assessment and
+exported via generate_assessment_docx into project Files (ProjectMaterial).
+No code writes to these tables anymore.
 
 Revision ID: 071
 Revises: 070
@@ -22,8 +22,10 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.drop_table("citations")
-    op.drop_table("memo_versions")
+    # IF EXISTS: some environments never created these tables in the first
+    # place (e.g. a dev DB rebuilt after this flow was already dead code).
+    op.execute("DROP TABLE IF EXISTS citations")
+    op.execute("DROP TABLE IF EXISTS memo_versions")
 
 
 def downgrade() -> None:

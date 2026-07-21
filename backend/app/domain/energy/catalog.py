@@ -42,9 +42,9 @@ def get_first_party_catalog() -> FirstPartyAssessmentCatalog:
 
     from app.domain.energy.assessments.carbon_assessment import CarbonTool
     from app.domain.energy.assessments.implementation_plan import ImplementationPlanAssessment
-    from app.domain.energy.assessments.memo import MemoAssessment
     from app.domain.energy.assessments.landscape_mapping import LandscapeMappingAssessment
     from app.domain.energy.assessments.lcoe_assessment import LCOETool
+    from app.domain.energy.assessments.memo_assessment import MemoAssessment
     from app.domain.energy.assessments.pvwatts_assessment import PVWattsTool
     from app.domain.energy.assessments.risk_assessment import RiskAssessment
     from app.domain.energy.assessments.stakeholder_assessment import StakeholderAssessment
@@ -135,16 +135,17 @@ def get_first_party_catalog() -> FirstPartyAssessmentCatalog:
         "memo": AssessmentSelectionMetadata(
             assessment_id="memo",
             selection_description=(
-                "Drafts a cited memo from a confirmed outline and project synthesis."
+                "Drafts a cited risk-summary memo from a confirmed outline and project "
+                "synthesis. Summarizes risk and evidence — not an investment recommendation."
             ),
             selection_triggers=(
                 "memo",
-                "IC memo",
-                "recommendation memo",
-                "funding recommendation",
-                "proceed hold reject",
+                "risk memo",
+                "diligence memo",
+                "risk summary",
+                "write-up",
             ),
-            domain_tags=("documentation", "decision", "diligence"),
+            domain_tags=("documentation", "risk", "diligence"),
         ),
     }
 
@@ -169,9 +170,9 @@ def get_first_party_catalog() -> FirstPartyAssessmentCatalog:
             "project risk": ("risk_assessment",),
             "risk mitigation": ("risk_assessment",),
             "memo": ("memo",),
-            "ic memo": ("memo",),
-            "funding recommendation": ("memo",),
-            "recommendation memo": ("memo",),
+            "risk memo": ("memo",),
+            "diligence memo": ("memo",),
+            "risk summary": ("memo",),
             "implementation plan": ("implementation_plan",),
             "implementation": ("implementation_plan",),
             "workplan": ("implementation_plan",),
