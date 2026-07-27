@@ -49,6 +49,14 @@ class SourceCitation(BaseModel):
     chunk_index: Optional[int] = None
 
 
+class MessageAttachment(BaseModel):
+    """A file attached to a chat message (references a ProjectMaterial row)."""
+    id: str
+    filename: str
+    file_type: Optional[str] = None
+    file_size: Optional[int] = None
+
+
 class ChatMessageResponse(BaseModel):
     """Response for a single chat message"""
     id: UUID
@@ -60,6 +68,7 @@ class ChatMessageResponse(BaseModel):
     thinking_lines: Optional[list[str]] = None
     completion_meta: Optional[dict[str, Any]] = None
     feedback: Optional[str] = None
+    attachments: Optional[list[MessageAttachment]] = None
     created_at: datetime
     
     class Config:

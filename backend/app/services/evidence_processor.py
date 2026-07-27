@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -40,6 +41,35 @@ logger = logging.getLogger(__name__)
 MAX_PROCESSING_ATTEMPTS = 3
 PREVIEW_CHAR_LIMIT = 800
 STALE_JOB_THRESHOLD = timedelta(minutes=10)
+
+# Caps how many evidence docs parse/embed concurrently across the whole
+# process. Bulk folder uploads (dozens-to-hundreds of files) used to fire one
+# unbounded background task per file, each holding its own DB session for the
+# full parse->embed->commit pipeline. That routinely exhausted the async
+# engine's connection pool (pool_size=10 + max_overflow=20, see
+# app/core/database.py) and starved unrelated requests (e.g. chat) of a
+# connection, and it multiplied the odds of concurrent writers deadlocking on
+# the same `subscriptions` row (see _is_deadlock_error below). Queued jobs
+# wait here *before* opening a DB session, so a large batch backs up in
+# memory instead of in the pool.
+EVIDENCE_PROCESSING_CONCURRENCY = 6
+_processing_semaphore = asyncio.Semaphore(EVIDENCE_PROCESSING_CONCURRENCY)
+
+# Under heavy concurrent bulk uploads, many jobs race to bump the same
+# `subscriptions.trial_cost_used` row (see app/core/llm_client.record_usage),
+# which occasionally deadlocks mid-flush and poisons that job's session —
+# the whole unit of work has to be retried, not just the failing statement.
+# Deadlocks are transient by nature (Postgres always rolls back exactly one
+# of the two competing transactions), so a short delayed retry is safe and
+# is what Postgres itself recommends. We reuse the doc's existing
+# processing_attempts/MAX_PROCESSING_ATTEMPTS bookkeeping rather than
+# inventing a parallel retry counter.
+_DEADLOCK_RETRY_BASE_DELAY = 0.5
+
+
+def _is_deadlock_error(exc: BaseException) -> bool:
+    return "deadlock detected" in str(exc).lower()
+
 
 # Onboarding assessment-proposal gating: how long we wait for at least one uploaded
 # doc to reach the lightweight milestone before falling through to proposal
@@ -126,8 +156,19 @@ async def process_evidence_doc(
     Designed to be called from a FastAPI ``BackgroundTasks`` queue or from
     ``reclaim_stale_jobs``.  Always uses its own DB session so it is safe
     to run after the originating request has returned.
+
+    Bounded by ``_processing_semaphore`` so a large bulk upload queues in
+    memory rather than opening one DB session per file — see the module
+    docstring comment above ``EVIDENCE_PROCESSING_CONCURRENCY``.
     """
 
+    async with _processing_semaphore:
+        await _process_evidence_doc_locked(doc_id, user_id=user_id)
+
+
+async def _process_evidence_doc_locked(
+    doc_id: UUID, *, user_id: str | None = None
+) -> None:
     async with AsyncSessionLocal() as db:
         doc = await _load_doc(db, doc_id)
         if doc is None:
@@ -275,9 +316,30 @@ async def process_evidence_doc(
                 exc_info=True,
             )
             await db.rollback()
-            # Re-fetch doc in the fresh transaction to mark failure.
+            # Re-fetch doc in the fresh transaction — the deadlocked flush
+            # poisoned the old session, so any in-memory state on `doc` may
+            # be stale.
             doc = await _load_doc(db, doc_id)
-            if doc is not None:
+            if doc is None:
+                return
+            if _is_deadlock_error(exc) and (doc.processing_attempts or 0) < MAX_PROCESSING_ATTEMPTS:
+                # Deadlocks are transient contention, not a real processing
+                # failure — reset to `uploaded` and let it be picked up
+                # again rather than burning the doc's one shot permanently.
+                doc.processing_status = EvidenceDocStatus.UPLOADED.value
+                doc.processing_error = f"Deadlocked, retrying: {exc}"[:2000]
+                await db.commit()
+                delay = _DEADLOCK_RETRY_BASE_DELAY * (1 + random.random())
+                logger.warning(
+                    "Deadlock indexing evidence doc %s (attempt %d/%d) — retrying in %.2fs",
+                    doc_id,
+                    doc.processing_attempts,
+                    MAX_PROCESSING_ATTEMPTS,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+                schedule_processing(doc_id, user_id=user_id)
+            else:
                 await _mark_failed(db, doc, f"Indexing failed: {exc}")
 
 

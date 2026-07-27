@@ -1718,6 +1718,11 @@ export function ProjectWorkbench({ projectId }: { projectId: string }) {
             pendingAutoSend={pendingInvestigateDraft}
             onPendingAutoSendHandled={() => setPendingInvestigateDraft(null)}
             onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
+            onStartAssessment={
+              project?.shared_role === 'viewer'
+                ? undefined
+                : handleCreateAssessmentInstanceInAssessmentsView
+            }
             onOpenDocument={handleOpenDocument}
             onChatMetaChange={({ chatId }) => {
               if (panelParam) return;

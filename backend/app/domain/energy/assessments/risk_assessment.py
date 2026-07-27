@@ -32,6 +32,12 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 RISK_RATINGS = ("Low", "Moderate", "Substantial", "High")
+EVIDENCE_STATUSES = ("Supported", "Partially supported", "Variable", "Needs evidence")
+
+# Coverage targets for the risks stage. Depth is filled by a second LLM pass —
+# never by static template text, so output stays project-specific.
+MIN_RISKS_PER_CATEGORY = 2
+MAX_RISKS_PER_CATEGORY = 4
 
 
 class RiskAssessment(BaseAssessment):
@@ -318,34 +324,26 @@ class RiskAssessment(BaseAssessment):
             f"- {c.get('label')}: {c.get('why_it_matters') or c.get('description')}"
             for c in categories
         )
-        project_signals = _project_signals(context)
-        category_labels = ", ".join(
+        category_labels = [
             str(c.get("label", "")).strip()
             for c in categories
             if str(c.get("label", "")).strip()
-        )
+        ]
+        descriptor = _project_descriptor(context)
+        joined_labels = ", ".join(category_labels)
         queries = [
-            (
-                f"{context.get('geography', '')} {context.get('project_type', '')} "
-                f"{project_signals} project preparation risks development finance categories {category_labels}"
-            ).strip(),
-            (
-                f"{context.get('geography', '')} {context.get('project_type', '')} "
-                f"{project_signals} implementation risks public sector approvals beneficiaries delivery model"
-            ).strip(),
-            (
-                f"{context.get('geography', '')} {context.get('project_type', '')} "
-                f"{project_signals} precedent donor project risks evidence"
-            ).strip(),
+            f"{descriptor} project preparation risks {joined_labels}".strip(),
+            f"{descriptor} implementation risks approvals delivery model beneficiaries".strip(),
+            f"{descriptor} precedent project risks lessons learned evidence".strip(),
         ]
         evidence_block = await _evidence_block(queries, context, max_facts=18)
         data = await llm_json(
             system=_risk_generation_system_prompt(),
             user_msg=(
                 f"{_project_context_text(context)}\n\n"
-                f"Project-specific signals to use when supported or framed as uncertainty:\n{project_signals}\n\n"
                 f"Confirmed categories:\n{category_text}"
                 f"{evidence_block}\n\n"
+                f"Produce {MIN_RISKS_PER_CATEGORY}-{MAX_RISKS_PER_CATEGORY} risks for every category above.\n"
                 "Return JSON only with key risks. Each risk object must include exactly these keys: "
                 "title, category, affected_components, why_it_matters, evidence_basis, "
                 "missing_information, evidence_status."
@@ -353,23 +351,68 @@ class RiskAssessment(BaseAssessment):
             model=settings.openai_orchestration_model,
             context=context,
         )
-        risks = _usable_risks(data.get("risks") or [], context)
-        risks = _ensure_category_risk_depth(risks, categories, context, minimum_per_category=2, maximum_per_category=4)
-        valid_categories = {c.get("label") for c in categories}
-        return [
-            {
-                "title": r.get("title", r.get("risk", "")).strip(),
-                "category": _category_or_default(r.get("category"), valid_categories),
-                "affected_components": _join_if_list(r.get("affected_components", "")),
-                "why_it_matters": r.get("why_it_matters", r.get("description", "")).strip(),
-                "evidence_basis": r.get("evidence_basis", r.get("basis", r.get("rationale", ""))).strip(),
-                "missing_information": _join_if_list(r.get("missing_information", "")),
-                "evidence_status": r.get("evidence_status") or "Partially supported",
-            }
-            for r in risks
-            if (r.get("title") or r.get("risk"))
-            and not _is_placeholder_risk_title(r.get("title", r.get("risk", "")))
-        ]
+        risks = _normalize_risks(data.get("risks") or [], category_labels)
+        risks = await self._fill_thin_categories(
+            context, category_labels, category_text, evidence_block, risks
+        )
+        return _cap_per_category(risks, MAX_RISKS_PER_CATEGORY)
+
+    async def _fill_thin_categories(
+        self,
+        context: dict,
+        category_labels: list[str],
+        category_text: str,
+        evidence_block: str,
+        risks: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Ask the model once more for categories that came back under-covered.
+
+        Depth is topped up dynamically rather than from static templates, so
+        unusual category labels (market, hydrology, supply chain, …) are handled
+        the same as conventional development-finance ones.
+        """
+        thin = {
+            label: MIN_RISKS_PER_CATEGORY - _count_for_category(risks, label)
+            for label in category_labels
+            if _count_for_category(risks, label) < MIN_RISKS_PER_CATEGORY
+        }
+        if not thin:
+            return risks
+
+        wanted = "\n".join(f"- {label}: {needed} more" for label, needed in thin.items())
+        existing_titles = "\n".join(f"- {risk['title']}" for risk in risks) or "- (none yet)"
+        try:
+            data = await llm_json(
+                system=_risk_generation_system_prompt(),
+                user_msg=(
+                    f"{_project_context_text(context)}\n\n"
+                    f"Categories:\n{category_text}"
+                    f"{evidence_block}\n\n"
+                    f"Risks already drafted (do not repeat or rephrase these):\n{existing_titles}\n\n"
+                    f"These categories still need more risks:\n{wanted}\n\n"
+                    "Return JSON only with key risks, using the same keys as before, "
+                    "covering only the categories listed above."
+                ),
+                model=settings.openai_orchestration_model,
+                context=context,
+            )
+        except Exception:
+            logger.exception("Risk depth top-up failed; keeping first-pass risks")
+            return risks
+
+        additions = _normalize_risks(data.get("risks") or [], list(thin.keys()))
+        seen = {_dedupe_key(risk["title"]) for risk in risks}
+        for addition in additions:
+            label = addition["category"]
+            if thin.get(label, 0) <= 0:
+                continue
+            key = _dedupe_key(addition["title"])
+            if key in seen:
+                continue
+            seen.add(key)
+            risks.append(addition)
+            thin[label] -= 1
+        return risks
 
     async def _enrich_mitigation(
         self,
@@ -426,15 +469,10 @@ class RiskAssessment(BaseAssessment):
             }
             for item in source_items
         ]
+        descriptor = _project_descriptor(context)
         queries = [
-            (
-                f"{context.get('geography', '')} {context.get('project_type', '')} "
-                f"{_project_signals(context)} risk mitigation project preparation implementation controls"
-            ).strip(),
-            (
-                f"{context.get('geography', '')} {context.get('project_type', '')} "
-                "development finance risk mitigation procurement institutional data verification safeguards"
-            ).strip(),
+            f"{descriptor} risk mitigation project preparation implementation controls".strip(),
+            f"{descriptor} risk mitigation procurement institutional data verification safeguards".strip(),
         ]
         evidence_block = await _evidence_block(queries, context, max_facts=12)
         data = await llm_json(
@@ -706,31 +744,19 @@ def _project_context_text(context: dict) -> str:
     )
 
 
-def _project_signals(context: dict[str, Any]) -> str:
-    raw = " ".join([
-        str(context.get("project_title", "")),
-        str(context.get("project_type", "")),
-        str(context.get("geography", "")),
-        str(context.get("target_population", "")),
-        str(context.get("project_description", "")),
-        _jsonish(context.get("project_plan", {})),
-        _jsonish(context.get("tool_inputs", {})),
-    ]).lower()
-    signals = []
-    signal_keywords = [
-        ("geospatial analysis / site prioritization", ("geospatial", "gis", "spatial", "site priorit", "mapping")),
-        ("productive-use demand", ("productive use", "productive-use", "enterprise", "irrigation", "agro", "milling")),
-        ("schools and clinics", ("school", "clinic", "health facility", "hospital")),
-        ("energy access delivery", ("energy access", "electrification", "mini-grid", "minigrid", "solar", "pv", "grid")),
-        ("clean cooking delivery", ("cooking", "cookstove", "stove", "lpg", "biogas")),
-        ("multi-agency public-sector delivery", ("ministry", "agency", "district", "public sector", "government")),
-        ("beneficiary targeting", ("beneficiary", "household", "community", "customer", "user")),
-        ("results verification / MRV", ("mrv", "verification", "monitoring", "indicator", "baseline")),
+def _project_descriptor(context: dict[str, Any]) -> str:
+    """Short retrieval descriptor built only from this project's own context.
+
+    Kept free of sector keyword taxonomies so retrieval works the same for any
+    geography, sector, or delivery model.
+    """
+    parts = [
+        str(context.get("project_title", "")).strip(),
+        str(context.get("project_type", "")).replace("_", " ").strip(),
+        str(context.get("geography", "")).strip(),
+        str(context.get("target_population", "")).strip(),
     ]
-    for label, keywords in signal_keywords:
-        if any(keyword in raw for keyword in keywords):
-            signals.append(label)
-    return "; ".join(signals) if signals else "No distinctive project signals detected beyond the supplied project context."
+    return " ".join(part for part in parts if part)
 
 
 def _risk_generation_system_prompt() -> str:
@@ -754,27 +780,6 @@ def _risk_generation_system_prompt() -> str:
     )
 
 
-def _project_terms(context: dict[str, Any]) -> list[str]:
-    terms: list[str] = []
-    for value in [
-        context.get("geography", ""),
-        context.get("project_type", ""),
-        context.get("target_population", ""),
-    ]:
-        for part in str(value).replace("_", " ").lower().split():
-            if len(part) >= 4:
-                terms.append(part)
-    signals = _project_signals(context).lower()
-    for term in [
-        "malawi", "geospatial", "spatial", "productive", "schools", "clinics",
-        "energy", "access", "solar", "grid", "beneficiary", "district",
-        "ministry", "mrv", "verification",
-    ]:
-        if term in signals:
-            terms.append(term)
-    return sorted(set(terms))
-
-
 def _default_categories(context: dict) -> list[dict[str, str]]:
     project_type = context.get("project_type", "project")
     return [
@@ -786,174 +791,6 @@ def _default_categories(context: dict) -> list[dict[str, str]]:
         {"label": "Environmental and Social", "description": "Community, land, environmental, labor, and safeguard risks.", "why_it_matters": "E&S issues can create harm, opposition, or compliance gaps.", "status": "Include"},
         {"label": "Data Quality and Results Verification", "description": "Evidence, monitoring, MRV, and verification risks.", "why_it_matters": "Weak data can undermine results claims and donor confidence.", "status": "Include"},
     ]
-
-
-def _default_risks(categories: list[dict[str, Any]], context: dict[str, Any]) -> list[dict[str, str]]:
-    risks: list[dict[str, str]] = []
-    project_type = str(context.get("project_type", "project")).replace("_", " ").strip() or "project"
-    geography = str(context.get("geography", "")).strip()
-    target_population = str(context.get("target_population", "")).strip() or "target users"
-    location_suffix = f" in {geography}" if geography else ""
-
-    for category in categories:
-        label = category.get("label", "")
-        lowered = label.lower()
-        default_basis = category.get("why_it_matters") or category.get("description", "")
-        if "policy" in lowered or "regulatory" in lowered:
-            risks.extend([
-                {
-                    "title": f"Permitting or approval changes could delay {project_type} rollout{location_suffix}",
-                    "category": label,
-                    "description": "Shifts in licensing, tariff, or implementing regulations could delay procurement and commissioning milestones.",
-                    "affected_components": "Permits; procurement; commissioning schedule",
-                    "basis": default_basis,
-                    "missing_information": "Current permit pathway, expected approval timelines, and regulator dependencies.",
-                    "evidence_status": "Needs evidence",
-                },
-                {
-                    "title": f"Unclear sector rules could force redesign or rebidding for {project_type} work packages",
-                    "category": label,
-                    "description": "New or evolving compliance requirements can force redesign, additional documentation, or contractor rebids.",
-                    "affected_components": "Technical scope; contracting; budget",
-                    "basis": default_basis,
-                    "missing_information": "Applicable standards, pending policy updates, and grandfathering variables.",
-                    "evidence_status": "Needs evidence",
-                },
-            ])
-            continue
-        if "political" in lowered or "governance" in lowered:
-            risks.extend([
-                {
-                    "title": f"Public-sector decision bottlenecks could slow execution{location_suffix}",
-                    "category": label,
-                    "description": "Changes in priorities, approvals, or leadership can delay implementation decisions and counterpart commitments.",
-                    "affected_components": "Interagency approvals; implementation timeline",
-                    "basis": default_basis,
-                    "missing_information": "Named approval owners, escalation paths, and contingency governance mechanisms.",
-                    "evidence_status": "Needs evidence",
-                },
-                {
-                    "title": "Coordination across authorities may be fragmented during delivery",
-                    "category": label,
-                    "description": "Unclear mandates across ministries, local authorities, and implementing entities can create coordination gaps.",
-                    "affected_components": "Project governance; milestone sequencing",
-                    "basis": default_basis,
-                    "missing_information": "Signed governance structure, authority map, and coordination cadence.",
-                    "evidence_status": "Needs evidence",
-                },
-            ])
-            continue
-        if "technical" in lowered or "design" in lowered:
-            risks.extend([
-                {
-                    "title": f"Design variables may not hold under site and operating conditions{location_suffix}",
-                    "category": label,
-                    "description": "Early engineering variables may differ from field constraints, requiring redesign or rework.",
-                    "affected_components": "System design; bill of quantities; installation plan",
-                    "basis": default_basis,
-                    "missing_information": "Validated site survey, load/profile data, and engineering variables register.",
-                    "evidence_status": "Needs evidence",
-                },
-                {
-                    "title": "Integration across delivery channels may create implementation slippage",
-                    "category": label,
-                    "description": "Parallel components and technologies can create sequencing risk and handoff failures.",
-                    "affected_components": "Work packages; integration milestones",
-                    "basis": default_basis,
-                    "missing_information": "Integrated implementation schedule and interface control plan.",
-                    "evidence_status": "Needs evidence",
-                },
-            ])
-            continue
-        if "institutional" in lowered or "capacity" in lowered:
-            risks.extend([
-                {
-                    "title": f"Implementing partners may lack capacity for sustained {project_type} delivery",
-                    "category": label,
-                    "description": "Capacity constraints can reduce execution quality and slow milestone completion.",
-                    "affected_components": "Project management; field operations",
-                    "basis": default_basis,
-                    "missing_information": "Capacity assessment, staffing plan, and partner support model.",
-                    "evidence_status": "Needs evidence",
-                },
-                {
-                    "title": "Staff turnover could weaken institutional memory and controls",
-                    "category": label,
-                    "description": "Frequent role changes can interrupt execution continuity and oversight.",
-                    "affected_components": "Program controls; reporting; supervision",
-                    "basis": default_basis,
-                    "missing_information": "Retention strategy, succession plan, and role handover protocols.",
-                    "evidence_status": "Needs evidence",
-                },
-            ])
-            continue
-        if "fiduciary" in lowered or "procurement" in lowered:
-            risks.extend([
-                {
-                    "title": "Procurement cycle delays may push critical path milestones",
-                    "category": label,
-                    "description": "Bid design, evaluation, or contracting delays may postpone deployment and increase cost.",
-                    "affected_components": "Tendering; contract award; mobilization",
-                    "basis": default_basis,
-                    "missing_information": "Procurement timeline, market sounding, and fallback supplier strategy.",
-                    "evidence_status": "Needs evidence",
-                },
-                {
-                    "title": "Weak contract controls may reduce value-for-money and delivery quality",
-                    "category": label,
-                    "description": "Insufficient performance clauses and oversight can drive overruns or underperformance.",
-                    "affected_components": "Contract management; disbursement controls",
-                    "basis": default_basis,
-                    "missing_information": "Contract KPI framework, QA/QC standards, and payment control process.",
-                    "evidence_status": "Needs evidence",
-                },
-            ])
-            continue
-        if "environmental" in lowered or "social" in lowered:
-            risks.extend([
-                {
-                    "title": f"Community acceptance risks could disrupt rollout among {target_population}",
-                    "category": label,
-                    "description": "Insufficient engagement or grievance handling can trigger resistance and site-level delays.",
-                    "affected_components": "Site access; beneficiary onboarding; operations",
-                    "basis": default_basis,
-                    "missing_information": "Stakeholder engagement plan, grievance mechanism, and vulnerable-group safeguards.",
-                    "evidence_status": "Needs evidence",
-                },
-                {
-                    "title": "Safeguard compliance gaps may create rework and approval delays",
-                    "category": label,
-                    "description": "Incomplete E&S controls can stall implementation or require late corrective actions.",
-                    "affected_components": "Compliance reporting; contractor practices",
-                    "basis": default_basis,
-                    "missing_information": "Applicable safeguard requirements, monitoring design, and audit approach.",
-                    "evidence_status": "Needs evidence",
-                },
-            ])
-            continue
-        if "data" in lowered or "verification" in lowered or "mrv" in lowered:
-            risks.extend([
-                {
-                    "title": "Monitoring data quality may be insufficient for credible results claims",
-                    "category": label,
-                    "description": "Weak baselines, inconsistent data capture, or missing metadata can reduce confidence in outcomes.",
-                    "affected_components": "MRV framework; reporting",
-                    "basis": default_basis,
-                    "missing_information": "Indicator definitions, QA controls, and source-level auditability.",
-                    "evidence_status": "Needs evidence",
-                },
-                {
-                    "title": "Verification bottlenecks may delay performance reporting and payments",
-                    "category": label,
-                    "description": "Slow validation of reported results can affect funding triggers and stakeholder confidence.",
-                    "affected_components": "Verification workflow; disbursement timing",
-                    "basis": default_basis,
-                    "missing_information": "Verifier process, evidence standards, and reporting cadence.",
-                    "evidence_status": "Needs evidence",
-                },
-            ])
-            continue
-    return risks
 
 
 def _default_mitigation(risk: dict[str, Any], context: dict[str, Any]) -> dict[str, str]:
@@ -1017,84 +854,79 @@ def _default_mitigation(risk: dict[str, Any], context: dict[str, Any]) -> dict[s
     }
 
 
-def _ensure_category_risk_depth(
-    risks: list[dict[str, Any]],
-    categories: list[dict[str, Any]],
-    context: dict[str, Any],
-    minimum_per_category: int,
-    maximum_per_category: int,
+def _normalize_risks(
+    raw_risks: list[Any],
+    category_labels: list[str],
 ) -> list[dict[str, Any]]:
-    if not categories:
-        return risks
+    """Normalize model output into risk rows, dropping placeholders and duplicates.
 
-    cleaned = _usable_risks(risks, context)
-    by_category: dict[str, list[dict[str, Any]]] = {}
-    for risk in cleaned:
-        category = str(risk.get("category", "")).strip()
-        if len(by_category.get(category, [])) >= maximum_per_category:
+    Screening is deliberately structural (is this a real, substantive risk
+    statement?) rather than keyword-based: keyword gates rejected valid risks for
+    any project whose wording did not echo its own sector/geography terms.
+    """
+    normalized: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for raw in raw_risks:
+        if not isinstance(raw, dict):
             continue
-        by_category.setdefault(category, []).append(risk)
-
-    supplemented = [risk for category_risks in by_category.values() for risk in category_risks]
-    for category in categories:
-        label = str(category.get("label", "")).strip()
-        if not label:
+        title = str(raw.get("title") or raw.get("risk") or "").strip()
+        why = str(raw.get("why_it_matters") or raw.get("description") or "").strip()
+        if not _has_risk_substance(title, why):
             continue
-        current_count = len(by_category.get(label, []))
-        if current_count >= minimum_per_category:
+        key = _dedupe_key(title)
+        if key in seen:
             continue
-        needed = minimum_per_category - current_count
-        additions = _default_risks([category], context)[:needed]
-        supplemented.extend(additions)
-        by_category.setdefault(label, []).extend(additions)
-
-    return supplemented
-
-
-def _usable_risks(risks: list[dict[str, Any]], context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-    return [
-        risk
-        for risk in risks
-        if isinstance(risk, dict)
-        and not _is_placeholder_risk_title(risk.get("title", risk.get("risk", "")))
-        and not _is_generic_risk(risk, context or {})
-    ]
+        seen.add(key)
+        normalized.append({
+            "title": title,
+            "category": _category_or_default(raw.get("category"), category_labels),
+            "affected_components": _join_if_list(raw.get("affected_components", "")),
+            "why_it_matters": why,
+            "evidence_basis": str(
+                raw.get("evidence_basis") or raw.get("basis") or raw.get("rationale") or ""
+            ).strip(),
+            "missing_information": _join_if_list(raw.get("missing_information", "")),
+            "evidence_status": _normalize_evidence_status(raw.get("evidence_status")),
+        })
+    return normalized
 
 
-def _is_generic_risk(risk: dict[str, Any], context: dict[str, Any]) -> bool:
-    title = str(risk.get("title", risk.get("risk", ""))).strip().lower()
-    why = str(risk.get("why_it_matters", risk.get("description", ""))).strip().lower()
-    basis = str(risk.get("evidence_basis", risk.get("basis", ""))).strip().lower()
-    affected = str(risk.get("affected_components", "")).strip().lower()
-    generic_fragments = (
-        "complex stakeholder engagement",
-        "integration across delivery channels",
-        "compliance obligations",
-        "implementation slippage",
-        "data fragmentation risk",
-        "institutional capacity constraints",
-        "complexity in technical delivery",
-    )
-    if any(fragment in title for fragment in generic_fragments):
-        return True
-    if "could" not in title and "may" not in title:
-        return True
-    if not affected or not why or not basis:
-        return True
-    project_terms = _project_terms(context)
-    text = " ".join([title, why, basis, affected])
-    # If there are detectable project-specific terms, at least one should appear in the row.
-    return bool(project_terms) and not any(term in text for term in project_terms)
+def _has_risk_substance(title: str, why_it_matters: str) -> bool:
+    """A usable risk needs a real statement and a stated consequence."""
+    if _is_placeholder_risk_title(title):
+        return False
+    # Bare category labels ("Procurement risk") are too short to be falsifiable.
+    if len(title) < 20 or len(title.split()) < 4:
+        return False
+    return bool(why_it_matters)
 
 
-def _is_placeholder_risk_set(risks: list[dict[str, Any]]) -> bool:
-    if not risks:
-        return True
-    placeholder_hits = 0
+def _count_for_category(risks: list[dict[str, Any]], label: str) -> int:
+    return sum(1 for risk in risks if risk.get("category") == label)
+
+
+def _cap_per_category(risks: list[dict[str, Any]], maximum: int) -> list[dict[str, Any]]:
+    counts: dict[str, int] = {}
+    capped: list[dict[str, Any]] = []
     for risk in risks:
-        if _is_placeholder_risk_title(risk.get("title", risk.get("risk", ""))):
-            placeholder_hits += 1
-    return placeholder_hits >= max(1, len(risks) // 2)
+        label = str(risk.get("category", ""))
+        if counts.get(label, 0) >= maximum:
+            continue
+        counts[label] = counts.get(label, 0) + 1
+        capped.append(risk)
+    return capped
+
+
+def _dedupe_key(title: str) -> str:
+    return " ".join(str(title or "").lower().split())
+
+
+def _normalize_evidence_status(value: Any) -> str:
+    candidate = str(value or "").strip().lower()
+    for status in EVIDENCE_STATUSES:
+        if candidate == status.lower():
+            return status
+    return "Partially supported"
 
 
 def _is_placeholder_risk_title(value: Any) -> bool:
@@ -1152,11 +984,20 @@ def _owner_status(record: dict[str, Any]) -> str:
     return owner or status
 
 
-def _category_or_default(value: Any, valid_categories: set[str]) -> str:
+def _category_or_default(value: Any, valid_categories: list[str]) -> str:
+    """Snap a model-supplied category onto a confirmed label.
+
+    Falls back to the first confirmed category so a mislabelled row still lands
+    somewhere the reviewer can see and re-file it.
+    """
     category = str(value or "").strip()
     if category in valid_categories:
         return category
-    return next(iter(valid_categories), category)
+    lowered = category.lower()
+    for label in valid_categories:
+        if label.lower() == lowered:
+            return label
+    return valid_categories[0] if valid_categories else category
 
 
 def _as_list(value: Any) -> list[str]:

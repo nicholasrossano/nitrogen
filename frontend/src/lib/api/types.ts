@@ -545,6 +545,13 @@ export interface EvidenceChunkDetail {
   preview_mime_type?: string | null;
 }
 
+export interface MessageAttachment {
+  id: string;
+  filename: string;
+  file_type?: string | null;
+  file_size?: number | null;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -555,6 +562,7 @@ export interface ChatMessage {
   thinking_lines?: string[] | null;
   completion_meta?: { latency_ms?: number; citation_count: number; tiers_used: string[] } | null;
   feedback?: 'like' | 'dislike' | null;
+  attachments?: MessageAttachment[] | null;
   created_at: string;
 }
 

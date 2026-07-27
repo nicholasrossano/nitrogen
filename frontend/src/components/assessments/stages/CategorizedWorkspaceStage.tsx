@@ -334,18 +334,18 @@ export function CategorizedWorkspaceStage({
                   [row.group.id]: !(prev[row.group.id] ?? true),
                 }))
               }
-              onDeleteItem={!interactionsDisabled ? handleDelete : undefined}
+              onDeleteItem={!interactionsDisabled && !isRecord ? handleDelete : undefined}
               onOpenItem={isRecord ? (planItem) => {
                 const selected = row.buildItems.find((item) => item.id === planItem.id) ?? null;
                 setSelectedItem((prev) => (prev?.id === selected?.id ? null : selected));
               } : undefined}
-              onAddItem={!interactionsDisabled ? (groupId, title) => handleAdd(groupId, title) : undefined}
+              onAddItem={!interactionsDisabled && !isRecord ? (groupId, title) => handleAdd(groupId, title) : undefined}
               showItemKindBadge={false}
               showItemCompleteToggle={false}
               showItemBranchDelete={false}
-              showItemRightActions={!interactionsDisabled}
-              enableItemSorting={!interactionsDisabled}
-              onReorderItems={!interactionsDisabled ? handleReorderWithinGroup : undefined}
+              showItemRightActions={!interactionsDisabled && !isRecord}
+              enableItemSorting={!interactionsDisabled && !isRecord}
+              onReorderItems={!interactionsDisabled && !isRecord ? handleReorderWithinGroup : undefined}
             />
           ))}
         </div>

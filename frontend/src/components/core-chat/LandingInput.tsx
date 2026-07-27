@@ -3,16 +3,19 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowUp, Loader2, MessageSquare, Trash2, Paperclip, X } from 'lucide-react';
 import type { ChatSession } from '@/types/chat';
+import type { MessageAttachment } from '@/lib/api';
 import { ALL_MODULES } from '@/components/chat/AssessmentPicker';
 import { TourAnchor } from '@/components/tour/TourAnchor';
 import { ChatTrialHint } from '@/components/ui/ChatTrialHint';
+import { UploadToast } from '@/components/ui/UploadToast';
+import { useComposerAttachments } from '@/hooks/useComposerAttachments';
 import { useVisibleAssessments } from '@/hooks/useFeatureFlag';
 import { useIsMobile } from '@/hooks/useIsMobile';
 
 
 interface LandingInputProps {
-  onSend: (content: string, toolHint?: string) => void;
-  onUploadFile?: (file: File) => Promise<void>;
+  onSend: (content: string, toolHint?: string, attachments?: MessageAttachment[]) => void;
+  onUploadFile?: (file: File) => Promise<MessageAttachment | null>;
   disabled?: boolean;
   /** Keep send disabled even when the field has text (e.g. demo mode) */
   sendDisabled?: boolean;
@@ -85,8 +88,16 @@ export function LandingInput({
   const visibleAssessments = useVisibleAssessments(ALL_MODULES);
   const [input, setInput] = useState('');
   const [focused, setFocused] = useState(false);
-  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
-  const [uploading, setUploading] = useState(false);
+  const {
+    attachedFiles,
+    addFiles,
+    removeFile: removeAttachedFile,
+    uploading,
+    uploadAndCollect,
+    toastItems,
+    showToast,
+    dismissToast,
+  } = useComposerAttachments();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const historyListRef = useRef<HTMLDivElement>(null);
@@ -124,38 +135,23 @@ export function LandingInput({
     e.preventDefault();
     if (!input.trim() || disabled || sendDisabled || uploading) return;
 
+    let attachments: MessageAttachment[] = [];
     if (attachedFiles.length > 0 && onUploadFile) {
-      setUploading(true);
-      const { runWithConcurrency, DEFAULT_UPLOAD_CONCURRENCY } = await import(
-        '@/lib/fileUtils'
-      );
-      await runWithConcurrency(
-        attachedFiles,
-        DEFAULT_UPLOAD_CONCURRENCY,
-        async (file) => {
-          try {
-            await onUploadFile(file);
-          } catch (err) {
-            console.error('Failed to upload attachment:', file.name, err);
-          }
-        },
-      );
-      setUploading(false);
+      attachments = await uploadAndCollect(onUploadFile);
     }
 
-    onSend(input.trim());
+    if (attachments.length > 0) {
+      onSend(input.trim(), undefined, attachments);
+    } else {
+      onSend(input.trim());
+    }
     setInput('');
-    setAttachedFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
-    if (files.length > 0) setAttachedFiles((prev) => [...prev, ...files]);
-  };
-
-  const removeAttachedFile = (index: number) => {
-    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
+    addFiles(files);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -292,6 +288,7 @@ export function LandingInput({
           )}
         </TourAnchor>
         <ChatTrialHint />
+        {showToast && <UploadToast items={toastItems} onDismiss={dismissToast} />}
       </div>
     );
   };

@@ -185,41 +185,204 @@ async def test_bulk_mitigation_generation_populates_each_risk(monkeypatch):
     assert records[risk_item["id"]]["owner"] == "Project data lead"
 
 
+def _risk_payload(title: str, category: str, **overrides):
+    payload = {
+        "title": title,
+        "category": category,
+        "affected_components": "Procurement; schedule",
+        "why_it_matters": "Delay would push the critical path.",
+        "evidence_basis": "Project materials reference an unconfirmed timetable.",
+        "missing_information": "Approved timetable.",
+        "evidence_status": "Needs evidence",
+    }
+    payload.update(overrides)
+    return payload
+
+
+CATEGORIES = [
+    make_build_item({
+        "label": "Sector Policy and Regulatory",
+        "description": "Rules and permits",
+        "why_it_matters": "Project depends on policy approvals.",
+        "status": "Include",
+    }),
+    make_build_item({
+        "label": "Technical Design and Delivery",
+        "description": "Engineering and integration",
+        "why_it_matters": "Delivery complexity is high.",
+        "status": "Include",
+    }),
+]
+
+
+@pytest.mark.parametrize(
+    "context",
+    [
+        {"project_type": "energy_access", "geography": "Kenya", "target_population": "rural households"},
+        {"project_type": "water_sanitation", "geography": "Peru", "target_population": "peri-urban residents"},
+        {"project_type": "urban_transport", "geography": "Vietnam", "target_population": "commuters"},
+        {"project_type": "land_restoration", "geography": "Brazil", "target_population": "smallholder farmers"},
+    ],
+)
 @pytest.mark.asyncio
-async def test_generate_risks_falls_back_to_concrete_category_specific_rows(monkeypatch):
+async def test_generate_risks_keeps_substantive_rows_across_project_demographics(monkeypatch, context):
+    """Screening must not depend on rows echoing their own sector/geography terms."""
     assessment = RiskAssessment()
-    categories = [
-        make_build_item({
-            "label": "Sector Policy and Regulatory",
-            "description": "Rules and permits",
-            "why_it_matters": "Project depends on policy approvals.",
-            "status": "Include",
-        }),
-        make_build_item({
-            "label": "Technical Design and Delivery",
-            "description": "Engineering and integration",
-            "why_it_matters": "Delivery complexity is high.",
-            "status": "Include",
-        }),
+    proposed = [
+        _risk_payload(
+            "Delays in tender evaluation could postpone contract award beyond the funding window",
+            "Sector Policy and Regulatory",
+        ),
+        _risk_payload(
+            "Tariff approval that lags financial close would undermine cost recovery assumptions",
+            "Sector Policy and Regulatory",
+        ),
+        _risk_payload(
+            "Unvalidated site survey data may force redesign after procurement is committed",
+            "Technical Design and Delivery",
+        ),
+        _risk_payload(
+            "Interface gaps between parallel work packages could strand commissioning milestones",
+            "Technical Design and Delivery",
+        ),
     ]
 
     async def fake_llm_json(*args, **kwargs):
-        return {"risks": []}
+        return {"risks": proposed}
 
     monkeypatch.setattr("app.domain.energy.assessments.risk_assessment.llm_json", fake_llm_json)
 
-    risks = await assessment._generate_risks(
-        {
-            "project_type": "energy_access",
-            "geography": "Kenya",
-            "project_description": "Distributed energy rollout",
-        },
-        categories,
-    )
+    risks = await assessment._generate_risks(context, CATEGORIES)
 
-    assert len(risks) >= 4
-    titles = [risk["title"].lower() for risk in risks]
-    assert not any("variables need validation" in title for title in titles)
-    assert not any("category-specific execution risk" in title for title in titles)
-    assert any("permitting" in title or "approval" in title for title in titles)
-    assert any("design variables" in title or "integration" in title for title in titles)
+    assert len(risks) == 4
+    assert {risk["category"] for risk in risks} == {
+        "Sector Policy and Regulatory",
+        "Technical Design and Delivery",
+    }
+    assert all(risk["evidence_status"] == "Needs evidence" for risk in risks)
+
+
+@pytest.mark.asyncio
+async def test_generate_risks_drops_placeholders_and_label_only_rows(monkeypatch):
+    assessment = RiskAssessment()
+
+    async def fake_llm_json(*args, **kwargs):
+        return {
+            "risks": [
+                _risk_payload("Needs validation", "Sector Policy and Regulatory"),
+                _risk_payload("Procurement risk", "Sector Policy and Regulatory"),
+                _risk_payload("Design variables to be confirmed", "Technical Design and Delivery"),
+                _risk_payload(
+                    "Missing hydrological baseline could invalidate sizing assumptions at final design",
+                    "Technical Design and Delivery",
+                    why_it_matters="",
+                ),
+                _risk_payload(
+                    "Permit sequencing that slips past mobilization could idle the contractor",
+                    "Sector Policy and Regulatory",
+                ),
+            ]
+        }
+
+    monkeypatch.setattr("app.domain.energy.assessments.risk_assessment.llm_json", fake_llm_json)
+
+    risks = await assessment._generate_risks({"project_type": "energy_access", "geography": "Kenya"}, CATEGORIES)
+
+    titles = [risk["title"] for risk in risks]
+    assert titles == ["Permit sequencing that slips past mobilization could idle the contractor"]
+
+
+@pytest.mark.asyncio
+async def test_generate_risks_dedupes_and_caps_per_category(monkeypatch):
+    assessment = RiskAssessment()
+
+    async def fake_llm_json(*args, **kwargs):
+        return {
+            "risks": [
+                _risk_payload(f"Escalating input costs could erode budget headroom in phase {n}", "Technical Design and Delivery")
+                for n in range(1, 8)
+            ] + [
+                # Same statement, different casing/spacing — must collapse to one row.
+                _risk_payload("Escalating input costs could erode budget headroom in phase 1", "Technical Design and Delivery"),
+                _risk_payload("ESCALATING  input costs could erode budget headroom in phase 1", "Technical Design and Delivery"),
+            ]
+        }
+
+    monkeypatch.setattr("app.domain.energy.assessments.risk_assessment.llm_json", fake_llm_json)
+
+    risks = await assessment._generate_risks({"project_type": "energy_access"}, CATEGORIES)
+
+    technical = [risk for risk in risks if risk["category"] == "Technical Design and Delivery"]
+    assert len(technical) == 4
+    assert len({risk["title"].lower() for risk in technical}) == 4
+
+
+@pytest.mark.asyncio
+async def test_thin_categories_are_topped_up_by_a_second_model_pass(monkeypatch):
+    """Depth comes from another model call, never from static template text."""
+    assessment = RiskAssessment()
+    calls = []
+
+    async def fake_llm_json(*args, **kwargs):
+        calls.append(kwargs.get("user_msg", ""))
+        if len(calls) == 1:
+            return {
+                "risks": [
+                    _risk_payload(
+                        "Tariff approval that lags financial close would undermine cost recovery",
+                        "Sector Policy and Regulatory",
+                    ),
+                    _risk_payload(
+                        "Permit sequencing that slips past mobilization could idle the contractor",
+                        "Sector Policy and Regulatory",
+                    ),
+                ]
+            }
+        return {
+            "risks": [
+                _risk_payload(
+                    "Unvalidated load profiles could size the system incorrectly at detailed design",
+                    "Technical Design and Delivery",
+                ),
+                _risk_payload(
+                    "Interface gaps between work packages could strand commissioning milestones",
+                    "Technical Design and Delivery",
+                ),
+            ]
+        }
+
+    monkeypatch.setattr("app.domain.energy.assessments.risk_assessment.llm_json", fake_llm_json)
+
+    risks = await assessment._generate_risks({"project_type": "energy_access", "geography": "Kenya"}, CATEGORIES)
+
+    assert len(calls) == 2
+    assert "still need more risks" in calls[1]
+    assert "Technical Design and Delivery" in calls[1]
+    technical = [risk for risk in risks if risk["category"] == "Technical Design and Delivery"]
+    assert len(technical) == 2
+
+
+@pytest.mark.asyncio
+async def test_top_up_failure_keeps_first_pass_risks(monkeypatch):
+    assessment = RiskAssessment()
+    calls = []
+
+    async def fake_llm_json(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            return {
+                "risks": [
+                    _risk_payload(
+                        "Tariff approval that lags financial close would undermine cost recovery",
+                        "Sector Policy and Regulatory",
+                    ),
+                ]
+            }
+        raise RuntimeError("model unavailable")
+
+    monkeypatch.setattr("app.domain.energy.assessments.risk_assessment.llm_json", fake_llm_json)
+
+    risks = await assessment._generate_risks({"project_type": "energy_access"}, CATEGORIES)
+
+    assert len(risks) == 1
+    assert risks[0]["category"] == "Sector Policy and Regulatory"

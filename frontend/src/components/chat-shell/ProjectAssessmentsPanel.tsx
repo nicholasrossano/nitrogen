@@ -101,16 +101,27 @@ export function ProjectAssessmentsPanel({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto p-3">
+      <div className="flex flex-1 min-h-0 flex-col overflow-y-auto p-3">
         {loading ? (
           <div className="flex items-center gap-2 text-xs text-text-tertiary px-1">
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
             Loading…
           </div>
         ) : rows.length === 0 ? (
-          <p className="px-1 text-xs text-text-secondary">
-            No assessments yet. Open Assessments to get started.
-          </p>
+          <div className="flex flex-1 flex-col items-center justify-center gap-2.5 px-1 text-center">
+            <p className="text-xs text-text-secondary">
+              No assessments yet.
+            </p>
+            {onViewAll ? (
+              <button
+                type="button"
+                onClick={onViewAll}
+                className="btn-primary !h-7 !rounded-md !px-2.5 !py-0 !text-[11px] !font-medium !leading-none"
+              >
+                Start an Assessment
+              </button>
+            ) : null}
+          </div>
         ) : (
           <ul className="space-y-1.5">
             {rows.map((row) => {

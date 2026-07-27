@@ -1,4 +1,4 @@
-import type { SourceCitation } from '@/lib/api';
+import type { MessageAttachment, SourceCitation } from '@/lib/api';
 
 export interface CompletionMeta {
   latency_ms: number;
@@ -17,6 +17,8 @@ export interface CoreChatMessage {
   completionMeta?: CompletionMeta;
   widget_type?: string | null;
   widget_data?: Record<string, any> | null;
+  /** Files attached to this message via the composer paperclip */
+  attachments?: MessageAttachment[] | null;
 }
 
 export interface ChatSummary {

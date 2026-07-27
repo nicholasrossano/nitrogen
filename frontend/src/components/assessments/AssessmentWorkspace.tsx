@@ -246,6 +246,14 @@ function ConfirmationBar({
   }
 
   if (status === 'pending' && !hasData) {
+    if (suppressConfirmAction || isPopulating) {
+      return (
+        <div className="flex items-center gap-2 py-3 px-4 border-t border-divider">
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
+          <span className="text-xs text-text-secondary">Generating {stageDef.title.toLowerCase()}...</span>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center justify-between py-3 px-4 border-t border-divider">
         <p className="text-xs text-text-tertiary">Populate this stage to get started</p>
@@ -832,7 +840,18 @@ export function AssessmentWorkspace({
 
   const currentStageState = stages[currentStageDef.id] ?? { status: 'pending', confirmed_at: null, confirmed_by: null, data: null };
   const isEditingConfirmedStage = !!editingConfirmedStageIds[currentStageDef.id];
-  const isStageGenerating = currentStageState.status === 'populating' || isPopulating;
+  const isAgentRunning = agentStatus?.run_state === 'running' || isRunningAssessment;
+  const stageHasPopulatedData = !!(
+    currentStageState.data?.items?.length
+    || currentStageState.data?.widget_data
+    || currentStageState.data?.records
+  );
+  // Agent can be "running" before the current stage flips to populating — treat
+  // empty pending stages as generating so we don't show a manual-add empty state.
+  const isStageGenerating =
+    currentStageState.status === 'populating'
+    || isPopulating
+    || (isAgentRunning && currentStageState.status === 'pending' && !stageHasPopulatedData);
   const currentStageDataSignature = stableStringify(currentStageState.data ?? null);
   const baselineSignature = editBaselineByStageId[currentStageDef.id];
   const hasPendingConfirmedStageChanges =
@@ -954,11 +973,31 @@ export function AssessmentWorkspace({
     }
 
     if ((component === 'list' || component === 'record') && widget === 'categorized_workspace') {
-      // Find the prior confirmed list stage to get categories from
-      const priorListStage = stageDefs.slice(0, currentIdx).reverse().find((s) => s.component === 'list');
+      // Record stages persist only { source_stage_id, records } — the rows to
+      // render belong to the source list stage, so pull them in and group by the
+      // list stage that preceded the source (not the source itself).
+      const isRecordStage = component === 'record';
+      const sourceStageId = isRecordStage
+        ? (currentStageState.data?.source_stage_id
+          ?? stageDefs.slice(0, currentIdx).reverse().find((s) => s.component === 'list')?.id
+          ?? null)
+        : null;
+      const groupingBeforeIdx = sourceStageId
+        ? stageDefs.findIndex((s) => s.id === sourceStageId)
+        : currentIdx;
+      const priorListStage = stageDefs
+        .slice(0, groupingBeforeIdx >= 0 ? groupingBeforeIdx : currentIdx)
+        .reverse()
+        .find((s) => s.component === 'list');
       const categoryItems = priorListStage
         ? (stages[priorListStage.id]?.data?.items ?? [])
         : [];
+      const workspaceStageData = sourceStageId
+        ? {
+            ...(currentStageState.data ?? {}),
+            items: stages[sourceStageId]?.data?.items ?? [],
+          }
+        : currentStageState.data;
 
       return (
         <CategorizedWorkspaceStage
@@ -966,7 +1005,7 @@ export function AssessmentWorkspace({
           stageId={stageId}
           workflowVersion={state.workflow_version}
           stageDef={currentStageDef}
-          stageData={currentStageState.data}
+          stageData={workspaceStageData}
           categoryItems={categoryItems}
           interactionLocked={isStageGenerating}
           readOnly={readOnly}
@@ -981,7 +1020,6 @@ export function AssessmentWorkspace({
   };
 
   const isComputedStage = currentStageDef.component === 'computed_results';
-  const isAgentRunning = agentStatus?.run_state === 'running' || isRunningAssessment;
   const isAssessmentMapWidget = isComputedStage
     && (
       currentStageDef.widget === 'assessment_map'
@@ -1236,7 +1274,7 @@ export function AssessmentWorkspace({
                 <div className="p-4 border-b border-divider">
                   <h3 className="text-sm font-semibold text-text-primary">{currentStageDef.title}</h3>
                   <p className="text-xs text-text-tertiary mt-0.5">
-                    {currentStageState.status === 'pending' && 'Not started'}
+                    {currentStageState.status === 'pending' && (isStageGenerating ? 'Generating…' : 'Not started')}
                     {currentStageState.status === 'populating' && 'Generating…'}
                     {currentStageState.status === 'draft' && 'Ready for your review'}
                     {isStageConfirmed(currentStageState.status) && 'Confirmed'}

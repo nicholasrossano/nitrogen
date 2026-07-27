@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Check, Trash2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 
 import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/AssessmentPicker';
 import { ConfirmButton } from '@/components/ui';
+import { UniversalLoadingIcon } from '@/components/ui/PageLoader';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { useProjectStore } from '@/stores/projectStore';
 
@@ -26,10 +26,15 @@ interface AssessmentChecklistWidgetProps {
   data: Record<string, any>;
   projectId: string;
   isActive?: boolean;
+  onStartAssessment?: (assessmentId: string, assessmentName: string) => Promise<void>;
 }
 
-export function AssessmentChecklistWidget({ data, projectId, isActive = true }: AssessmentChecklistWidgetProps) {
-  const router = useRouter();
+export function AssessmentChecklistWidget({
+  data,
+  projectId,
+  isActive = true,
+  onStartAssessment,
+}: AssessmentChecklistWidgetProps) {
   const recommendations = useMemo(
     () => ((data?.recommendations || []) as AssessmentRecommendation[])
       .filter((recommendation) => recommendation?.tool?.id),
@@ -40,6 +45,7 @@ export function AssessmentChecklistWidget({ data, projectId, isActive = true }: 
   const selectTools = useProjectStore((s) => s.selectTools);
   const [confirmedLocal, setConfirmedLocal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [startingAssessmentId, setStartingAssessmentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const assessmentMetaById = useMemo(
@@ -61,16 +67,22 @@ export function AssessmentChecklistWidget({ data, projectId, isActive = true }: 
       .map((recommendation) => recommendation.tool.id);
   }, [visibleRecommendations]);
   const initialSelectedKey = initialSelectedIds.join('|');
+  const persistedSelectedTools = project?.selected_tools ?? null;
+  const persistedSelectedKey = (persistedSelectedTools ?? []).join('|');
 
   const [selectedAssessments, setSelectedAssessments] = useState<Set<string>>(
     () => new Set(initialSelectedIds),
   );
 
   useEffect(() => {
+    if (persistedSelectedTools && persistedSelectedTools.length > 0) {
+      setSelectedAssessments(new Set(persistedSelectedTools));
+      return;
+    }
     if (!confirmedLocal) {
       setSelectedAssessments(new Set(initialSelectedIds));
     }
-  }, [confirmedLocal, initialSelectedIds, initialSelectedKey]);
+  }, [confirmedLocal, initialSelectedIds, initialSelectedKey, persistedSelectedKey, persistedSelectedTools]);
 
   const selectedRecommendations = useMemo(
     () => visibleRecommendations.filter((recommendation) => selectedAssessments.has(recommendation.tool.id)),
@@ -106,11 +118,11 @@ export function AssessmentChecklistWidget({ data, projectId, isActive = true }: 
     return grouped;
   }, [selectedRecommendations]);
 
-  const title = 'Framework Plan';
+  const title = 'Proposed Assessments';
 
   const confirmed =
     confirmedLocal ||
-    Boolean(project?.selected_tools && project.selected_tools.length > 0);
+    Boolean(persistedSelectedTools && persistedSelectedTools.length > 0);
   const canInteract = isActive && !confirmed && !submitting;
 
   if (!visibleRecommendations.length) {
@@ -145,12 +157,24 @@ export function AssessmentChecklistWidget({ data, projectId, isActive = true }: 
       if (afterSelect.error) {
         throw new Error(afterSelect.error);
       }
-      router.replace(`/projects/${projectId}?panel=assessments`);
     } catch (nextError) {
       setConfirmedLocal(false);
       setError(nextError instanceof Error ? nextError.message : 'Failed to confirm framework.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleStartAssessment = async (assessmentId: string, assessmentName: string) => {
+    if (!onStartAssessment || startingAssessmentId) return;
+    setStartingAssessmentId(assessmentId);
+    setError(null);
+    try {
+      await onStartAssessment(assessmentId, assessmentName);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Failed to start assessment.');
+    } finally {
+      setStartingAssessmentId(null);
     }
   };
 
@@ -172,12 +196,14 @@ export function AssessmentChecklistWidget({ data, projectId, isActive = true }: 
               {category.items.map((recommendation) => {
                 const assessmentId = recommendation.tool.id;
                 const assessmentMeta = assessmentMetaById.get(assessmentId);
+                const assessmentName = recommendation.tool.name;
+                const isStarting = startingAssessmentId === assessmentId;
                 return (
                   <div
                     key={assessmentId}
                     className={`group relative overflow-hidden rounded-xl border border-black/[0.04] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-colors ${
                       selectedAssessments.has(assessmentId) ? 'bg-accent-wash' : ''
-                    } ${!canInteract ? 'opacity-80' : ''}`}
+                    } ${!canInteract && !confirmed ? 'opacity-80' : ''}`}
                   >
                     <div className="flex items-start gap-3 px-4 py-3.5">
                       <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded bg-accent-wash text-accent [&>svg]:h-5 [&>svg]:w-5">
@@ -186,21 +212,44 @@ export function AssessmentChecklistWidget({ data, projectId, isActive = true }: 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-2">
                           <p className="text-sm font-medium text-text-primary">
-                            {recommendation.tool.name}
+                            {assessmentName}
                           </p>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleAssessment(assessmentId)}
-                            disabled={!canInteract}
-                            aria-label={`Remove ${recommendation.tool.name}`}
-                            className="inline-flex h-6 w-6 items-center justify-center rounded text-text-tertiary transition-colors enabled:hover:bg-white/60 enabled:hover:text-indicator-orange disabled:cursor-not-allowed"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          {!confirmed && (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleAssessment(assessmentId)}
+                              disabled={!canInteract}
+                              aria-label={`Remove ${assessmentName}`}
+                              className="inline-flex h-6 w-6 items-center justify-center rounded text-text-tertiary transition-colors enabled:hover:bg-white/60 enabled:hover:text-indicator-orange disabled:cursor-not-allowed"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </div>
                         <p className="mt-1 text-xs leading-5 text-text-secondary">
                           {recommendation.tool.description}
                         </p>
+                        {confirmed && onStartAssessment && (
+                          <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              disabled={Boolean(startingAssessmentId)}
+                              onClick={() => {
+                                void handleStartAssessment(assessmentId, assessmentName);
+                              }}
+                              className="inline-flex h-7 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-accent bg-accent px-2.5 text-xs font-medium text-white transition-colors enabled:hover:border-accent-hover enabled:hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {isStarting ? (
+                                <>
+                                  <UniversalLoadingIcon size={12} colorClassName="text-white" />
+                                  Start Task
+                                </>
+                              ) : (
+                                'Start Task'
+                              )}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

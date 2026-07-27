@@ -411,7 +411,7 @@ export function CategorizedListStage({
         />
       )}
 
-      {!interactionsDisabled && !adding && (
+      {!interactionsDisabled && !adding && !isLoading && (
         <div className="flex justify-center py-1">
           <button
             onClick={() => setAdding(true)}

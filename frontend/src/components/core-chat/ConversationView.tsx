@@ -17,7 +17,7 @@ import {
   Paperclip,
 } from 'lucide-react';
 import type { CoreChatMessage } from '@/types/chat';
-import { FieldContext, SourceCitation, ResearchStep } from '@/lib/api';
+import { FieldContext, MessageAttachment, SourceCitation, ResearchStep } from '@/lib/api';
 import { ThinkingLogs } from './ThinkingLogs';
 import { FLOAT_WIDGET_TYPES } from '@/components/editor/FloatLayer';
 import { track } from '@/lib/analytics';
@@ -32,6 +32,8 @@ import type { ResearchPanelCitation } from './ResearchPanel';
 import { CitationChip } from '@/components/ui/CitationChip';
 import { TourAnchor } from '@/components/tour/TourAnchor';
 import { ChatTrialHint } from '@/components/ui/ChatTrialHint';
+import { UploadToast } from '@/components/ui/UploadToast';
+import { useComposerAttachments } from '@/hooks/useComposerAttachments';
 
 export interface ConversationViewProps {
   messages: CoreChatMessage[];
@@ -45,8 +47,9 @@ export interface ConversationViewProps {
     toolHint?: string,
     fieldContext?: FieldContext | null,
     modelInputsContext?: string | null,
+    attachments?: MessageAttachment[],
   ) => void;
-  onUploadFile?: (file: File) => Promise<void>;
+  onUploadFile?: (file: File) => Promise<MessageAttachment | null>;
   onEditMessage: (messageId: string, newContent: string) => void;
   onRetryMessage: (messageId: string) => void;
   messageFeedback: Record<string, 'like' | 'dislike' | null>;
@@ -71,6 +74,8 @@ export interface ConversationViewProps {
   topContentMode?: 'inline' | 'panel';
   /** Apply a proposed model value to its backing assessment workflow. */
   onApplyProposedValue?: (request: ProposedValueApplyRequest) => boolean | Promise<boolean>;
+  /** Start an assessment instance from an in-chat framework plan widget. */
+  onStartAssessment?: (assessmentId: string, assessmentName: string) => Promise<void>;
   /** Show file attachment controls in the composer */
   showAttachments?: boolean;
   /** Loading an existing chat history from the server */
@@ -112,6 +117,7 @@ export function ConversationView({
   topContent,
   topContentMode = 'inline',
   onApplyProposedValue,
+  onStartAssessment,
   showAttachments = true,
   historyLoading = false,
   sendDisabled = false,
@@ -124,8 +130,16 @@ export function ConversationView({
   const [draftTag, setDraftTag] = useState<string | null>(null);
   const [draftFieldContext, setDraftFieldContext] = useState<FieldContext | null>(null);
   const [draftModelInputsContext, setDraftModelInputsContext] = useState<string | null>(null);
-  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
-  const [uploading, setUploading] = useState(false);
+  const {
+    attachedFiles,
+    addFiles,
+    removeFile: removeAttachedFile,
+    uploading,
+    uploadAndCollect,
+    toastItems,
+    showToast,
+    dismissToast,
+  } = useComposerAttachments();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -226,23 +240,9 @@ export function ConversationView({
     e.preventDefault();
     if (!input.trim() || sending || uploading || sendDisabled) return;
 
+    let attachments: MessageAttachment[] = [];
     if (attachedFiles.length > 0 && onUploadFile) {
-      setUploading(true);
-      const { runWithConcurrency, DEFAULT_UPLOAD_CONCURRENCY } = await import(
-        '@/lib/fileUtils'
-      );
-      await runWithConcurrency(
-        attachedFiles,
-        DEFAULT_UPLOAD_CONCURRENCY,
-        async (file) => {
-          try {
-            await onUploadFile(file);
-          } catch (err) {
-            console.error('Failed to upload attachment:', file.name, err);
-          }
-        },
-      );
-      setUploading(false);
+      attachments = await uploadAndCollect(onUploadFile);
     }
 
     debugChatFlow('composer-send', {
@@ -252,22 +252,21 @@ export function ConversationView({
       has_field_context: Boolean(draftFieldContext),
       has_model_inputs_context: Boolean(draftModelInputsContext),
     });
-    onSendMessage(input.trim(), undefined, draftFieldContext, draftModelInputsContext);
+    if (attachments.length > 0) {
+      onSendMessage(input.trim(), undefined, draftFieldContext, draftModelInputsContext, attachments);
+    } else {
+      onSendMessage(input.trim(), undefined, draftFieldContext, draftModelInputsContext);
+    }
     setInput('');
     setDraftTag(null);
     setDraftFieldContext(null);
     setDraftModelInputsContext(null);
-    setAttachedFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
-    if (files.length > 0) setAttachedFiles((prev) => [...prev, ...files]);
-  };
-
-  const removeAttachedFile = (index: number) => {
-    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
+    addFiles(files);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -421,6 +420,7 @@ export function ConversationView({
           <ChatTrialHint />
         </div>
       </div>
+      {showToast && <UploadToast items={toastItems} onDismiss={dismissToast} />}
     </div>
   ) : null;
 
@@ -483,6 +483,7 @@ export function ConversationView({
                 onOpenDocument={onOpenDocument}
                 onSendMessage={(content) => onSendMessage(content)}
                 onApplyProposedValue={onApplyProposedValue}
+                onStartAssessment={onStartAssessment}
               />
             );
           })}
@@ -537,6 +538,7 @@ export function ConversationView({
               isActive={true}
               onDocumentRequestMessage={(content) => onSendMessage(content)}
               onApplyProposedValue={onApplyProposedValue}
+              onStartAssessment={onStartAssessment}
             />
           </div>
         </div>
@@ -944,6 +946,7 @@ function MessageBubble({
   onOpenDocument,
   onSendMessage,
   onApplyProposedValue,
+  onStartAssessment,
 }: {
   message: CoreChatMessage;
   animate: boolean;
@@ -958,6 +961,7 @@ function MessageBubble({
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   onSendMessage: (content: string) => void | Promise<void>;
   onApplyProposedValue?: (request: ProposedValueApplyRequest) => boolean | Promise<boolean>;
+  onStartAssessment?: (assessmentId: string, assessmentName: string) => Promise<void>;
 }) {
   const isUser = message.role === 'user';
   const enterClass = animate ? (isUser ? 'message-enter' : 'message-enter-bot') : '';
@@ -1025,10 +1029,26 @@ function MessageBubble({
         )}
 
         {isUser ? (
-          <div ref={bubbleRef} className="px-4 py-3 rounded-2xl bg-zinc-700 text-white prose-user">
-            <ReactMarkdown components={streamingMarkdownComponents}>
-              {message.content.replace(/\n?\[TEMPLATE_CONTEXT\][\s\S]*?\[\/TEMPLATE_CONTEXT\]/g, '').trim()}
-            </ReactMarkdown>
+          <div className="flex flex-col items-end gap-1.5">
+            {message.attachments && message.attachments.length > 0 && (
+              <div className="flex flex-wrap justify-end gap-1.5">
+                {message.attachments.map((att) => (
+                  <span
+                    key={att.id}
+                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-subtle border border-stroke-subtle text-[11px] font-medium text-text-secondary leading-none max-w-[200px]"
+                    title={att.filename}
+                  >
+                    <Paperclip className="w-2.5 h-2.5 shrink-0" />
+                    <span className="truncate">{att.filename}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div ref={bubbleRef} className="px-4 py-3 rounded-2xl bg-zinc-700 text-white prose-user">
+              <ReactMarkdown components={streamingMarkdownComponents}>
+                {message.content.replace(/\n?\[TEMPLATE_CONTEXT\][\s\S]*?\[\/TEMPLATE_CONTEXT\]/g, '').trim()}
+              </ReactMarkdown>
+            </div>
           </div>
         ) : (
           <div className="prose-chat w-full">
@@ -1054,6 +1074,7 @@ function MessageBubble({
               isActive={isLatest}
               onSendMessage={(content) => onSendMessage(content)}
               onApplyProposedValue={onApplyProposedValue}
+              onStartAssessment={onStartAssessment}
             />
           </div>
         )}
@@ -1071,6 +1092,7 @@ function ChatWidget({
   isActive,
   onSendMessage,
   onApplyProposedValue,
+  onStartAssessment,
 }: {
   type: string;
   data: Record<string, any>;
@@ -1079,6 +1101,7 @@ function ChatWidget({
   isActive?: boolean;
   onSendMessage?: (content: string) => void | Promise<void>;
   onApplyProposedValue?: (request: ProposedValueApplyRequest) => boolean | Promise<boolean>;
+  onStartAssessment?: (assessmentId: string, assessmentName: string) => Promise<void>;
 }) {
   return (
     <ChatWidgetRenderer
@@ -1089,6 +1112,7 @@ function ChatWidget({
       isActive={isActive}
       onSendMessage={onSendMessage}
       onApplyProposedValue={onApplyProposedValue}
+      onStartAssessment={onStartAssessment}
     />
   );
 }

@@ -61,6 +61,9 @@ class CoreChatMessage(Base):
     widget_type: Mapped[str | None] = mapped_column(String(50))
     widget_data: Mapped[dict | None] = mapped_column(JSONB)
     feedback: Mapped[str | None] = mapped_column(String(20))
+    # Files attached to this message, e.g. [{"id", "filename", "file_type", "file_size"}].
+    # References ProjectMaterial rows uploaded via the composer paperclip.
+    attachments: Mapped[list | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     chat: Mapped["CoreChat"] = relationship(back_populates="messages")

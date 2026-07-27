@@ -122,6 +122,7 @@ export const chatApi = {
     compareProjectIds?: string[] | null,
     allowInitialProjectOnboarding?: boolean,
     activeEditorContext?: ActiveEditorContext | null,
+    attachmentIds?: string[] | null,
   ) => {
     if (isDemoActive()) {
       await streamDemoPlaceholderReply({
@@ -176,6 +177,7 @@ export const chatApi = {
         compare_project_ids: compareProjectIds ?? null,
         allow_initial_project_onboarding: Boolean(allowInitialProjectOnboarding),
         active_editor_context: activeEditorContext ?? null,
+        attachment_ids: attachmentIds ?? null,
       }),
     });
 

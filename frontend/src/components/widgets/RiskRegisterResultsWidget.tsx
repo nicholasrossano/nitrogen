@@ -33,6 +33,8 @@ interface CategoryRating {
   category: string;
   rating: string;
   rationale?: string;
+  top_risks?: string[];
+  unresolved_issues?: string[];
 }
 
 interface TopRisk {
@@ -332,8 +334,27 @@ export function RiskRegisterResultsWidget({
                   <RatingBadge rating={category.rating} />
                 </div>
                 <p className="mt-2 text-xs leading-relaxed text-text-secondary">{category.rationale}</p>
+                {(category.top_risks?.length ?? 0) > 0 && (
+                  <div className="mt-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">Top Risks</p>
+                    <ul className="mt-1 list-disc space-y-1 pl-4 text-[11px] leading-relaxed text-text-secondary">
+                      {category.top_risks?.map((risk, index) => <li key={index}>{risk}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {(category.unresolved_issues?.length ?? 0) > 0 && (
+                  <div className="mt-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">Unresolved</p>
+                    <ul className="mt-1 list-disc space-y-1 pl-4 text-[11px] leading-relaxed text-amber-700">
+                      {category.unresolved_issues?.map((issue, index) => <li key={index}>{issue}</li>)}
+                    </ul>
+                  </div>
+                )}
               </div>
             ))}
+            {categoryRatings.length === 0 && (
+              <p className="text-sm text-text-tertiary">No category ratings were generated.</p>
+            )}
           </div>
         )}
 

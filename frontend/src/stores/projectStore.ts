@@ -50,6 +50,15 @@ interface ProjectState {
   loadEvidence: (id: string) => Promise<void>;
   loadMaterials: (id: string) => Promise<void>;
   uploadMaterial: (id: string, file: File) => Promise<void>;
+  /**
+   * Upload a file attached from the chat composer. Unlike `uploadMaterial`
+   * (which goes through the async evidence/RAG pipeline), this hits the
+   * synchronous `/materials` endpoint so extracted text is available
+   * immediately — the caller (chat) needs it for the very next reply, not
+   * just for later retrieval. Returns the created material so the composer
+   * can attach it to the outgoing message.
+   */
+  uploadChatAttachment: (id: string, file: File) => Promise<ProjectMaterial>;
   deleteMaterial: (materialId: string, source?: string | null) => Promise<void>;
   loadDriveLinkedFiles: (id: string) => Promise<void>;
   importFromDrive: (id: string, fileIds: string[]) => Promise<DriveImportResult>;
@@ -293,6 +302,21 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       console.error('Failed to upload material:', error);
       throw error;
     }
+  },
+
+  uploadChatAttachment: async (id: string, file: File) => {
+    const response = await api.uploadProjectMaterial(id, file);
+    const material = response.material;
+    set((state) => {
+      const projectMaterials = [
+        material,
+        ...state.projectMaterials.filter((m) => m.id !== material.id),
+      ];
+      setCached(swrKeys.materials(id), projectMaterials);
+      return { projectMaterials, materialsProjectId: id };
+    });
+    notifyProjectSignalsUpdated(id);
+    return material;
   },
 
   deleteMaterial: async (materialId: string, source?: string | null) => {

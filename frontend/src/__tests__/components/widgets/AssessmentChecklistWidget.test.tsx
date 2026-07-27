@@ -6,17 +6,8 @@ import { AssessmentChecklistWidget } from '@/components/widgets/AssessmentCheckl
 import { useProjectStore } from '@/stores/projectStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 
-const replace = jest.fn();
-
-jest.mock('next/navigation', () => ({
-  useRouter: () => ({
-    replace,
-  }),
-}));
-
 describe('AssessmentChecklistWidget', () => {
   beforeEach(() => {
-    replace.mockReset();
     useSettingsStore.setState({ devMode: false });
     useProjectStore.setState({
       project: { id: 'initiative-123', selected_tools: null } as any,
@@ -89,7 +80,64 @@ describe('AssessmentChecklistWidget', () => {
 
     await waitFor(() => {
       expect(selectTools).toHaveBeenCalledWith('initiative-123', ['landscape_mapping']);
-      expect(replace).toHaveBeenCalledWith('/projects/initiative-123?panel=assessments');
+    });
+  });
+
+  it('shows Start Task after confirm and starts the assessment', async () => {
+    const selectTools = jest.fn().mockImplementation(async () => {
+      useProjectStore.setState({
+        error: null,
+        project: {
+          id: 'initiative-123',
+          selected_tools: ['landscape_mapping'],
+        } as any,
+      });
+    });
+    const onStartAssessment = jest.fn().mockResolvedValue(undefined);
+
+    useProjectStore.setState({
+      project: { id: 'initiative-123', selected_tools: null } as any,
+      projectPlan: null,
+      error: null,
+      selectTools,
+    });
+
+    render(
+      <AssessmentChecklistWidget
+        projectId="initiative-123"
+        isActive
+        onStartAssessment={onStartAssessment}
+        data={{
+          title: 'Recommended Framework Assessments',
+          recommendations: [
+            {
+              tool: {
+                id: 'landscape_mapping',
+                name: 'Landscape Mapping',
+                description: 'Map the ecosystem of actors and initiatives',
+                icon: 'Map',
+                output_type: 'analysis',
+                category: 'opportunity',
+              },
+              confidence: 0.92,
+              recommended: true,
+            },
+          ],
+        }}
+      />,
+    );
+
+    await act(async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    });
+
+    const startTask = await screen.findByRole('button', { name: 'Start Task' });
+    await act(async () => {
+      await userEvent.click(startTask);
+    });
+
+    await waitFor(() => {
+      expect(onStartAssessment).toHaveBeenCalledWith('landscape_mapping', 'Landscape Mapping');
     });
   });
 

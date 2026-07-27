@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Loader2, RefreshCw, SquarePen } from 'lucide-react';
 import { api } from '@/lib/api';
-import type { ChatMessage, FieldContext, ResearchStep, ActiveEditorContext } from '@/lib/api';
+import type { ChatMessage, FieldContext, MessageAttachment, ResearchStep, ActiveEditorContext } from '@/lib/api';
 import type { ResearchPanelCitation } from './ResearchPanel';
 import { useProjectStore } from '@/stores/projectStore';
 import { filterSupportedFiles } from '@/lib/fileUtils';
@@ -102,6 +102,8 @@ interface ProjectChatSurfaceProps {
     chatId?: string | null;
     chatTitle?: string | null;
   }) => void;
+  /** Start an assessment from the in-chat framework plan widget (create instance + open workspace). */
+  onStartAssessment?: (assessmentId: string, assessmentName: string) => Promise<void>;
   /** Ref that the parent can call to programmatically trigger a send */
   onSendRef?: React.MutableRefObject<((content: string, toolHint?: string) => void) | null>;
   /** Shared session history (project + user scoped) */
@@ -158,6 +160,7 @@ function toCoreMessage(m: ChatMessage): CoreChatMessage {
       : undefined,
     widget_type: m.widget_type,
     widget_data: m.widget_data,
+    attachments: m.attachments ?? null,
   };
 }
 
@@ -197,6 +200,7 @@ export function ProjectChatSurface({
   onChatMetaChange,
   onLandingStateChange,
   onOpenWorkspaceAssessment,
+  onStartAssessment,
   onSendRef,
   sessions = [],
   activeAssessmentContext = null,
@@ -249,7 +253,7 @@ export function ProjectChatSurface({
 
   const project = useProjectStore((s) => s.project);
   const projectMaterials = useProjectStore((s) => s.projectMaterials);
-  const uploadMaterial = useProjectStore((s) => s.uploadMaterial);
+  const uploadChatAttachment = useProjectStore((s) => s.uploadChatAttachment);
   const generateProjectOverview = useProjectStore((s) => s.generateProjectOverview);
   const isOverviewLanding = hideTiles && !landingHeaderContent;
 
@@ -624,6 +628,7 @@ export function ProjectChatSurface({
       associatedAssessment?: { instanceId: string; assessmentId: string; title?: string | null } | null,
       variableId?: string | null,
       activeEditorContextOverride?: ActiveEditorContext | null,
+      attachments?: MessageAttachment[] | null,
     ) => {
       const history = currentMessages.slice(0, -1).map((m) => ({
         role: m.role,
@@ -750,6 +755,7 @@ export function ProjectChatSurface({
         compareIds,
         allowInitialProjectOnboarding,
         activeEditorContextOverride ?? null,
+        attachments?.map((a) => a.id) ?? null,
       );
     },
     [
@@ -763,12 +769,20 @@ export function ProjectChatSurface({
   );
 
   const handleUploadFile = useCallback(
-    async (file: File) => {
+    async (file: File): Promise<MessageAttachment | null> => {
       const { accepted } = filterSupportedFiles([file]);
-      if (accepted.length === 0) return;
-      await uploadMaterial(projectId, file);
+      if (accepted.length === 0) {
+        throw new Error(`Unsupported file type: ${file.name}`);
+      }
+      const material = await uploadChatAttachment(projectId, file);
+      return {
+        id: material.id,
+        filename: material.filename,
+        file_type: material.file_type,
+        file_size: material.file_size,
+      };
     },
-    [projectId, uploadMaterial],
+    [projectId, uploadChatAttachment],
   );
 
   const handleSend = useCallback(
@@ -778,6 +792,7 @@ export function ProjectChatSurface({
       fieldContext?: FieldContext | null,
       modelInputsContext?: string | null,
       variableIdOverride?: string | null,
+      attachments?: MessageAttachment[] | null,
     ) => {
       onBeforeSendMessage?.();
       onMessageSent?.();
@@ -803,6 +818,7 @@ export function ProjectChatSurface({
         content,
         widget_type: null,
         widget_data: null,
+        attachments: attachments && attachments.length > 0 ? attachments : null,
         created_at: new Date().toISOString(),
       };
 
@@ -836,6 +852,7 @@ export function ProjectChatSurface({
           associatedAssessment,
           effectiveVariableId,
           activeEditorContext,
+          attachments,
         );
       } catch {
         setLocalMessages((prev) =>
@@ -1202,7 +1219,7 @@ export function ProjectChatSurface({
     return (
       <div className="h-full min-h-0">
         <LandingInput
-          onSend={onLandingSend ?? handleSend}
+          onSend={onLandingSend ?? ((content, toolHint, attachments) => handleSend(content, toolHint, undefined, undefined, undefined, attachments))}
           onUploadFile={isDemo ? undefined : handleUploadFile}
           disabled={sending}
           sessions={sessions}
@@ -1293,7 +1310,9 @@ export function ProjectChatSurface({
           researchSteps={researchSteps}
           streamingContent={streamingContent}
           error={error}
-          onSendMessage={handleSend}
+          onSendMessage={(content, toolHint, fieldContext, modelInputsContext, attachments) =>
+            handleSend(content, toolHint, fieldContext, modelInputsContext, undefined, attachments)
+          }
           onUploadFile={isDemo ? undefined : handleUploadFile}
           onEditMessage={handleEditMessage}
           onRetryMessage={handleRetryMessage}
@@ -1308,6 +1327,7 @@ export function ProjectChatSurface({
           topContent={topContent}
           topContentMode={topContentMode}
           onApplyProposedValue={isDemo ? undefined : handleApplyProposedValue}
+          onStartAssessment={onStartAssessment}
           showAttachments={!isDemo && !allowInitialProjectOnboarding}
           historyLoading={loadingChat}
           pendingDraft={pendingAutoSend}

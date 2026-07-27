@@ -22,6 +22,7 @@ interface ChatWidgetRendererProps {
   onSendMessage?: (content: string) => void | Promise<void>;
   onDocumentRequestMessage?: (content: string) => void | Promise<void>;
   onApplyProposedValue?: (request: ProposedValueApplyRequest) => boolean | Promise<boolean>;
+  onStartAssessment?: (assessmentId: string, assessmentName: string) => Promise<void>;
 }
 
 export function ChatWidgetRenderer({
@@ -33,6 +34,7 @@ export function ChatWidgetRenderer({
   onSendMessage,
   onDocumentRequestMessage,
   onApplyProposedValue,
+  onStartAssessment,
 }: ChatWidgetRendererProps) {
   switch (type) {
     case 'confirmation':
@@ -55,7 +57,12 @@ export function ChatWidgetRenderer({
     case 'tool_checklist':
       return projectId ? (
         <ErrorBoundary>
-          <AssessmentChecklistWidget data={data} projectId={projectId} isActive={isActive} />
+          <AssessmentChecklistWidget
+            data={data}
+            projectId={projectId}
+            isActive={isActive}
+            onStartAssessment={onStartAssessment}
+          />
         </ErrorBoundary>
       ) : null;
     case 'deliverables_overview':

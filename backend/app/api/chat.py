@@ -85,6 +85,47 @@ def _build_focused_variable_context(variable: Variable | None) -> str:
     return "\n".join(lines)
 
 
+_MAX_ATTACHMENT_CHARS_PER_FILE = 15000
+_MAX_ATTACHMENT_CHARS_TOTAL = 30000
+
+
+def _build_attached_files_context(materials: list[ProjectMaterial]) -> str:
+    """Format newly-attached files' extracted text for direct injection into the
+    current turn's prompt. Materials extract text synchronously on upload, so — unlike
+    evidence, which indexes in the background — this content is always ready immediately.
+    """
+    if not materials:
+        return ""
+
+    blocks: list[str] = []
+    total_chars = 0
+    for material in materials:
+        if total_chars >= _MAX_ATTACHMENT_CHARS_TOTAL:
+            break
+        text = (material.content_text or "").strip()
+        remaining = _MAX_ATTACHMENT_CHARS_TOTAL - total_chars
+        per_file_limit = min(_MAX_ATTACHMENT_CHARS_PER_FILE, remaining)
+        if text:
+            truncated = text[:per_file_limit]
+            note = "\n\n[...truncated...]" if len(text) > per_file_limit else ""
+            blocks.append(f"### {material.filename}\n{truncated}{note}")
+            total_chars += len(truncated)
+        else:
+            blocks.append(
+                f"### {material.filename}\n[No text could be extracted from this file — "
+                "it may be an image or unsupported layout. It has been saved to the "
+                "project's Files section but its contents are not available here.]"
+            )
+
+    return (
+        "## Files Attached to This Message\n"
+        "The user just attached the following file(s) with this message. Their extracted "
+        "content is included below — read and use it directly to answer, and prioritize it "
+        "when the user refers to \"this file\", \"the attached document\", or similar.\n\n"
+        + "\n\n".join(blocks)
+    )
+
+
 def _build_active_editor_view_context(active_editor_context: dict) -> str:
     """Describe a non-document editor tab for the chat system prompt."""
     kind = active_editor_context.get("kind") or "unknown"
@@ -397,6 +438,7 @@ class ChatStreamRequest(BaseModel):
     allow_initial_project_onboarding: bool = False
     variable_id: Optional[str] = None
     active_editor_context: Optional[dict] = None
+    attachment_ids: Optional[list[str]] = None
 
 
 class TitleRequest(BaseModel):
@@ -551,6 +593,7 @@ async def get_chat_messages(
                 "widget_type": m.widget_type,
                 "widget_data": m.widget_data,
                 "feedback": m.feedback,
+                "attachments": m.attachments,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             }
             for m in messages
@@ -748,10 +791,45 @@ async def chat_stream(
                     detail="Focused variable does not belong to this chat project.",
                 )
 
+            # Resolve any files attached to this message (already uploaded to the
+            # project's materials store before this request was sent). Scoped to
+            # resolved_initiative_id so a user can't reference another project's files.
+            attachments_meta: list[dict] = []
+            attached_files_block: str | None = None
+            if data.attachment_ids and resolved_initiative_id:
+                material_uuids: list[uuid.UUID] = []
+                for raw_id in data.attachment_ids:
+                    try:
+                        material_uuids.append(uuid.UUID(raw_id))
+                    except ValueError:
+                        continue
+                if material_uuids:
+                    materials_result = await db.execute(
+                        select(ProjectMaterial).where(
+                            ProjectMaterial.id.in_(material_uuids),
+                            ProjectMaterial.project_id == resolved_initiative_id,
+                        )
+                    )
+                    materials_by_id = {m.id: m for m in materials_result.scalars().all()}
+                    ordered_materials = [
+                        materials_by_id[u] for u in material_uuids if u in materials_by_id
+                    ]
+                    attachments_meta = [
+                        {
+                            "id": str(m.id),
+                            "filename": m.filename,
+                            "file_type": m.file_type,
+                            "file_size": m.file_size,
+                        }
+                        for m in ordered_materials
+                    ]
+                    attached_files_block = _build_attached_files_context(ordered_materials)
+
             user_msg = CoreChatMessage(
                 chat_id=chat.id,
                 role="user",
                 content=data.content,
+                attachments=attachments_meta or None,
             )
             db.add(user_msg)
             await db.flush()
@@ -928,6 +1006,12 @@ async def chat_stream(
                     if project_context
                     else f"## Active Deep Dive Context\n{supplemental_project_context}"
                 )
+            if attached_files_block:
+                project_context = (
+                    f"{project_context}\n\n{attached_files_block}"
+                    if project_context
+                    else attached_files_block
+                )
 
             active_editor_doc: dict | None = None
             editor_ctx = data.active_editor_context if isinstance(data.active_editor_context, dict) else None
@@ -1100,54 +1184,84 @@ async def chat_stream(
 
                         if _is_onboarding_pivot:
                             async def _direct_assessment_proposal() -> ServiceChatResponse:
+                                from sqlalchemy.exc import OperationalError, TimeoutError as SATimeoutError
                                 from app.plans.registry import get_plan_registry as _get_plan_registry
 
                                 if on_thinking:
                                     await on_thinking("Reviewing uploaded materials…")
 
                                 _plan_handler = _get_plan_registry().default_handler(db, user.uid)
-                                try:
-                                    _structure = await _plan_handler.propose_structure(
-                                        initiative=verified_initiative
-                                    )
-                                    _wt = _plan_handler.definition.structure_widget_type
-                                    _wd = _plan_handler.build_structure_widget_data(_structure)
-                                    _recs = _wd.get("recommendations") or []
-                                    _n = len([
-                                        r for r in _recs
-                                        if isinstance(r, dict) and r.get("recommended")
-                                    ]) or len(_recs)
-                                    _label = "assessment" if _n == 1 else "assessments"
-                                    _msg = (
-                                        f"I've mapped the {_n} {_label} that look most relevant for this project. "
-                                        "Review them below and confirm the framework plan you want to start with."
-                                    ) if _n > 0 else (
-                                        "I've mapped the assessments that look most relevant for this project. "
-                                        "Review them below and confirm the framework plan you want to start with."
-                                    )
-                                    return ServiceChatResponse(
-                                        content=_msg,
-                                        sources=[],
-                                        tiers_used=[],
-                                        latency_ms=0,
-                                        widget_type=_wt,
-                                        widget_data=_wd,
-                                    )
-                                except Exception as _e:
-                                    logger.error(
-                                        "Assessment proposal failed during onboarding pivot: %s",
-                                        _e,
-                                        exc_info=True,
-                                    )
-                                    return ServiceChatResponse(
-                                        content=(
-                                            "I wasn't able to analyze the project right now. "
-                                            "Could you describe a bit more so I can try again?"
-                                        ),
-                                        sources=[],
-                                        tiers_used=[],
-                                        latency_ms=0,
-                                    )
+                                # Bulk uploads can still be saturating the DB pool with
+                                # background indexing jobs when this pivot fires (see
+                                # app/services/evidence_processor.py). That's transient —
+                                # retry a couple of times with backoff before giving up,
+                                # rather than immediately falling back to a message that
+                                # implies the *project description* was the problem.
+                                _max_attempts = 3
+                                for _attempt in range(1, _max_attempts + 1):
+                                    try:
+                                        _structure = await _plan_handler.propose_structure(
+                                            initiative=verified_initiative
+                                        )
+                                        _wt = _plan_handler.definition.structure_widget_type
+                                        _wd = _plan_handler.build_structure_widget_data(_structure)
+                                        _recs = _wd.get("recommendations") or []
+                                        _n = len([
+                                            r for r in _recs
+                                            if isinstance(r, dict) and r.get("recommended")
+                                        ]) or len(_recs)
+                                        _label = "assessment" if _n == 1 else "assessments"
+                                        _msg = (
+                                            f"I've mapped the {_n} {_label} that look most relevant for this project. "
+                                            "Review them below and confirm the framework plan you want to start with."
+                                        ) if _n > 0 else (
+                                            "I've mapped the assessments that look most relevant for this project. "
+                                            "Review them below and confirm the framework plan you want to start with."
+                                        )
+                                        return ServiceChatResponse(
+                                            content=_msg,
+                                            sources=[],
+                                            tiers_used=[],
+                                            latency_ms=0,
+                                            widget_type=_wt,
+                                            widget_data=_wd,
+                                        )
+                                    except (OperationalError, SATimeoutError) as _e:
+                                        await db.rollback()
+                                        if _attempt == _max_attempts:
+                                            logger.error(
+                                                "Assessment proposal failed during onboarding pivot "
+                                                "after %d attempts (transient DB error): %s",
+                                                _max_attempts,
+                                                _e,
+                                                exc_info=True,
+                                            )
+                                            break
+                                        logger.warning(
+                                            "Assessment proposal hit transient DB error "
+                                            "(attempt %d/%d) — retrying: %s",
+                                            _attempt,
+                                            _max_attempts,
+                                            _e,
+                                        )
+                                        await asyncio.sleep(2 * _attempt)
+                                    except Exception as _e:
+                                        logger.error(
+                                            "Assessment proposal failed during onboarding pivot: %s",
+                                            _e,
+                                            exc_info=True,
+                                        )
+                                        break
+
+                                return ServiceChatResponse(
+                                    content=(
+                                        "Your documents are still finishing processing — give it a "
+                                        "moment and send another message to pick up where we left off."
+                                    ),
+                                    sources=[],
+                                    tiers_used=[],
+                                    latency_ms=0,
+                                )
 
                             generation_task = asyncio.create_task(_direct_assessment_proposal())
                         else:
