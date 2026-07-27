@@ -768,7 +768,19 @@ class ChatService(ChatPlanningMixin, ChatGenerationMixin):
                 messages=[
                     {
                         "role": "system",
-                        "content": "Extract project information from this message. Only include fields that are clearly stated or can be directly inferred. Leave out fields that aren't mentioned.",
+                        "content": (
+                            "Extract project information from this message. Only include fields "
+                            "that are explicitly stated in the message text, or that follow with "
+                            "near-certainty from words actually present in it. "
+                            "Leave out ANY field that isn't mentioned — an omitted field is always "
+                            "correct; a guessed one is not. "
+                            "NEVER invent, guess, or fabricate specific details (a location, country, "
+                            "technology, or description) that are not grounded in this exact message. "
+                            "If the message is a question, greeting, acknowledgment, or otherwise "
+                            "does not describe the project itself (e.g. 'What's this project about?', "
+                            "'Thanks', 'Sounds good'), return no fields at all — do not use it as an "
+                            "opportunity to author a plausible-sounding project description."
+                        ),
                     },
                     {"role": "user", "content": message},
                 ],

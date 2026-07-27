@@ -8,6 +8,46 @@ from app.config import get_settings
 settings = get_settings()
 
 
+_XLS_OLE2_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+
+
+def _iter_sheet_rows(content: bytes) -> list[tuple[str, list[tuple]]]:
+    """Return (sheet_name, rows) pairs for modern .xlsx and legacy .xls alike.
+
+    openpyxl only reads the OOXML (zip-backed) format, so a legacy BIFF .xls
+    fails with "File is not a zip file" — those are routed to xlrd instead.
+    Detection is by content signature, not extension, because uploads are often
+    misnamed.
+    """
+    if content[: len(_XLS_OLE2_MAGIC)] == _XLS_OLE2_MAGIC:
+        import xlrd
+
+        book = xlrd.open_workbook(file_contents=content)
+        sheets: list[tuple[str, list[tuple]]] = []
+        for sheet in book.sheets():
+            rows = [
+                tuple(_normalize_xls_cell(cell) for cell in sheet.row_values(row_idx))
+                for row_idx in range(sheet.nrows)
+            ]
+            sheets.append((sheet.name, rows))
+        return sheets
+
+    import openpyxl
+
+    workbook = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+    return [
+        (sheet_name, list(workbook[sheet_name].iter_rows(values_only=True)))
+        for sheet_name in workbook.sheetnames
+    ]
+
+
+def _normalize_xls_cell(value):
+    """xlrd returns every number as float; keep whole numbers from rendering as "2015.0"."""
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
+
+
 class DocumentParserService:
     """Service for parsing documents and chunking text"""
 
@@ -65,15 +105,11 @@ class DocumentParserService:
 
     def parse_xlsx(self, content: bytes) -> str:
         """Parse XLSX/XLS spreadsheet content to plain text."""
-        import openpyxl
-
-        wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
         sheet_parts = []
 
-        for sheet_name in wb.sheetnames:
-            ws = wb[sheet_name]
+        for sheet_name, sheet_rows in _iter_sheet_rows(content):
             rows = []
-            for row in ws.iter_rows(values_only=True):
+            for row in sheet_rows:
                 cells = [str(cell) if cell is not None else "" for cell in row]
                 if any(c.strip() for c in cells):
                     rows.append("\t".join(cells))
@@ -122,15 +158,10 @@ class DocumentParserService:
         return result.value
 
     def parse_xlsx_html(self, content: bytes) -> str:
-        """Convert XLSX to HTML tables (one per sheet)."""
-        import openpyxl
-
-        wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+        """Convert XLSX/XLS to HTML tables (one per sheet)."""
         html_parts: list[str] = []
 
-        for sheet_name in wb.sheetnames:
-            ws = wb[sheet_name]
-            all_rows = list(ws.iter_rows(values_only=True))
+        for sheet_name, all_rows in _iter_sheet_rows(content):
             non_empty = [r for r in all_rows if any(
                 (str(c).strip() if c is not None else "") for c in r
             )]

@@ -30,6 +30,7 @@ from app.schemas.chat import FieldContext
 from app.api.chat_constants import (
     INITIAL_ONBOARDING_DOCUMENT_PROMPT,
     SKIP_EXTRACTION_MESSAGES as _SKIP_EXTRACTION_MESSAGES,
+    is_low_signal_extraction_message as _is_low_signal_extraction_message,
 )
 
 chat_ai_access = require_ai_access(count_message=True)
@@ -969,9 +970,12 @@ async def chat_stream(
                             and not data.tool_hint
                         )
                     )
-                    # Fill missing initiative fields from user text; skip synthetic onboarding lines with no project detail.
+                    # Fill missing initiative fields from user text; skip synthetic onboarding lines
+                    # and other content-free messages (questions, acks) that give the model nothing
+                    # real to extract — see is_low_signal_extraction_message for why this matters.
                     should_extract = (
                         data.content not in _SKIP_EXTRACTION_MESSAGES
+                        and not _is_low_signal_extraction_message(data.content)
                         and (
                             not verified_initiative.project_type
                             or not verified_initiative.geography

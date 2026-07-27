@@ -25,6 +25,9 @@ PyMuPDF>=1.27.2.3
 python-docx>=1.2.0
 python-pptx>=1.0.2
 openpyxl>=3.1.5
+# openpyxl reads OOXML (.xlsx) only; legacy BIFF .xls needs xlrd. Registry
+# dataroom exports (e.g. Verra non-permanence risk tools) are still .xls.
+xlrd>=2.0.1
 mammoth>=1.6.0
 
 # Auth

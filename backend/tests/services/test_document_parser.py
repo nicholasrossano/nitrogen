@@ -3,7 +3,13 @@ from unittest.mock import patch
 
 from app.core.upload_types import resolve_document_file_type
 from app.services.document_conversion import prepare_uploaded_document
-from app.services.document_parser import DocumentParserService, _clean_pdf_pages
+from app.services.document_parser import (
+    _XLS_OLE2_MAGIC,
+    DocumentParserService,
+    _clean_pdf_pages,
+    _iter_sheet_rows,
+    _normalize_xls_cell,
+)
 
 
 def test_clean_pdf_pages_removes_repeated_margin_boilerplate():
@@ -134,6 +140,56 @@ def test_prepare_uploaded_document_converts_numbers_to_xlsx_filename():
     assert prepared.content == b"converted"
     assert prepared.filename == "Budget.xlsx"
     assert prepared.file_type == "xlsx"
+
+
+def test_parse_xlsx_reads_modern_workbook():
+    import openpyxl
+
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "Summary"
+    sheet.append(["Year", "Rating"])
+    sheet.append([2015, "Low"])
+
+    buf = io.BytesIO()
+    workbook.save(buf)
+
+    text = DocumentParserService().parse_xlsx(buf.getvalue())
+
+    assert "[Sheet: Summary]" in text
+    assert "Year\tRating" in text
+    assert "2015\tLow" in text
+
+
+def test_iter_sheet_rows_routes_legacy_xls_to_xlrd(monkeypatch):
+    """Legacy BIFF .xls must not reach openpyxl, which rejects it as "not a zip file"."""
+
+    class _Sheet:
+        name = "Risk Tool v4.0 - Template"
+        nrows = 2
+
+        def row_values(self, idx):
+            return [["Year", "Rating"], [2015.0, 3.5]][idx]
+
+    class _Book:
+        def sheets(self):
+            return [_Sheet()]
+
+    import xlrd
+
+    monkeypatch.setattr(xlrd, "open_workbook", lambda **_kwargs: _Book())
+
+    sheets = _iter_sheet_rows(_XLS_OLE2_MAGIC + b"biff-payload")
+
+    assert sheets == [("Risk Tool v4.0 - Template", [("Year", "Rating"), (2015, 3.5)])]
+
+
+def test_normalize_xls_cell_keeps_whole_numbers_readable():
+    # xlrd types every number as float; "2015.0" in extracted text is noise.
+    assert _normalize_xls_cell(2015.0) == 2015
+    assert _normalize_xls_cell(3.5) == 3.5
+    assert _normalize_xls_cell("Low") == "Low"
+    assert _normalize_xls_cell(None) is None
 
 
 def test_parse_pptx_extracts_slide_text():

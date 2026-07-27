@@ -374,7 +374,7 @@ async def test_chat_stream_short_circuits_to_initial_project_onboarding(monkeypa
             response = await client.post(
                 "/api/v1/chat/stream",
                 json={
-                    "content": "Testing",
+                    "content": "Solar minigrid rollout in rural Kenya",
                     "history": [],
                     "project_id": str(project_id),
                     "allow_initial_project_onboarding": True,
@@ -389,7 +389,7 @@ async def test_chat_stream_short_circuits_to_initial_project_onboarding(monkeypa
 
     assert complete_event["widget_type"] == "document_request"
     assert complete_event["content"].startswith("Please upload any relevant project materials")
-    assert extract_calls == [("Testing", project_id)]
+    assert extract_calls == [("Solar minigrid rollout in rural Kenya", project_id)]
 
 
 @pytest.mark.asyncio
@@ -465,7 +465,7 @@ async def test_chat_stream_short_circuits_for_first_turn_even_if_global_guard_fa
             response = await client.post(
                 "/api/v1/chat/stream",
                 json={
-                    "content": "Testing",
+                    "content": "Solar minigrid rollout in rural Kenya",
                     "history": [],
                     "project_id": str(project_id),
                     "allow_initial_project_onboarding": True,
@@ -480,4 +480,4 @@ async def test_chat_stream_short_circuits_for_first_turn_even_if_global_guard_fa
 
     assert complete_event["widget_type"] == "document_request"
     assert complete_event["content"].startswith("Please upload any relevant project materials")
-    assert extract_calls == [("Testing", project_id)]
+    assert extract_calls == [("Solar minigrid rollout in rural Kenya", project_id)]

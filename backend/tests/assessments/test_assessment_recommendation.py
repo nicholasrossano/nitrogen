@@ -8,11 +8,23 @@ import pytest
 
 from app.assessments.recommendation import (
     MIN_RECOMMENDATIONS,
+    _signal_present,
     build_recommendation_rows,
     confidence_from_score,
+    inapplicable_ids,
     merge_llm_with_floor,
+    recommend_for_project,
     score_assessments,
     select_recommended_ids,
+)
+
+MANGROVE_ARR_CONTEXT = (
+    "VCS1764 Reforestation and restoration of degraded mangrove lands, sustainable "
+    "livelihood and community development in Myanmar. AR-AM0014 A/R Large-scale "
+    "Methodology: afforestation and reforestation of degraded mangrove habitats. "
+    "Non-permanence risk report, verified carbon units, tCO2e, baseline emissions, "
+    "leakage from increased use of non-renewable woody biomass, charcoal harvesting "
+    "pressure, livestock grazing, community livelihoods, deep due diligence."
 )
 
 
@@ -117,6 +129,74 @@ def test_empty_llm_falls_back_without_selecting_everything():
     assert "carbon_model" in recommended
     assert len(recommended) < len(heuristic)
     assert len(recommended) >= MIN_RECOMMENDATIONS
+
+
+def _all_assessment_ids() -> set[str]:
+    return set(score_assessments(project_description="", project_type=None).keys())
+
+
+def test_land_use_carbon_project_gates_out_avoided_emissions_calculator():
+    # The carbon engine only models avoided emissions; an ARR/removals project
+    # cannot be represented by it even though it is unmistakably a carbon project.
+    blocked = inapplicable_ids(MANGROVE_ARR_CONTEXT, _all_assessment_ids())
+    assert "carbon_model" in blocked
+    assert "risk_assessment" not in blocked
+    assert "stakeholder_assessment" not in blocked
+
+
+def test_land_use_carbon_project_still_recommends_applicable_assessments():
+    scores = score_assessments(
+        project_description=MANGROVE_ARR_CONTEXT,
+        project_type="carbon offset project",
+    )
+    blocked = inapplicable_ids(MANGROVE_ARR_CONTEXT, set(scores.keys()))
+    scores = {k: v for k, v in scores.items() if k not in blocked}
+    recommended = select_recommended_ids(scores)
+    assert "carbon_model" not in recommended
+    assert len(recommended) >= MIN_RECOMMENDATIONS
+
+
+def test_supported_method_pack_projects_are_not_gated():
+    ids = _all_assessment_ids()
+    for description in (
+        "Improved cookstove distribution with fNRB and carbon credits.",
+        "Fuel switch to LPG for household cooking.",
+        "Safe water supply using ceramic filter technology.",
+        "Solar home systems replacing kerosene lighting.",
+        "Biodigester program with manure management.",
+    ):
+        assert "carbon_model" not in inapplicable_ids(description, ids), description
+
+
+def test_signal_present_requires_word_boundary():
+    # Substring matching would let unrelated prose open a scope gate.
+    assert _signal_present("we distribute cfl bulbs", "cfl")
+    assert not _signal_present("the baseline is modelled and detailed", "led")
+    assert not _signal_present("solarium refurbishment", "solar")
+
+
+@pytest.mark.asyncio
+async def test_recommend_for_project_drops_out_of_scope_llm_pick(monkeypatch: pytest.MonkeyPatch):
+    assessments = [
+        SimpleNamespace(definition=SimpleNamespace(id=tool_id))
+        for tool_id in ("carbon_model", "risk_assessment", "stakeholder_assessment")
+    ]
+
+    async def fake_llm(**_kwargs):
+        # Mirrors the real failure: the model picked the calculator on name alone.
+        return [("carbon_model", 1.0), ("risk_assessment", 0.9), ("stakeholder_assessment", 0.85)]
+
+    monkeypatch.setattr("app.assessments.recommendation.propose_with_llm", fake_llm)
+
+    rows = await recommend_for_project(
+        assessments=assessments,  # type: ignore[arg-type]
+        project_title="VCS1764",
+        project_description=MANGROVE_ARR_CONTEXT,
+        project_type="carbon offset project",
+    )
+    recommended = {row[0].definition.id for row in rows if row[2]}
+    assert "carbon_model" not in recommended
+    assert recommended == {"risk_assessment", "stakeholder_assessment"}
 
 
 def test_build_recommendation_rows_marks_recommended_flag():

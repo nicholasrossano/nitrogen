@@ -7,6 +7,7 @@ never dump the full catalog by default, and always propose at least two.
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -141,6 +142,35 @@ def score_assessments(
                 scores[tool_id] += boost
 
     return scores
+
+
+def _signal_present(text: str, signal: str) -> bool:
+    """Word-boundary match so short signals ("cfl", "solar") don't hit substrings.
+
+    Plain `in` matching would let unrelated prose open a scope gate — "led" matches
+    "modelled", "detailed", "fuelled" — which is exactly how a land-use project
+    would slip past the carbon_model gate.
+    """
+    return re.search(rf"\b{re.escape(signal)}\b", text) is not None
+
+
+def inapplicable_ids(context_text: str, assessment_ids: set[str]) -> set[str]:
+    """Return IDs gated out because their engine cannot model this project.
+
+    Only applies to assessments declaring `applicability_signals`. Assessments
+    without them are unaffected.
+    """
+    from app.domain.registry import get_first_party_catalog
+
+    text = (context_text or "").lower()
+    blocked: set[str] = set()
+    for metadata in get_first_party_catalog().selection_metadata.values():
+        signals = getattr(metadata, "applicability_signals", ())
+        if not signals or metadata.assessment_id not in assessment_ids:
+            continue
+        if not any(_signal_present(text, signal.lower()) for signal in signals):
+            blocked.add(metadata.assessment_id)
+    return blocked
 
 
 def confidence_from_score(raw_score: float) -> float:
@@ -351,6 +381,21 @@ async def recommend_for_project(
         assessment_ids=valid_ids,
     )
 
+    # Drop out-of-scope assessments before the floor logic can reinstate them:
+    # `select_recommended_ids` picks from whatever keys remain in `scores`.
+    blocked_ids = inapplicable_ids(context_text, valid_ids)
+    if blocked_ids:
+        logger.info(
+            "Gated out-of-scope assessments for project %r: %s",
+            project_title or "(untitled)",
+            sorted(blocked_ids),
+        )
+        heuristic_scores = {
+            tool_id: score
+            for tool_id, score in heuristic_scores.items()
+            if tool_id not in blocked_ids
+        }
+
     llm_picks: list[tuple[str, float]] | None = None
     if use_llm and (project_description or materials_preview or project_title):
         llm_picks = await propose_with_llm(
@@ -363,6 +408,11 @@ async def recommend_for_project(
             user_id=user_id,
             db=db,
         )
+
+    if llm_picks and blocked_ids:
+        # The prompt states the scope, but the model still sometimes picks on name
+        # alone ("Carbon Emissions Calculator" for a reforestation project).
+        llm_picks = [pick for pick in llm_picks if pick[0] not in blocked_ids]
 
     scores, recommended_ids = merge_llm_with_floor(
         llm_picks=llm_picks,

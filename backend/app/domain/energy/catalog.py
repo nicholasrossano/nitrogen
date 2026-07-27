@@ -20,6 +20,12 @@ class AssessmentSelectionMetadata:
     capability_tool_name: str | None = None
     tool_hint_message: str | None = None
     domain_tags: tuple[str, ...] = ()
+    # Hard scope gate for assessments whose engine only models specific project
+    # types. When set, the assessment is only proposed if one of these signals
+    # appears in the project context — a generic topical match is not enough.
+    # Prevents proposing a calculator whose name fits but whose maths cannot
+    # represent the project (see carbon_model: avoided emissions only).
+    applicability_signals: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -69,7 +75,15 @@ def get_first_party_catalog() -> FirstPartyAssessmentCatalog:
         ),
         "carbon_model": AssessmentSelectionMetadata(
             assessment_id="carbon_model",
-            selection_description="Estimates emissions reductions and carbon-credit potential.",
+            selection_description=(
+                "Estimates emission reductions for avoided-emissions project types ONLY — "
+                "improved cookstoves, fuel switch, safe water, grid renewable, solar home "
+                "systems, biodigesters, and efficient lighting (see CarbonEngine method "
+                "packs). It CANNOT model land-use removals or sequestration: do not propose "
+                "it for afforestation/reforestation (ARR), REDD+, blue carbon, mangrove, "
+                "peatland, soil-carbon, or agroforestry projects, even though those are "
+                "carbon projects and discuss tCO2e, baselines, and credits."
+            ),
             selection_triggers=(
                 "carbon credits",
                 "emission reductions",
@@ -82,6 +96,48 @@ def get_first_party_catalog() -> FirstPartyAssessmentCatalog:
             capability_tool_name="run_carbon",
             tool_hint_message="Building your carbon emissions model…",
             domain_tags=("carbon", "impact", "calculator"),
+            # One signal per supported method pack. Deliberately excludes terms that
+            # recur in land-use project documents (e.g. "charcoal", "livestock",
+            # "firewood") so a removals project cannot open this gate.
+            applicability_signals=(
+                "cookstove",
+                "cookstoves",
+                "cook stove",
+                "clean cooking",
+                "improved stove",
+                "three stone fire",
+                "three-stone",
+                "fuel switch",
+                "fuel-switch",
+                "lpg",
+                "biogas",
+                "ethanol",
+                "safe water",
+                "water filter",
+                "water purification",
+                "chlorination",
+                "biosand",
+                "ceramic filter",
+                "grid emission factor",
+                "grid renewable",
+                "renewable energy",
+                "small hydro",
+                "geothermal",
+                "wind turbine",
+                "wind farm",
+                "solar",
+                "off-grid",
+                "kerosene",
+                "biodigester",
+                "bio-digester",
+                "anaerobic digester",
+                "manure management",
+                "efficient lighting",
+                "led lamp",
+                "led bulb",
+                "cfl",
+                "incandescent",
+            ),
         ),
         "solar_estimate": AssessmentSelectionMetadata(
             assessment_id="solar_estimate",
@@ -252,9 +308,15 @@ def format_assessment_selection_context() -> str:
         triggers = ", ".join(metadata.selection_triggers) or "None listed"
         required = ", ".join(metadata.required_context) or "No special context required"
         tool = metadata.capability_tool_name or "no direct tool"
-        lines.append(
+        line = (
             f"- {metadata.assessment_id}: {metadata.selection_description} "
             f"Triggers: {triggers}. Required context: {required}. Tool: {tool}."
         )
+        if metadata.applicability_signals:
+            line += (
+                " Only applicable when the project matches one of: "
+                f"{', '.join(metadata.applicability_signals)}."
+            )
+        lines.append(line)
     return "\n".join(lines)
 
