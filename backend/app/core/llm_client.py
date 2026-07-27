@@ -185,6 +185,17 @@ async def record_usage(
     if is_byok or not settings.billing_enabled:
         return
 
+    # usage_records.user_id FKs to users.id. Synthetic ids like "system" must never
+    # be flushed — they IntegrityError and leave the request session rolled back.
+    billable_user_id = (user_id or "").strip()
+    if not billable_user_id or billable_user_id.startswith("system"):
+        logger.warning(
+            "Skipping usage record for non-billable user_id=%r model=%s",
+            user_id,
+            model,
+        )
+        return
+
     from app.core.openrouter_pricing import ensure_pricing_fresh
 
     await ensure_pricing_fresh()
@@ -192,7 +203,7 @@ async def record_usage(
 
     from app.models.subscription import UsageRecord, Subscription
     record = UsageRecord(
-        user_id=user_id,
+        user_id=billable_user_id,
         model=model,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
@@ -202,7 +213,7 @@ async def record_usage(
 
     # Bump trial counters if on trial
     result = await db.execute(
-        select(Subscription).where(Subscription.user_id == user_id)
+        select(Subscription).where(Subscription.user_id == billable_user_id)
     )
     sub = result.scalar_one_or_none()
     if sub and sub.tier == "trial":

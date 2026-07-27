@@ -587,7 +587,13 @@ class StakeholderAssessment(BaseAssessment):
             queries = [query for query in queries if query]
             if queries:
                 try:
-                    context_str, citations = await retrieve_evidence(queries, db, project_id, max_facts=8)
+                    context_str, citations = await retrieve_evidence(
+                        queries,
+                        db,
+                        project_id,
+                        max_facts=8,
+                        user_id=context.get("user_id"),
+                    )
                     if context_str:
                         evidence_block = (
                             "\n\nRetrieved evidence (cite [n] references when grounding your assessment):\n"

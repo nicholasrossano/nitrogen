@@ -203,7 +203,7 @@ class PVWattsTool(BaseAssessment):
         if adapter is None:
             raise RuntimeError("pvwatts adapter is not registered.")
         ctx = ExecutionContext(
-            user_id="system",
+            user_id="",
             user_email=None,
             project_id=None,
             initiative_role=None,
@@ -324,7 +324,7 @@ class PVWattsTool(BaseAssessment):
         if adapter is None:
             raise RuntimeError("pvwatts adapter is not registered.")
         ctx = ExecutionContext(
-            user_id="system",
+            user_id="",
             user_email=None,
             project_id=None,
             initiative_role=None,
@@ -368,7 +368,7 @@ class PVWattsTool(BaseAssessment):
         if adapter is None:
             raise RuntimeError("pvwatts adapter is not registered.")
         ctx = ExecutionContext(
-            user_id="system",
+            user_id="",
             user_email=None,
             project_id=None,
             initiative_role=None,

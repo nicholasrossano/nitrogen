@@ -580,7 +580,13 @@ class ImplementationPlanAssessment(BaseAssessment):
         if not queries:
             return "Retrieved evidence:\n(None.)"
 
-        context_str, _citations = await retrieve_evidence(queries, None, None, max_facts=10)
+        context_str, _citations = await retrieve_evidence(
+            queries,
+            context.get("_db"),
+            context.get("project_id"),
+            max_facts=10,
+            user_id=context.get("user_id"),
+        )
         if not context_str:
             return "Retrieved evidence:\n(None.)"
         return f"Retrieved evidence:\n{context_str}"

@@ -446,7 +446,8 @@ async def populate_stage(
 
     context = await get_initiative_context(db, inst.project_id)
     context["_db"] = db
-    context["user_id"] = inst.started_by
+    # Prefer the acting user for billing/usage attribution during population.
+    context["user_id"] = actor_user_id or inst.started_by
 
     # Mark as populating
     state["stages"][stage_id]["status"] = "populating"
@@ -533,12 +534,37 @@ async def populate_stage(
         await db.flush()
 
     except Exception as e:
+        instance_id = getattr(inst, "id", None)
         logger.error(
             "Population failed for stage '%s' on instance '%s': %s",
-            stage_id, inst.id, e, exc_info=True,
+            stage_id, instance_id, e, exc_info=True,
         )
-        state["stages"][stage_id]["status"] = "error"
-        save_workflow_state(inst, state, increment_version=True)
+        # A mid-pipeline flush failure (e.g. bad usage_records user_id) leaves the
+        # session in PendingRollbackError — clear it before persisting error state.
+        try:
+            await db.rollback()
+        except Exception:
+            logger.exception(
+                "Failed to rollback after population error for instance '%s'",
+                instance_id,
+            )
+        try:
+            if instance_id is not None:
+                from app.models.assessment_instance import AssessmentInstance
+
+                refreshed = await db.get(AssessmentInstance, instance_id)
+                if refreshed is not None:
+                    state = _hydrate_state(refreshed, assessment)
+                    if stage_id in state.get("stages", {}):
+                        state["stages"][stage_id]["status"] = "error"
+                        state["current_stage_id"] = stage_id
+                        save_workflow_state(refreshed, state, increment_version=True)
+                        await db.commit()
+        except Exception:
+            logger.exception(
+                "Failed to persist error status after population failure for instance '%s'",
+                instance_id,
+            )
         raise
 
     return state

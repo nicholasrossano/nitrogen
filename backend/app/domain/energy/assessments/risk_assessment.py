@@ -719,7 +719,13 @@ async def _evidence_block(queries: list[str], context: dict[str, Any], max_facts
     project_id = context.get("project_id")
     if db is None or not project_id:
         return ""
-    context_str, _citations = await retrieve_evidence([q for q in queries if q], db, project_id, max_facts=max_facts)
+    context_str, _citations = await retrieve_evidence(
+        [q for q in queries if q],
+        db,
+        project_id,
+        max_facts=max_facts,
+        user_id=context.get("user_id"),
+    )
     if not context_str:
         return ""
     return f"\n\nRetrieved evidence and context. Use only if relevant; cite/support in basis fields:\n{context_str}"

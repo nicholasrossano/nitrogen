@@ -14,23 +14,49 @@ logger = logging.getLogger(__name__)
 
 async def retrieve_evidence(
     queries: list[str],
-    db: AsyncSession,
-    project_id: UUID,
+    db: AsyncSession | None,
+    project_id: UUID | None,
     max_facts: int = 15,
+    *,
+    user_id: str | None = None,
 ) -> tuple[str, list[dict]]:
     """Run tiered retrieval (RAG + OpenAlex + web) for a list of queries.
 
     Returns (context_str_for_prompt, numbered_citations_list).
     Citations are deduplicated by source title.
+
+    ``user_id`` must be a real app user when ``db`` is provided — usage/web-search
+    billing writes to ``usage_records`` which FKs to ``users``. A synthetic
+    ``system`` id poisons the session and breaks assessment population.
     """
+    if db is None or project_id is None:
+        return "", []
+
+    if not isinstance(project_id, UUID):
+        try:
+            project_id = UUID(str(project_id))
+        except (TypeError, ValueError):
+            return "", []
+
     from app.adapters import get_adapter_registry
     from app.core.execution_context import ExecutionContext
 
     retrieval_adapter = get_adapter_registry().get("retrieval")
     if retrieval_adapter is None:
         raise RuntimeError("retrieval adapter is not registered.")
+    # Prefer the acting/starter user; never bill as "system" (no users row).
+    billing_user_id = (user_id or "").strip()
+    if not billing_user_id or billing_user_id.startswith("system"):
+        billing_user_id = ""
+        logger.warning(
+            "retrieve_evidence called without a billable user_id for project %s; "
+            "web/LLM usage will not be attributed",
+            project_id,
+        )
     ctx = ExecutionContext(
-        user_id="system",
+        # Empty string skips usage_records writes (see record_usage / web_search guards).
+        # Never use "system" — that FK-fails against users and poisons the session.
+        user_id=billing_user_id,
         user_email=None,
         project_id=project_id,
         initiative_role=None,

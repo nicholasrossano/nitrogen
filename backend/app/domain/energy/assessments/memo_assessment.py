@@ -522,7 +522,13 @@ class MemoAssessment(BaseAssessment):
             return "", []
 
         try:
-            context_str, citations = await retrieve_evidence(queries, db, project_id, max_facts=12)
+            context_str, citations = await retrieve_evidence(
+                queries,
+                db,
+                project_id,
+                max_facts=12,
+                user_id=context.get("user_id"),
+            )
         except Exception as exc:
             logger.warning("Memo evidence retrieval failed: %s", exc)
             return "", []

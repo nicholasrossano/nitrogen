@@ -255,7 +255,7 @@ class CarbonTool(BaseAssessment):
         if adapter is None:
             raise RuntimeError("carbon adapter is not registered.")
         ctx = ExecutionContext(
-            user_id="system",
+            user_id="",
             user_email=None,
             project_id=None,
             initiative_role=None,

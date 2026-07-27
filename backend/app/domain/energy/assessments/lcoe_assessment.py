@@ -230,7 +230,8 @@ class LCOETool(BaseAssessment):
         if adapter is None:
             raise RuntimeError("lcoe adapter is not registered.")
         ctx = ExecutionContext(
-            user_id="system",
+            # Pure compute path (db=None) — empty user_id skips usage_records FK writes.
+            user_id="",
             user_email=None,
             project_id=None,
             initiative_role=None,
