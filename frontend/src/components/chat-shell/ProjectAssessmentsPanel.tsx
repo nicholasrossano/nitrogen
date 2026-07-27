@@ -108,18 +108,20 @@ export function ProjectAssessmentsPanel({
             Loading…
           </div>
         ) : rows.length === 0 ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-2.5 px-1 text-center">
+          <div className="relative flex flex-1 flex-col px-1">
             <p className="text-xs text-text-secondary">
               No assessments yet.
             </p>
             {onViewAll ? (
-              <button
-                type="button"
-                onClick={onViewAll}
-                className="btn-primary !h-7 !rounded-md !px-2.5 !py-0 !text-[11px] !font-medium !leading-none"
-              >
-                Start an Assessment
-              </button>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={onViewAll}
+                  className="btn-primary !h-7 !rounded-md !px-2.5 !py-0 !text-[11px] !font-medium !leading-none"
+                >
+                  Start an Assessment
+                </button>
+              </div>
             ) : null}
           </div>
         ) : (
