@@ -150,6 +150,14 @@ For detailed conventions and edge-case policy, consult `docs/agent-playbook.md` 
 - local/cloud run details
 - loading art authoring rules
 
+## Cursor Cloud specific instructions
+
+### Known setup gotchas
+
+1. **`mcp` package version**: `requirements.txt` specifies `mcp>=1.28.0` but pip resolves to 2.0+ which removed `mcp.server.fastmcp`. Pin with `pip install "mcp>=1.28.0,<2.0"` after `pip install -r requirements.txt` until `requirements.txt` is updated.
+2. **`CORS_ORIGINS` in materialized `.env`**: `materialize_dev_env.sh` uses `printf '%q'` which shell-escapes brackets/quotes in the JSON array. If backend fails with `SettingsError: error parsing value for field "cors_origins"`, manually fix the line in `.env` to raw JSON: `CORS_ORIGINS=["http://localhost:3000","http://localhost:3001"]`.
+3. **Docker is available** on this VM (installed during environment setup), contrary to the general cloud agent note above. The `nitrogen-db` pgvector container is available if you need local Postgres instead of Neon.
+
 ## Maintenance Rule
 
 - Add new rules only when they prevent a recurring class of mistakes.
