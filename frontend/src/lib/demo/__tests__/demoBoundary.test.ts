@@ -1,3 +1,4 @@
+import { track } from '@vercel/analytics';
 import {
   beginDemoEntry,
   endDemoEntry,
@@ -17,8 +18,13 @@ import {
 import { useProjectStore } from '@/stores/projectStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
+jest.mock('@vercel/analytics', () => ({
+  track: jest.fn(),
+}));
+
 describe('demoBoundary', () => {
   beforeEach(() => {
+    (track as jest.Mock).mockClear();
     exitDemo();
     endDemoEntry();
     resetClientStateForDemoBoundary();
@@ -50,6 +56,7 @@ describe('demoBoundary', () => {
     expect(sawDemoDuringSignOut).toBe(true);
     expect(isDemoActive()).toBe(true);
     expect(isDemoEntryInProgress()).toBe(false);
+    expect(track).toHaveBeenCalledWith('demo_open');
   });
 
   it('leaveDemoSession is a no-op while demo entry is in progress', () => {

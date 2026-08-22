@@ -6,6 +6,7 @@
 
 import { clearLastProjectPreference } from '@/lib/authReturnUrl';
 import { resetClientStores } from '@/lib/sessionBoundary';
+import { track } from '@vercel/analytics';
 import {
   beginDemoEntry,
   beginLeavingDemoForAuth,
@@ -40,6 +41,7 @@ export async function startDemoSession(options?: {
     // as active even while Firebase sign-out is still in flight.
     resetClientStateForDemoBoundary();
     enterDemo();
+    track('demo_open');
 
     if (options?.hasUser && options.signOut) {
       try {
