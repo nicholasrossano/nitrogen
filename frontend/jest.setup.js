@@ -20,6 +20,15 @@ jest.mock('@/lib/firebase', () => ({
   getAuthToken: jest.fn().mockResolvedValue(null),
 }));
 
+// @vercel/analytics is ESM-only; Jest's CJS runtime cannot parse it.
+// Demo tracking is asserted via the mocked `track` in demoBoundary tests.
+jest.mock('@vercel/analytics', () => ({
+  track: jest.fn(),
+}));
+jest.mock('@vercel/analytics/react', () => ({
+  Analytics: () => null,
+}));
+
 // Mock window.matchMedia (not implemented in jsdom)
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
