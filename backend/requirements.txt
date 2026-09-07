@@ -47,7 +47,8 @@ pydantic-settings>=2.14.0
 python-dotenv>=1.2.2
 httpx>=0.28.1
 aiofiles>=25.1.0
-mcp>=1.28.0
+# 1.x FastMCP import path; 2.x renamed it to MCPServer and breaks collection.
+mcp>=1.28.0,<2
 
 # Development & Testing
 # Upper-bound softens ruff major bumps; lint rules are pinned in ruff.toml.
